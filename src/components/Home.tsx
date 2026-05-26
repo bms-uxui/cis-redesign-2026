@@ -99,9 +99,9 @@ function MenuCard({ label, img }: { label: string; img: string }) {
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen w-full bg-[#aeaeae]">
+    <div className="relative min-h-screen w-full">
       {/* Hero background image with overlay */}
-      <div className="fixed inset-0 -z-10">
+      <div className="fixed inset-0 z-0">
         <img
           src={HERO_BG}
           alt=""
@@ -109,17 +109,30 @@ export default function Home() {
         />
         <div className="absolute inset-0 bg-gradient-to-l from-white/40 via-black/40 to-[#3a3a3a]/40" />
       </div>
+      <div className="relative z-10">
 
       {/* Top navigation */}
       <header className="sticky top-0 z-30 h-[100px]">
         <div className="mx-auto flex h-full max-w-[1392px] items-center justify-between px-6">
-          <div className="flex items-center gap-2">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-md">
-              <span className="text-2xl">🏥</span>
-            </div>
+          <div className="flex items-center gap-3">
+            <svg
+              viewBox="0 0 48 48"
+              className="h-12 w-12 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]"
+            >
+              <path
+                d="M24 4c-8 0-14 6-14 14 0 10 14 26 14 26s14-16 14-26c0-8-6-14-14-14z"
+                fill="#E94B4B"
+              />
+              <rect x="21" y="12" width="6" height="16" rx="1" fill="#fff" />
+              <rect x="16" y="17" width="16" height="6" rx="1" fill="#fff" />
+            </svg>
             <div className="leading-tight">
-              <p className="text-xs font-bold text-emerald-400 drop-shadow">EXCELLENT</p>
-              <p className="text-xs font-bold text-emerald-400 drop-shadow">HEALTH PLATFORM</p>
+              <p className="text-[13px] font-extrabold tracking-wide text-[#2BC480] drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                EXCELLENT
+              </p>
+              <p className="text-[11px] font-bold tracking-[0.18em] text-[#2BC480] drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                HEALTH PLATFORM
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -173,7 +186,7 @@ export default function Home() {
             <div className="relative flex h-full flex-col justify-between overflow-hidden rounded-[40px] border border-white/50 p-6 shadow-[0_4px_24px_rgba(0,0,0,0.12)]"
                  style={{ width: 280 }}>
               <img
-                src="https://images.unsplash.com/photo-1538108149393-fbbd81895907?auto=format&fit=crop&w=800&q=80"
+                src="https://images.unsplash.com/photo-1666214280391-8ff5bd3c0bf0?auto=format&fit=crop&w=800&q=80"
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover"
               />
@@ -314,6 +327,7 @@ export default function Home() {
       >
         <Sparkles className="h-9 w-9 text-white drop-shadow" />
       </button>
+      </div>
     </div>
   );
 }
