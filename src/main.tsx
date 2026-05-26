@@ -23,7 +23,7 @@ const muiTheme = createTheme({
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <HeroUIProvider>
         <ThemeProvider theme={muiTheme}>
           <RadixTheme accentColor="blue" radius="medium">
