@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@plugin './hero.ts';
+@source '../node_modules/@heroui/theme/dist/**/*.{js,mjs}';
+
+/* ============================================
+   Google Sans Font Family
+   ============================================ */
+@theme {
+  --font-sans: "Google Sans", "Google Sans Text", "Google Sans Display", "Noto Sans Thai", system-ui, sans-serif;
+
+  /* Design Tokens - Customize these! */
+  --color-primary: #4285F4;
+  --color-secondary: #34A853;
+  --color-accent: #FBBC05;
+  --color-danger: #EA4335;
+  --color-surface: #FFFFFF;
+  --color-background: #F8F9FA;
+  --color-text: #202124;
+  --color-text-muted: #5F6368;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+body {
+  font-family: "Google Sans", "Google Sans Text", "Google Sans Display", "Noto Sans Thai", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-background);
+  color: var(--color-text);
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Force Google Sans on everything (overrides Radix Theme font) */
+*,
+.radix-themes {
+  font-family: "Google Sans", "Google Sans Text", "Google Sans Display", "Noto Sans Thai", system-ui, sans-serif !important;
+}
