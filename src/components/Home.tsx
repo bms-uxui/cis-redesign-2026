@@ -18,26 +18,31 @@ import {
   Blocks,
   Sparkles,
 } from "lucide-react";
-
-const HERO_BG =
-  "https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&w=2000&q=80";
+import HERO_BG from "../assets/figma/hero-bg.png";
+import EHP_LOGO from "../assets/figma/ehp-logo.png";
+import CARD_TODAY from "../assets/figma/card-today.png";
+import MENU_DOCTOR from "../assets/figma/menu-doctor.png";
+import MENU_RECORDS from "../assets/figma/menu-records.png";
+import MENU_ONESTOP from "../assets/figma/menu-onestop.png";
+import MENU_TELEHEALTH from "../assets/figma/menu-telehealth.png";
+import MENU_CLAIMS from "../assets/figma/menu-claims.png";
 
 const MENU_IMAGES = [
-  "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1581090700227-1e37b190418e?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1666214280557-f1b5022eb634?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1581595220892-b0739db3ba8c?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1559757175-5700dde675bc?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1538108149393-fbbd81895907?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1504439468489-c8920d796a29?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1583912267550-d6c2ac3196c0?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1631815587646-b85a1bb027e1?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1612277795421-9bc7706a4a34?auto=format&fit=crop&w=600&q=80",
-  "https://images.unsplash.com/photo-1666214280557-f1b5022eb634?auto=format&fit=crop&w=600&q=80",
+  MENU_DOCTOR,
+  MENU_RECORDS,
+  MENU_ONESTOP,
+  MENU_TELEHEALTH,
+  MENU_CLAIMS,
+  MENU_DOCTOR,
+  MENU_RECORDS,
+  MENU_ONESTOP,
+  MENU_TELEHEALTH,
+  MENU_CLAIMS,
+  MENU_DOCTOR,
+  MENU_RECORDS,
+  MENU_ONESTOP,
+  MENU_TELEHEALTH,
+  MENU_CLAIMS,
 ];
 
 const FREQUENT_MENU = [
@@ -114,27 +119,11 @@ export default function Home() {
       {/* Top navigation */}
       <header className="sticky top-0 z-30 h-[100px]">
         <div className="mx-auto flex h-full max-w-[1392px] items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <svg
-              viewBox="0 0 48 48"
-              className="h-12 w-12 drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]"
-            >
-              <path
-                d="M24 4c-8 0-14 6-14 14 0 10 14 26 14 26s14-16 14-26c0-8-6-14-14-14z"
-                fill="#E94B4B"
-              />
-              <rect x="21" y="12" width="6" height="16" rx="1" fill="#fff" />
-              <rect x="16" y="17" width="16" height="6" rx="1" fill="#fff" />
-            </svg>
-            <div className="leading-tight">
-              <p className="text-[13px] font-extrabold tracking-wide text-[#2BC480] drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
-                EXCELLENT
-              </p>
-              <p className="text-[11px] font-bold tracking-[0.18em] text-[#2BC480] drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
-                HEALTH PLATFORM
-              </p>
-            </div>
-          </div>
+          <img
+            src={EHP_LOGO}
+            alt="Excellent Health Platform"
+            className="h-12 w-auto drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]"
+          />
           <div className="flex items-center gap-4">
             <button className="flex h-16 w-16 items-center justify-center rounded-[32px] bg-white shadow">
               <BellDot className="h-6 w-6" />
