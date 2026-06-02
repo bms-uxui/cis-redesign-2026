@@ -326,7 +326,7 @@ function renderNode(
             style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }}
           >
             {node.children.map((cid) => {
-              const child = byId[cid];
+              const child = byId.get(cid);
               const isShortField =
                 child?.type === "field" &&
                 !(child as { multiline?: boolean }).multiline;
@@ -356,7 +356,7 @@ function renderNode(
           style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }}
         >
           {node.children.map((cid) => {
-            const child = byId[cid];
+            const child = byId.get(cid);
             const isShortField =
               child?.type === "field" && !(child as { multiline?: boolean }).multiline;
             return (

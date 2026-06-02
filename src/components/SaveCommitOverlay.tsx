@@ -134,7 +134,7 @@ const ACCENT_BY_TONE = {
   },
 } as const;
 
-type AccentDef = (typeof ACCENT_BY_TONE)["violet"];
+type AccentDef = (typeof ACCENT_BY_TONE)[keyof typeof ACCENT_BY_TONE];
 
 function ModuleCard({
   module,

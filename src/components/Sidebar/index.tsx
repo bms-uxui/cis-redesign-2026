@@ -21,9 +21,10 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { collapsed, setCollapsed, toggleCollapsed } = useSidebar();
 
-  // Default to "home" — the SidebarContext starts collapsed so the app
-  // opens with rail only, matching the main-page landing state.
-  const [activeRail, setActiveRail] = useState<string>("home");
+  // No rail item highlighted by default — the SidebarContext starts
+  // collapsed so the app opens with rail only. User explicitly picks
+  // a section to expand a panel.
+  const [activeRail, setActiveRail] = useState<string>("");
   const [activeChild, setActiveChild] = useState<string>("register");
 
   const active = RAIL_LIST.find((r) => r.key === activeRail);

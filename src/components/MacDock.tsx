@@ -82,6 +82,9 @@ export type DockItem =
   | {
       kind: "label-icon";
       icon: string;
+      /** Optional tabler icon — when present, the dock renders an inline
+          icon+label pill instead of the regular icon-only slot. */
+      tablerIcon?: TablerIcon;
       label: string;
       active?: boolean;
       onClick?: () => void;

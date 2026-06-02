@@ -1,5 +1,4 @@
 import {
-  IconHome,
   IconLayoutDashboard,
   IconStethoscope,
   IconUserPlus,
@@ -30,7 +29,6 @@ import type { RailGroup, RailEntry } from "./types";
 export const RAIL_GROUPS: RailGroup[] = [
   {
     items: [
-      { key: "home", Icon: IconHome, label: "หน้าหลัก", navigateTo: "/" },
       {
         key: "workbench",
         Icon: IconHeartbeat,

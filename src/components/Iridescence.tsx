@@ -46,7 +46,7 @@ void main() {
 }
 `;
 
-interface IridescenceProps extends HTMLAttributes<HTMLDivElement> {
+interface IridescenceProps extends Omit<HTMLAttributes<HTMLDivElement>, "color"> {
   color?: [number, number, number];
   speed?: number;
   amplitude?: number;
