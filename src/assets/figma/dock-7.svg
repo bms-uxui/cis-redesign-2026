@@ -1,0 +1,20 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Frame" clip-path="url(#clip0_806_3889)">
+<g id="Vector">
+</g>
+<path id="Vector_2" d="M11 20C10.0623 20.9377 9.32608 21 8 21C6.67392 21 5.40215 20.4732 4.46447 19.5355C3.52678 18.5979 3 17.3261 3 16C3 14.6739 3.52678 13.4021 4.46447 12.4645C5.40215 11.5268 6.67392 11 8 11C9.32608 11 10.5979 11.5268 11.5355 12.4645" stroke="var(--stroke-0, black)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_3" d="M3 3H4C4.53043 3 5.03914 3.21071 5.41421 3.58579C5.78929 3.96086 6 4.46957 6 5V11" stroke="var(--stroke-0, black)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_4" d="M6 8H17" stroke="var(--stroke-0, black)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_5" d="M15 8C15 10.3431 15 8.65685 15 11" stroke="var(--stroke-0, black)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<g id="Group 272">
+<circle id="Ellipse 7" cx="17" cy="17" r="5" fill="var(--fill-0, #F2F2F2)"/>
+<path id="Vector_6" d="M14 17H20" stroke="var(--stroke-0, black)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_7" d="M17 14L20 17L17 20" stroke="var(--stroke-0, black)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_806_3889">
+<rect width="24" height="24" fill="white"/>
+</clipPath>
+</defs>
+</svg>

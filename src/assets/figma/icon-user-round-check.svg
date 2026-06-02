@@ -1,0 +1,11 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="lucide/user-round-check">
+<path id="Vector" d="M5.33301 56C5.33278 51.8942 6.51737 47.8756 8.7446 44.4264C10.9718 40.9772 14.1471 38.2439 17.8893 36.5547C21.6315 34.8655 25.7816 34.292 29.8417 34.9031C33.9018 35.5143 37.6992 37.284 40.7783 40M42.6663 50.6667L47.9997 56L58.6663 45.3333M39.9997 21.3333C39.9997 28.6971 34.0301 34.6667 26.6663 34.6667C19.3025 34.6667 13.333 28.6971 13.333 21.3333C13.333 13.9695 19.3025 8 26.6663 8C34.0301 8 39.9997 13.9695 39.9997 21.3333Z" stroke="url(#paint0_linear_806_3839)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_806_3839" x1="31.9997" y1="8" x2="31.9997" y2="56" gradientUnits="userSpaceOnUse">
+<stop stop-color="white"/>
+<stop offset="1" stop-color="white" stop-opacity="0"/>
+</linearGradient>
+</defs>
+</svg>

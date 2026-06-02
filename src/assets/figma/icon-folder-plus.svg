@@ -1,0 +1,11 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 124 124" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="lucide/folder-plus">
+<path id="Vector" d="M61.9997 51.6667V82.6667M46.4997 67.1667H77.4997M103.333 103.333C106.074 103.333 108.702 102.245 110.64 100.307C112.578 98.3689 113.666 95.7406 113.666 93V41.3333C113.666 38.5928 112.578 35.9644 110.64 34.0266C108.702 32.0887 106.074 31 103.333 31H62.5163C60.7882 31.0169 59.0833 30.6002 57.5579 29.7878C56.0325 28.9754 54.7351 27.7934 53.7847 26.35L49.5997 20.15C48.6588 18.7213 47.3779 17.5485 45.8719 16.7369C44.366 15.9253 42.6821 15.5003 40.9713 15.5H20.6663C17.9258 15.5 15.2974 16.5887 13.3596 18.5266C11.4217 20.4644 10.333 23.0928 10.333 25.8333V93C10.333 95.7406 11.4217 98.3689 13.3596 100.307C15.2974 102.245 17.9258 103.333 20.6663 103.333H103.333Z" stroke="url(#paint0_linear_806_3927)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_806_3927" x1="61.9997" y1="15.5" x2="61.9997" y2="103.333" gradientUnits="userSpaceOnUse">
+<stop stop-color="white"/>
+<stop offset="1" stop-color="white" stop-opacity="0"/>
+</linearGradient>
+</defs>
+</svg>
