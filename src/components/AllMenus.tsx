@@ -83,7 +83,7 @@ export default function AllMenus() {
   // Featured + Recent surfaces below.
   const searchResults = useMemo<MenuEntry[]>(() => {
     if (!isSearching) return [];
-    return searchMenuEntries(query).slice(0, 50);
+    return searchMenuEntries(query).entries.slice(0, 50);
   }, [query, isSearching]);
 
   const handleSelect = (entry: MenuEntry) => {
