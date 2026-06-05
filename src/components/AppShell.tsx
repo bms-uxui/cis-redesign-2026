@@ -8,7 +8,6 @@ import MenuPaletteHint from "./MenuPaletteHint";
 import CustomizeSidebarModal from "./CustomizeSidebarModal";
 import TabsHost from "./TabsHost";
 import { DictationProvider } from "../contexts/DictationContext";
-import GlobalLiveCaption from "./GlobalLiveCaption";
 import DictationIsland from "./DictationIsland";
 import { HeaderSlotProvider } from "../contexts/HeaderSlotContext";
 import { TabsProvider } from "../contexts/TabsContext";
@@ -76,7 +75,6 @@ function AppShellInner() {
         <AivaDrawer open={aivaOpen} onClose={closeAiva} />
       </div>
 
-      <GlobalLiveCaption />
       <MenuPalette />
       <MenuPaletteHotkey />
       <MenuPaletteHint />

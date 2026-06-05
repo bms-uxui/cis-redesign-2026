@@ -1,4 +1,4 @@
-import type { Dashboard, Widget } from "./types";
+import type { Dashboard } from "./types";
 import { DATA_SOURCES, WIDGET_KINDS } from "./catalog";
 import { chatJSON } from "../../services/ai/llm";
 
@@ -17,12 +17,16 @@ export async function generateDashboard(prompt: string): Promise<Dashboard> {
       return stampAudit(result, prompt, "vllm");
     }
     console.warn("[dashboards] LLM output failed validation:", errors);
+    return stampAudit(
+      await unavailableDashboard(prompt, `LLM output ไม่ผ่าน validation: ${errors.join("; ")}`),
+      prompt,
+      "llm-invalid",
+    );
   } catch (err) {
-    console.warn("[dashboards] LLM unavailable, falling back to mock:", err);
+    console.warn("[dashboards] LLM unreachable:", err);
+    const reason = err instanceof Error ? err.message : String(err);
+    return stampAudit(await unavailableDashboard(prompt, reason), prompt, "llm-unavailable");
   }
-  // Fallback path — guaranteed to work without network / API keys.
-  const mock = await mockGenerate(prompt);
-  return stampAudit(mock, prompt, "mock-generator");
 }
 
 // ── Real LLM path ─────────────────────────────────────────────────────────
@@ -75,11 +79,13 @@ The user writes a natural-language prompt (Thai or English). Emit a single JSON 
 # Widget schema
 {
   "id": string,                  // unique per dashboard (w1, w2, ...)
-  "kind": "kpi" | "line-chart" | "bar-chart" | "table",
+  "kind": "kpi" | "line-chart" | "bar-chart" | "table" | "info",
   "title": string,               // short Thai label shown at the top of the widget
-  "source": string,              // must be one of the data source ids below
+  "source": string,              // must be one of the data source ids below (empty string only when kind="info")
   "groupBy"?: string,            // a dimension from that source (e.g. "clinic", "age_band")
   "metric"?: string,             // a measure from that source (only when needed, e.g. "avg_wait_time_min")
+  "filters"?: { ... },           // string/number/boolean filter values (used by patient.* sources)
+  "message"?: string,            // REQUIRED when kind="info" — markdown text to render
   "layout": { "col": 1|2|3|4, "row": number, "w": 1|2|3|4, "h": number }
 }
 
@@ -99,9 +105,9 @@ Use only these IDs as widget.source:
 ${sources}
 
 # Source → widget compatibility (MUST match)
-KPI sources (single value): appointments.today, patients.active, lab_results.recent
-Chart sources (categorical / time series): appointments.today, appointments.trend, patients.active, patients.insurance, patients.risk, lab_results.recent, medications.top, labs.hba1c_trend
-Table sources (record rows): no_show.list, patients.missed, patients.list
+KPI sources (single value): appointments.today, patients.active, lab_results.recent, operational.no_show_trend, patient.risk_kpi
+Chart sources (categorical / time series): appointments.today, appointments.trend, patients.active, patients.insurance, patients.risk, lab_results.recent, medications.top, labs.hba1c_trend, labs.ldl_trend, labs.creatinine_trend, vitals.systolic_trend, visits.volume_by_month, visits.top_complaints, visits.by_clinic, visits.wait_time_by_clinic, operational.no_show_rate, operational.no_show_trend, operational.slot_utilization, patient.vitals_trend, patient.labs_trend
+Table sources (record rows): no_show.list, patients.missed, patients.list, operational.queue, patient.profile, patient.diagnoses, patient.medications, patient.visits
 
 Examples of WRONG combinations (DO NOT EMIT):
 - kpi + patients.risk (no scalar — use bar-chart instead)
@@ -109,12 +115,30 @@ Examples of WRONG combinations (DO NOT EMIT):
 - table + patients.active (use kpi or bar-chart)
 - bar-chart + patients.list (use table)
 
+# Per-patient queries (IMPORTANT)
+When the user asks about a SPECIFIC patient by name or HN (e.g. "สรุปข้อมูลผู้ป่วยสมชาย ใจดี", "ดูประวัติคุณสมหญิง", "HN 00012345"):
+1. Use the patient.* sources, NOT the cohort sources (patients.active, etc).
+2. Every patient.* widget MUST include a "filters" object with EITHER:
+   - "patient_name": "สมชาย ใจดี"  (Thai name without prefix, the resolver will match)
+   - "patient_hn": "00012345"
+3. For patient.vitals_trend pass metric: "systolic" | "diastolic" | "weight" | "bmi" | "heart_rate"
+4. For patient.labs_trend pass metric: "HbA1c" | "FBS" | "LDL" | "Creatinine" | "Hb"
+5. A good per-patient dashboard combines: profile (table), diagnoses (table), medications (table), vitals trend (line), labs trend (line), visits (table).
+
 # Output rules
 - Output MUST be valid JSON. No prose, no markdown, no code fences.
 - Names should be concise Thai.
-- Pick widget kinds that fit the data shape (e.g. kpi for single values, bar-chart for categorical, line-chart for time, table for record lists).
+- Pick widget kinds that fit the data shape (kpi=scalar, bar-chart=categorical, line-chart=time series, table=record list).
 - Default to a useful but minimal dashboard (3–8 widgets). Do not pack everything in.
-- If the prompt is vague, return a sensible OPD overview.
+
+# CRITICAL — Never fabricate
+- NEVER invent a source id. Only reference ids from the catalog below; any unknown id will be rejected.
+- NEVER invent numeric values, names, or labels. The renderer fetches data from the source — your job is only to pick the right source + groupBy + metric + filters.
+- If the prompt asks for data that NO source in the catalog can provide (e.g. "vaccine coverage", "OR utilization", "ค่าใช้จ่ายผ่าตัด"), DO NOT pick the closest unrelated source. Instead emit a SINGLE info widget that lists:
+  • what the prompt asks for
+  • which data sources we DO have that are closest
+  • a suggestion for how to rephrase
+- If the prompt is vague (e.g. "อะไรก็ได้", "show me something"), pick a reasonable OPD/clinical overview from existing cohort sources.
 
 # Examples
 
@@ -130,6 +154,39 @@ Prompt: "ขอภาพรวม OPD วันนี้"
     { "id": "w4", "kind": "kpi", "title": "ผลแลปผิดปกติ", "source": "lab_results.recent", "layout": { "col": 4, "row": 1, "w": 1, "h": 1 } },
     { "id": "w5", "kind": "bar-chart", "title": "นัดต่อคลินิก", "source": "appointments.today", "groupBy": "clinic", "layout": { "col": 1, "row": 2, "w": 2, "h": 2 } },
     { "id": "w6", "kind": "line-chart", "title": "คิวต่อชั่วโมง", "source": "appointments.today", "groupBy": "hour", "layout": { "col": 3, "row": 2, "w": 2, "h": 2 } }
+  ]
+}
+
+Prompt: "สรุปข้อมูลผู้ป่วยชื่อ สมชาย ใจดี"
+{
+  "id": "db-pat001",
+  "name": "สรุปผู้ป่วย สมชาย ใจดี",
+  "description": "ข้อมูลรายบุคคล: profile, dx, ยา, vitals, lab, visits",
+  "widgets": [
+    { "id": "w1", "kind": "table", "title": "ข้อมูลผู้ป่วย", "source": "patient.profile", "filters": { "patient_name": "สมชาย ใจดี" }, "layout": { "col": 1, "row": 1, "w": 2, "h": 3 } },
+    { "id": "w2", "kind": "table", "title": "โรคประจำตัว", "source": "patient.diagnoses", "filters": { "patient_name": "สมชาย ใจดี" }, "layout": { "col": 3, "row": 1, "w": 2, "h": 2 } },
+    { "id": "w3", "kind": "kpi", "title": "Risk Flags", "source": "patient.risk_kpi", "filters": { "patient_name": "สมชาย ใจดี" }, "layout": { "col": 3, "row": 3, "w": 1, "h": 1 } },
+    { "id": "w4", "kind": "table", "title": "ยาที่ใช้อยู่", "source": "patient.medications", "filters": { "patient_name": "สมชาย ใจดี" }, "layout": { "col": 4, "row": 3, "w": 1, "h": 1 } },
+    { "id": "w5", "kind": "line-chart", "title": "Systolic BP 12 เดือน", "source": "patient.vitals_trend", "metric": "systolic", "filters": { "patient_name": "สมชาย ใจดี" }, "layout": { "col": 1, "row": 4, "w": 2, "h": 2 } },
+    { "id": "w6", "kind": "line-chart", "title": "HbA1c 12 เดือน", "source": "patient.labs_trend", "metric": "HbA1c", "filters": { "patient_name": "สมชาย ใจดี" }, "layout": { "col": 3, "row": 4, "w": 2, "h": 2 } },
+    { "id": "w7", "kind": "table", "title": "ประวัติการตรวจ", "source": "patient.visits", "filters": { "patient_name": "สมชาย ใจดี" }, "layout": { "col": 1, "row": 6, "w": 4, "h": 3 } }
+  ]
+}
+
+Prompt: "ดู vaccine coverage รายเขตสุขภาพ"
+{
+  "id": "db-novacc",
+  "name": "ไม่มีข้อมูล vaccine coverage",
+  "description": "Catalog ไม่มี data source สำหรับ vaccine coverage",
+  "widgets": [
+    {
+      "id": "w1",
+      "kind": "info",
+      "title": "ไม่มีข้อมูลตามที่ขอ",
+      "source": "",
+      "message": "Prompt ขอ vaccine coverage รายเขตสุขภาพ\nแต่ catalog ปัจจุบันไม่มี data source ที่ครอบคลุมเรื่องนี้\n\nที่ใกล้เคียงพอใช้ได้: appointments.today (filter type=Vaccine) — แสดงนัดวัคซีนวันนี้\n\nลองถามใหม่: \"นัดวัคซีนวันนี้\" หรือ \"จำนวนนัดประเภท vaccine 14 วันล่าสุด\"",
+      "layout": { "col": 1, "row": 1, "w": 4, "h": 3 }
+    }
   ]
 }
 
@@ -165,115 +222,30 @@ function stampAudit(d: Dashboard, prompt: string, model: string): Dashboard {
   };
 }
 
-// ── Mock keyword generator (fallback) ─────────────────────────────────────
+// ── LLM-unavailable fallback ──────────────────────────────────────────────
+// We do NOT keyword-match prompts to widgets here — that would violate the
+// "LLM picks UI, never fabricate" contract. When vLLM is unreachable we just
+// surface that fact through an info widget so the user knows why no
+// dashboard was composed.
 
-async function mockGenerate(prompt: string): Promise<Dashboard> {
-  await new Promise((r) => setTimeout(r, 600));
-
-  const p = prompt.toLowerCase();
-  const has = (...kws: string[]) => kws.some((k) => p.includes(k.toLowerCase()));
-
-  const widgets: Widget[] = [];
-  const nextId = (() => {
-    let n = 0;
-    return () => `w${++n}`;
-  })();
-
-  const wantsOPD = has("opd", "นัด", "คิว", "ผู้ป่วยนอก", "outpatient");
-  const wantsLab = has("lab", "แลป", "ห้องแลป");
-  const wantsNoShow = has("no-show", "no show", "ไม่มา", "ขาดนัด");
-  const wantsChronic = has("เรื้อรัง", "chronic", "เบาหวาน", "ความดัน", "diabetes", "hypertension");
-  const wantsWait = has("รอ", "wait");
-  const wantsTrend = has("ย้อนหลัง", "trend", "แนวโน้ม", "สัปดาห์", "เดือน", "week");
-  const wantsActive = has("active", "ทั้งหมด", "ปัจจุบัน");
-  const wantsInsurance = has("สิทธิ", "ประกัน", "insurance", "uc", "sso");
-  const wantsRisk = has("เสี่ยง", "risk", "ฉุกเฉิน", "high risk");
-  const wantsMedications = has("ยา", "medication", "drug", "สั่งจ่าย");
-  const wantsList = has("รายชื่อ", "list", "ตาราง");
-
-  let col = 1;
-  const placeKpi = (title: string, source: string, metric?: string) => {
-    if (col > 4) return;
-    widgets.push({
-      id: nextId(),
-      kind: "kpi",
-      title,
-      source,
-      metric,
-      layout: { col, row: 1, w: 1, h: 1 },
-    });
-    col++;
-  };
-
-  if (wantsOPD) placeKpi("นัดวันนี้", "appointments.today");
-  if (wantsWait) placeKpi("เวลารอเฉลี่ย", "appointments.today", "avg_wait_time_min");
-  if (wantsLab) placeKpi("ผลแลปผิดปกติ", "lab_results.recent");
-  if (wantsActive || wantsChronic) placeKpi("ผู้ป่วย active", "patients.active");
-
-  if (widgets.length === 0) placeKpi("นัดวันนี้", "appointments.today");
-  while (col <= 4 && widgets.length < 4) {
-    if (col === 2) placeKpi("เวลารอเฉลี่ย", "appointments.today", "avg_wait_time_min");
-    else if (col === 3) placeKpi("ผลแลปผิดปกติ", "lab_results.recent");
-    else placeKpi("ผู้ป่วย active", "patients.active");
-  }
-
-  let row = 2;
-
-  if (wantsOPD) {
-    widgets.push({ id: nextId(), kind: "bar-chart", title: "นัดต่อคลินิก", source: "appointments.today", groupBy: "clinic", layout: { col: 1, row, w: 2, h: 2 } });
-    widgets.push({ id: nextId(), kind: "line-chart", title: "คิวต่อชั่วโมง", source: "appointments.today", groupBy: "hour", layout: { col: 3, row, w: 2, h: 2 } });
-    row += 2;
-  }
-  if (wantsChronic) {
-    widgets.push({ id: nextId(), kind: "bar-chart", title: "ผู้ป่วยแยกตามกลุ่มโรค", source: "patients.active", groupBy: "diagnosis_group", layout: { col: 1, row, w: 2, h: 2 } });
-    widgets.push({ id: nextId(), kind: "bar-chart", title: "ช่วงอายุ", source: "patients.active", groupBy: "age_band", layout: { col: 3, row, w: 2, h: 2 } });
-    row += 2;
-  }
-  if (wantsLab && !wantsOPD) {
-    widgets.push({ id: nextId(), kind: "bar-chart", title: "การส่งตรวจแลป", source: "lab_results.recent", groupBy: "test", layout: { col: 1, row, w: 4, h: 2 } });
-    row += 2;
-  }
-  if (wantsTrend) {
-    widgets.push({ id: nextId(), kind: "line-chart", title: "แนวโน้มนัด 14 วัน", source: "appointments.trend", layout: { col: 1, row, w: 4, h: 2 } });
-    row += 2;
-  }
-  if (wantsNoShow) {
-    widgets.push({ id: nextId(), kind: "table", title: "ผู้ป่วย no-show / ขาดนัด", source: "patients.missed", layout: { col: 1, row, w: 4, h: 2 } });
-    row += 2;
-  }
-  if (wantsInsurance) {
-    widgets.push({ id: nextId(), kind: "bar-chart", title: "สัดส่วนสิทธิ", source: "patients.insurance", layout: { col: 1, row, w: 2, h: 2 } });
-    row += 2;
-  }
-  if (wantsRisk) {
-    widgets.push({ id: nextId(), kind: "bar-chart", title: "ผู้ป่วยกลุ่มเสี่ยง", source: "patients.risk", layout: { col: 1, row, w: 4, h: 2 } });
-    row += 2;
-  }
-  if (wantsMedications) {
-    widgets.push({ id: nextId(), kind: "bar-chart", title: "ยาที่สั่งจ่ายบ่อย", source: "medications.top", layout: { col: 1, row, w: 4, h: 2 } });
-    row += 2;
-  }
-  if (wantsList || (wantsActive && widgets.length < 4)) {
-    widgets.push({ id: nextId(), kind: "table", title: "รายชื่อผู้ป่วย active", source: "patients.list", layout: { col: 1, row, w: 4, h: 3 } });
-    row += 3;
-  }
-  if (wantsChronic && has("hba1c", "เบาหวาน")) {
-    widgets.push({ id: nextId(), kind: "line-chart", title: "HbA1c เฉลี่ย 6 เดือน", source: "labs.hba1c_trend", layout: { col: 1, row, w: 4, h: 2 } });
-    row += 2;
-  }
-  if (!widgets.some((w) => w.kind === "line-chart") && wantsOPD) {
-    widgets.push({ id: nextId(), kind: "line-chart", title: "แนวโน้มนัด 14 วัน", source: "appointments.trend", layout: { col: 1, row, w: 4, h: 2 } });
-  }
-
-  const id = `db-${Math.random().toString(36).slice(2, 9)}`;
+async function unavailableDashboard(prompt: string, reason: string): Promise<Dashboard> {
   const now = new Date().toISOString();
   return {
-    id,
+    id: `db-${Math.random().toString(36).slice(2, 9)}`,
     name: deriveName(prompt),
     description: prompt,
     prompt,
     generatedAt: now,
-    widgets,
+    widgets: [
+      {
+        id: "w1",
+        kind: "info",
+        title: "ระบบสร้าง Dashboard ไม่พร้อมใช้งาน",
+        source: "",
+        message: `ไม่สามารถติดต่อ LLM เพื่อสร้าง dashboard จาก prompt นี้ได้\n\nสาเหตุ: ${reason}\n\nกรุณาลองใหม่อีกครั้ง — ถ้ายังไม่ได้ ตรวจสอบ vLLM endpoint`,
+        layout: { col: 1, row: 1, w: 4, h: 3 },
+      },
+    ],
     createdAt: now,
     updatedAt: now,
   };
@@ -296,6 +268,8 @@ const KPI_SOURCES = new Set([
   "appointments.today",
   "patients.active",
   "lab_results.recent",
+  "operational.no_show_trend",
+  "patient.risk_kpi",
 ]);
 const POINTS_SOURCES = new Set([
   "appointments.today",
@@ -306,11 +280,28 @@ const POINTS_SOURCES = new Set([
   "lab_results.recent",
   "medications.top",
   "labs.hba1c_trend",
+  "labs.ldl_trend",
+  "labs.creatinine_trend",
+  "vitals.systolic_trend",
+  "visits.volume_by_month",
+  "visits.top_complaints",
+  "visits.by_clinic",
+  "visits.wait_time_by_clinic",
+  "operational.no_show_rate",
+  "operational.no_show_trend",
+  "operational.slot_utilization",
+  "patient.vitals_trend",
+  "patient.labs_trend",
 ]);
 const ROWS_SOURCES = new Set([
   "no_show.list",
   "patients.missed",
   "patients.list",
+  "operational.queue",
+  "patient.profile",
+  "patient.diagnoses",
+  "patient.medications",
+  "patient.visits",
 ]);
 
 export function validateDashboard(d: unknown): string[] {
@@ -330,17 +321,23 @@ export function validateDashboard(d: unknown): string[] {
       }
       if (!w.kind || !validKinds.has(w.kind))
         errors.push(`widget[${i}].kind invalid: ${w.kind}`);
-      if (!w.source || !validSources.has(w.source)) {
-        errors.push(`widget[${i}].source unknown: ${w.source}`);
-        return;
+      // Info widgets don't query a data source — they just render their
+      // own `message`. Skip source validation.
+      if (w.kind === "info") {
+        if (!w.message || typeof w.message !== "string")
+          errors.push(`widget[${i}] info widget needs "message" string`);
+      } else {
+        if (!w.source || !validSources.has(w.source)) {
+          errors.push(`widget[${i}].source unknown: ${w.source}`);
+          return;
+        }
+        if (w.kind === "kpi" && !KPI_SOURCES.has(w.source))
+          errors.push(`widget[${i}] kpi can't use source "${w.source}" (no scalar output)`);
+        if ((w.kind === "line-chart" || w.kind === "bar-chart") && !POINTS_SOURCES.has(w.source))
+          errors.push(`widget[${i}] chart can't use source "${w.source}" (no categorical output)`);
+        if (w.kind === "table" && !ROWS_SOURCES.has(w.source))
+          errors.push(`widget[${i}] table can't use source "${w.source}" (no row output)`);
       }
-      // Shape compatibility — the most common LLM mistake.
-      if (w.kind === "kpi" && !KPI_SOURCES.has(w.source))
-        errors.push(`widget[${i}] kpi can't use source "${w.source}" (no scalar output)`);
-      if ((w.kind === "line-chart" || w.kind === "bar-chart") && !POINTS_SOURCES.has(w.source))
-        errors.push(`widget[${i}] chart can't use source "${w.source}" (no categorical output)`);
-      if (w.kind === "table" && !ROWS_SOURCES.has(w.source))
-        errors.push(`widget[${i}] table can't use source "${w.source}" (no row output)`);
 
       if (!w.layout || typeof w.layout !== "object")
         errors.push(`widget[${i}].layout missing`);

@@ -8,8 +8,11 @@ import {
   IconMessagePlus,
   IconSettings,
 } from "@tabler/icons-react";
+import { useNavigate } from "react-router";
 import { useDictationContext } from "../contexts/DictationContext";
 import { useAiva } from "../contexts/AivaContext";
+import { answerChatPrompt, type ChatMessage } from "../services/chatAssistant";
+import ChatMessageText from "./ChatMessageText";
 
 const EASE_TV: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -20,11 +23,29 @@ interface AivaDrawerProps {
   onClose: () => void;
 }
 
+interface ChatTurn {
+  id: string;
+  prompt: string;
+  status: "thinking" | "ready" | "error";
+  reply?: string;
+  error?: string;
+}
+
 export default function AivaDrawer({ open, onClose }: AivaDrawerProps) {
   const { isRecording, startSession, stopSession, segments } = useDictationContext();
   const { initialPrompt } = useAiva();
+  const navigate = useNavigate();
   const [prompt, setPrompt] = useState("");
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Mae suggests pages as markdown links — clicking should navigate AND
+  // close the drawer so the doctor lands on the target page immediately.
+  const handleNavigate = (path: string) => {
+    navigate(path);
+    onClose();
+  };
 
   // Esc to close — standard drawer affordance
   useEffect(() => {
@@ -52,14 +73,53 @@ export default function AivaDrawer({ open, onClose }: AivaDrawerProps) {
     if (text) setPrompt(text);
   }, [segments, isRecording]);
 
+  // Auto-scroll to the latest message — fires when a turn is appended and
+  // again when its assistant reply arrives, so the user always sees the
+  // newest content without having to scroll manually.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [turns]);
+
   const handleMic = () => {
     if (isRecording) void stopSession();
     else startSession("mic");
   };
 
   const handleSubmit = () => {
-    if (!prompt.trim()) return;
-    console.log("[aiva-drawer] submit", prompt);
+    const text = prompt.trim();
+    if (!text) return;
+    const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const turn: ChatTurn = { id, prompt: text, status: "thinking" };
+    // Snapshot history BEFORE the new turn so the assistant has full context.
+    const history: ChatMessage[] = turns.flatMap((t) =>
+      t.reply
+        ? [
+            { role: "user", content: t.prompt },
+            { role: "assistant", content: t.reply },
+          ]
+        : [],
+    );
+    setTurns((prev) => [...prev, turn]);
+    setPrompt("");
+    void answerChatPrompt(text, history).then(
+      (reply) =>
+        setTurns((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, status: "ready", reply } : t)),
+        ),
+      (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        setTurns((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, status: "error", error: msg } : t)),
+        );
+      },
+    );
+  };
+
+  const handleNewChat = () => {
+    setPrompt("");
+    setTurns([]);
   };
 
   return (
@@ -94,7 +154,7 @@ export default function AivaDrawer({ open, onClose }: AivaDrawerProps) {
               <div className="flex items-center gap-1">
                 <IconButton
                   label="แชทใหม่"
-                  onClick={() => setPrompt("")}
+                  onClick={handleNewChat}
                 >
                   <IconMessagePlus className="h-4 w-4" stroke={1.75} />
                 </IconButton>
@@ -107,32 +167,60 @@ export default function AivaDrawer({ open, onClose }: AivaDrawerProps) {
               </div>
             </header>
 
-            {/* Greeting + quick chips. Clean, no card — text and outlined
-                pills sit directly on the panel surface. */}
-            <div className="flex flex-1 flex-col gap-[var(--theme-space-md)] overflow-y-auto p-[var(--theme-space-md)]">
-              <div className="flex flex-col gap-1 pt-2">
-                <p className="text-[length:var(--theme-text-lg)] font-medium text-[var(--theme-primary)]">
-                  สวัสดี, คุณหมอ
-                </p>
-                <h2 className="text-[length:var(--theme-text-xl)] font-semibold text-[var(--theme-neutral)]">
-                  ให้เมย์ช่วยอะไร?
-                </h2>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {QUICK_PROMPTS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => {
-                      setPrompt(p);
-                      inputRef.current?.focus();
-                    }}
-                    className="rounded-full border border-[var(--theme-primary)]/50 bg-transparent px-4 py-2 text-[length:var(--theme-text-sm)] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
+            {/* Chat body — greeting + quick chips when empty, conversation
+                turns once the user has sent something. Each assistant turn
+                is rendered as an inline A2UI dashboard generated from the
+                user's prompt. */}
+            <div
+              ref={scrollRef}
+              className="flex flex-1 flex-col gap-[var(--theme-space-md)] overflow-y-auto p-[var(--theme-space-md)]"
+            >
+              {turns.length === 0 ? (
+                <>
+                  <div className="flex flex-col gap-1 pt-2">
+                    <p className="text-[length:var(--theme-text-lg)] font-medium text-[var(--theme-primary)]">
+                      สวัสดี, คุณหมอ
+                    </p>
+                    <h2 className="text-[length:var(--theme-text-xl)] font-semibold text-[var(--theme-neutral)]">
+                      ให้เมย์ช่วยอะไร?
+                    </h2>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {QUICK_PROMPTS.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => {
+                          setPrompt(p);
+                          inputRef.current?.focus();
+                        }}
+                        className="rounded-full border border-[var(--theme-primary)]/50 bg-transparent px-4 py-2 text-[length:var(--theme-text-sm)] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                turns.map((t) => (
+                  <div key={t.id} className="flex flex-col gap-2">
+                    <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-[var(--theme-primary)] px-4 py-2 text-[length:var(--theme-text-sm)] text-white">
+                      {t.prompt}
+                    </div>
+                    <div className="mr-auto max-w-[90%] rounded-2xl rounded-tl-md border border-[var(--theme-neutral)]/10 bg-[var(--theme-base)] px-4 py-2 text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)] whitespace-pre-wrap">
+                      {t.status === "thinking" && <TypingDots />}
+                      {t.status === "ready" && t.reply && (
+                        <ChatMessageText text={t.reply} onNavigate={handleNavigate} />
+                      )}
+                      {t.status === "error" && (
+                        <span className="text-[var(--theme-error)]">
+                          ขออภัย เกิดข้อผิดพลาด: {t.error}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Input area — subtle filled bg, no thick border. Mic + send
@@ -201,6 +289,24 @@ interface IconButtonProps {
   label: string;
   onClick?: () => void;
   children: React.ReactNode;
+}
+
+function TypingDots() {
+  return (
+    <span
+      aria-label="กำลังคิด"
+      className="inline-flex items-center gap-1 align-middle text-[var(--theme-neutral)]/55"
+    >
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="inline-block h-1.5 w-1.5 rounded-full bg-current"
+          animate={{ opacity: [0.25, 1, 0.25], y: [0, -2, 0] }}
+          transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
+        />
+      ))}
+    </span>
+  );
 }
 
 function IconButton({ label, onClick, children }: IconButtonProps) {

@@ -23,15 +23,15 @@ import {
   IconChevronRight,
   IconAdjustmentsHorizontal,
   IconSortDescending,
-  IconThumbUp,
-  IconThumbDown,
-  IconTrash,
+  IconEye,
+  IconEyeOff,
+  IconPencil,
 } from "@tabler/icons-react";
-import { Button } from "@heroui/react";
+import { Button, Card, CardBody, CardHeader, Divider } from "@heroui/react";
 import type { SaveCommitField } from "./SaveCommitOverlay";
 import { useDictationContext } from "../contexts/DictationContext";
 import { useSidebar } from "../contexts/SidebarContext";
-import { chat } from "../services/ai/llm";
+import { chat, chatJSON } from "../services/ai/llm";
 import {
   A2UI_CATALOG_SYSTEM,
   A2UI_PATIENT_DESCRIBE_TASK,
@@ -275,10 +275,11 @@ export default function NewPatientByVoice() {
     <div className="min-h-screen w-full bg-[var(--theme-base)]">
       {/* Reserve space for the floating TopBar card (top-4 + h-16 = 80px). */}
       <div className="h-20 shrink-0" aria-hidden />
-      <div
+      {/* ── Main panel ─────────────────────────────────────────────────── */}
+      <main
         className={[
-          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
-          // Match the global sidebar width: hidden=16, collapsed=106, expanded=415.
+          "flex min-w-0 flex-col overflow-hidden h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 transition-[margin] duration-300 ease-out",
+          // Match the global sidebar width: hidden=16, collapsed=106, expanded=370.
           railHidden
             ? "ml-4"
             : sidebarCollapsed
@@ -286,194 +287,179 @@ export default function NewPatientByVoice() {
               : "ml-[370px]",
         ].join(" ")}
       >
-      {/* ── Main panel ─────────────────────────────────────────────────── */}
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Scrollable content area */}
-        <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-6 overflow-y-auto px-6 py-6">
-        <PageHeader
-          phase={phase}
-          populatedCount={populatedCount}
-          onManualFallback={() => navigate("/patient/new/manual")}
-        />
+        {/* Content area — fits within the viewport during the INPUT phase
+            (Figma single-screen layout) and switches back to scrolling for
+            the extracting/review phases that have unbounded form lengths. */}
+        <div
+          className={
+            phase === "input"
+              ? "flex w-full min-h-0 flex-1 flex-col gap-3 overflow-hidden py-0"
+              : "mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-6 overflow-y-auto px-6 py-6"
+          }
+        >
+        {phase !== "input" && (
+          <PageHeader
+            phase={phase}
+            populatedCount={populatedCount}
+            onManualFallback={() => navigate("/patient/new/manual")}
+          />
+        )}
 
-        {/* Phase: INPUT — empty/idle and live-recording */}
+        {/* Phase: INPUT — Speech-to-text capture screen (Figma design 992:918).
+            Hero card with the doctor avatar in the center, floating live
+            transcript bubbles scattered around, and a Stop / Listening pill
+            pair. Below: two side-by-side cards — patient profile preview on
+            the left, full transcription on the right. */}
         <AnimatePresence mode="wait">
           {phase === "input" && (
-            <motion.section
+            <motion.div
               key="input"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.45, ease: EASE_TV }}
-              className="flex flex-col items-center gap-8 rounded-[28px] border border-neutral-200/80 bg-white px-10 py-12 shadow-[0_2px_6px_rgba(0,0,0,0.02)]"
+              className="flex min-h-0 flex-1 flex-col gap-3"
             >
-              <div className="flex flex-col items-center gap-4 text-center">
-                <motion.img
-                  src={AI_DOCTOR}
-                  alt="เมย์"
-                  decoding="async"
-                  initial={{ scale: 0.7, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{
-                    duration: 0.7,
-                    ease: [0.34, 1.6, 0.5, 1],
-                  }}
-                  className="h-32 w-auto object-contain drop-shadow-[0_8px_18px_rgba(120,90,220,0.22)]"
-                />
-                <div>
-                  <p className="text-sm font-normal text-neutral-500">
-                    ลงทะเบียนผู้ป่วยใหม่
-                  </p>
-                  <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">
-                    เล่าให้เมย์ฟังเกี่ยวกับผู้ป่วยใหม่
-                  </h1>
-                  <p className="mt-2 max-w-[520px] text-sm leading-relaxed text-neutral-500">
-                    พูดหรือพิมพ์ข้อมูลก็ได้ — เมย์จะจัดเป็นฟอร์มให้ตรวจสอบก่อนบันทึก
-                  </p>
+              {/* Hero: Speech-to-text card with floating message bubbles.
+                  Flex-basis 0 + flex-1 lets it share the viewport with the
+                  bottom row without forcing a scroll. */}
+              <section className="relative flex flex-[1.1_0_0] basis-0 items-center justify-center overflow-hidden rounded-[24px] bg-white px-8 py-6">
+                {/* Cancel / Save action pill — overlaid at the hero card's
+                    top-right corner (Figma 992:1387). z-20 keeps it above
+                    the bubbles + center cluster. */}
+                <div className="absolute right-5 top-5 z-20 inline-flex items-center gap-3 rounded-full border border-neutral-200 bg-white p-2 shadow-[0_2px_6px_rgba(0,0,0,0.04)]">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/")}
+                    className="flex w-[112px] items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-neutral-900 hover:bg-neutral-100"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmitInput}
+                    disabled={!prompt.trim() || isRecording}
+                    className="flex w-[112px] items-center justify-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    บันทึก
+                  </button>
                 </div>
-              </div>
 
-              {/* Inline live transcript — replaces the floating LiveCaption
-                  modal on this page. Shows diarized segments as chat-style
-                  bubbles while the user records. */}
-              {(isRecording || segments.length > 0) && (
-                <div className="flex w-full max-w-[640px] flex-col gap-2 rounded-2xl border border-neutral-200 bg-white p-4 shadow-[0_2px_6px_rgba(0,0,0,0.02)]">
-                  <div className="flex items-center justify-between text-[12px]">
-                    <span className="flex items-center gap-1.5 font-medium text-neutral-600">
-                      {isRecording ? (
-                        <>
-                          <span className="relative flex h-2 w-2">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
-                            <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
+
+                {/* Floating bubbles — recent transcript snippets sprinkled
+                    around the avatar so the user sees their words "lifting
+                    off". When idle, show subtle placeholder dots. */}
+                <SpeechBubbles segments={segments} isRecording={isRecording} />
+
+                {/* Center cluster: soft halo + avatar + title + buttons */}
+                <div className="relative z-10 flex flex-col items-center gap-5">
+                  <div className="relative">
+                    {/* Soft semicircular gradient backdrop */}
+                    <div
+                      aria-hidden
+                      className="absolute left-1/2 bottom-0 h-[140px] w-[300px] -translate-x-1/2 rounded-t-full bg-gradient-to-t from-violet-200/55 via-violet-100/35 to-transparent"
+                    />
+                    <motion.img
+                      src={AI_DOCTOR}
+                      alt="เมย์"
+                      decoding="async"
+                      initial={{ scale: 0.7, opacity: 0 }}
+                      animate={{
+                        scale: 1,
+                        opacity: 1,
+                        y: isRecording ? [0, -4, 0] : 0,
+                      }}
+                      transition={{
+                        scale: { duration: 0.7, ease: [0.34, 1.6, 0.5, 1] },
+                        opacity: { duration: 0.7 },
+                        y: isRecording
+                          ? { duration: 2.2, repeat: Infinity, ease: "easeInOut" }
+                          : { duration: 0.4 },
+                      }}
+                      className="relative h-32 w-auto object-contain drop-shadow-[0_8px_18px_rgba(120,90,220,0.25)]"
+                    />
+                    {/* Small "patient" head badge offset right — photo-style
+                        avatar so this reads as a 2-person conversation, not
+                        a one-sided monologue. Matches Figma node 992:1344. */}
+                    <div
+                      aria-hidden
+                      className="absolute -right-14 top-16 flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-amber-100 via-rose-100 to-violet-100 shadow-[0_6px_16px_rgba(120,90,220,0.18)] ring-4 ring-white"
+                    >
+                      <IconUser
+                        className="h-10 w-10 translate-y-1 text-rose-900/55"
+                        stroke={1.4}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-center">
+                    <h2 className="text-[24px] font-semibold leading-tight text-black">
+                      Speech-to-text
+                    </h2>
+                    <p className="mt-1 text-[16px] text-black/80">
+                      ซักประวัติผู้ป่วยโดยไม่ต้องจดเอง
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    {isRecording ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void stopSession()}
+                          className="rounded-2xl bg-[#ff383c] px-6 py-3 text-[16px] font-semibold text-white transition hover:bg-[#e6262a]"
+                        >
+                          หยุด
+                        </button>
+                        <div
+                          aria-live="polite"
+                          className="flex items-center gap-2 rounded-2xl bg-[#3965e1] px-6 py-3 text-[16px] font-semibold text-white"
+                        >
+                          <span className="relative inline-flex h-2 w-2">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/80" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
                           </span>
-                          กำลังบันทึก{source === "tab" ? "เสียงในอุปกรณ์" : "เสียงพูด"}
-                        </>
-                      ) : (
-                        <>ทรานสคริปต์ ({segments.length} ตอน)</>
-                      )}
-                    </span>
-                    {!isRecording && segments.length > 0 && (
-                      <span className="text-neutral-400">
-                        แก้ไขข้อความด้านล่างก่อนวิเคราะห์ได้
-                      </span>
-                    )}
-                  </div>
-                  <div className="max-h-[260px] overflow-y-auto pr-1">
-                    {segments.length === 0 ? (
-                      <p className="py-6 text-center text-[13px] text-neutral-400">
-                        พูดได้เลย เมย์กำลังฟังอยู่…
-                      </p>
+                          กำลังฟัง...
+                        </div>
+                      </>
                     ) : (
-                      <div className="flex flex-col gap-2">
-                        {segments.map((s, i) => {
-                          const isDoctor = s.speaker === 1;
-                          return (
-                            <div
-                              key={i}
-                              className={`flex gap-2 ${
-                                isDoctor ? "flex-row" : "flex-row-reverse"
-                              }`}
-                            >
-                              <span
-                                className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
-                                  isDoctor
-                                    ? "bg-violet-100 text-violet-700"
-                                    : "bg-emerald-100 text-emerald-700"
-                                }`}
-                                title={isDoctor ? "แพทย์" : "ผู้ป่วย"}
-                              >
-                                {isDoctor ? "D" : "P"}
-                              </span>
-                              <span
-                                className={`max-w-[78%] rounded-2xl px-3 py-1.5 text-[13px] leading-relaxed ${
-                                  isDoctor
-                                    ? "bg-violet-50 text-violet-900"
-                                    : "bg-emerald-50 text-emerald-900"
-                                }`}
-                              >
-                                {s.text}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div
-                className={`flex w-full max-w-[640px] flex-col gap-3 rounded-2xl border bg-neutral-50 px-5 py-4 transition ${
-                  isRecording
-                    ? "border-violet-400 ring-2 ring-violet-100"
-                    : "border-neutral-200"
-                }`}
-              >
-                <textarea
-                  ref={inputRef}
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      handleSubmitInput();
-                    }
-                  }}
-                  placeholder={EXAMPLE}
-                  rows={4}
-                  className="resize-none bg-transparent text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none"
-                />
-
-                <div className="flex items-center justify-between">
-                  <RecordingHint isRecording={isRecording} source={source} />
-                  <div className="flex items-center gap-2">
-                    {/* Tab/system audio — for telehealth calls, voice memos
-                        playing on the device, recorded interviews, etc. */}
-                    {!isRecording && (
                       <button
                         type="button"
-                        onClick={handleTabAudio}
-                        aria-label="ฟังเสียงในอุปกรณ์"
-                        title="ฟังเสียงในอุปกรณ์ (เช่น Telehealth / คลิปที่เปิดอยู่)"
-                        className="flex h-10 w-10 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-700 transition hover:bg-neutral-50"
+                        onClick={handleMic}
+                        className="flex items-center gap-2 rounded-2xl bg-[#3965e1] px-6 py-3 text-[16px] font-semibold text-white transition hover:bg-[#2d52c4]"
                       >
-                        <IconDeviceDesktop className="h-5 w-5" stroke={1.75} />
+                        <IconMicrophone className="h-4 w-4" stroke={2} />
+                        เริ่มฟัง
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={isRecording ? () => void stopSession() : handleMic}
-                      aria-label={isRecording ? "หยุดบันทึก" : "พูดผ่านไมค์"}
-                      title={isRecording ? "หยุดบันทึก" : "พูดผ่านไมค์"}
-                      className={`flex h-10 w-10 items-center justify-center rounded-full transition ${
-                        isRecording
-                          ? "bg-rose-500 text-white shadow-[0_4px_12px_rgba(244,63,94,0.4)]"
-                          : "border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50"
-                      }`}
-                    >
-                      {isRecording ? (
-                        <span className="block h-3 w-3 rounded-sm bg-white" />
-                      ) : (
-                        <IconMicrophone className="h-5 w-5" stroke={1.75} />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSubmitInput}
-                      disabled={!prompt.trim() || isRecording}
-                      className="flex h-10 items-center gap-2 rounded-full bg-neutral-900 px-5 text-sm font-medium text-white shadow-[0_4px_12px_rgba(0,0,0,0.18)] transition disabled:cursor-not-allowed disabled:opacity-30"
-                    >
-                      <span>วิเคราะห์</span>
-                      <IconArrowUp className="h-4 w-4" stroke={2} />
-                    </button>
                   </div>
-                </div>
-              </div>
 
-              <p className="text-[11px] text-neutral-400">
-                ⌘+Enter เพื่อวิเคราะห์ทันที
-              </p>
-            </motion.section>
+                  {!isRecording && !prompt && (
+                    <button
+                      type="button"
+                      onClick={handleTabAudio}
+                      className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-800"
+                    >
+                      <IconDeviceDesktop className="h-3.5 w-3.5" stroke={1.75} />
+                      ใช้เสียงในอุปกรณ์ (Telehealth / คลิปที่เปิดอยู่)
+                    </button>
+                  )}
+                </div>
+              </section>
+
+              {/* Bottom row — profile preview (left, from ID-card scan) +
+                  full transcript (right). Figma split is roughly 40/60
+                  (profile 518px, transcription 729px on 1299px). */}
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[2fr_3fr]">
+                <ProfilePreviewCard populatedCount={populatedCount.filled} />
+                <TranscriptionCard
+                  prompt={prompt}
+                  segments={segments}
+                  onPromptChange={setPrompt}
+                  textareaRef={inputRef}
+                />
+              </div>
+            </motion.div>
           )}
 
           {/* Phase: EXTRACTING — module card + field rows stagger in,
@@ -578,43 +564,7 @@ export default function NewPatientByVoice() {
         </AnimatePresence>
         </div>
 
-        {/* Bottom action row */}
-        <footer className="flex items-center justify-between border-t border-neutral-100 bg-white px-6 py-3 text-[13px]">
-          <button
-            type="button"
-            onClick={() => navigate("/")}
-            className="flex items-center gap-1.5 text-neutral-600 hover:text-rose-600"
-          >
-            <IconTrash className="h-4 w-4" stroke={1.75} />
-            <span className="underline-offset-4 hover:underline">
-              ยกเลิกการบันทึก
-            </span>
-          </button>
-          <div className="flex items-center gap-3 text-neutral-500">
-            <button
-              type="button"
-              aria-label="เห็นด้วย"
-              className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-neutral-100 hover:text-emerald-600"
-            >
-              <IconThumbUp className="h-4 w-4" stroke={1.75} />
-            </button>
-            <button
-              type="button"
-              aria-label="ไม่เห็นด้วย"
-              className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-neutral-100 hover:text-rose-600"
-            >
-              <IconThumbDown className="h-4 w-4" stroke={1.75} />
-            </button>
-            <button
-              type="button"
-              className="text-rose-600 underline-offset-4 hover:underline"
-            >
-              แจ้งการบันทึกมีปัญหา
-            </button>
-          </div>
-        </footer>
       </main>
-      </div>
     </div>
   );
 }
@@ -874,6 +824,516 @@ function ExtractFieldRow({
             }}
           />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── New "Speech-to-text" hero helpers (Figma 992:918) ────────────────────
+
+interface SpeechBubblesProps {
+  segments: { text: string; speaker?: number }[];
+  isRecording: boolean;
+}
+
+/** Ask the LLM to extract clinically relevant key phrases from the live
+ *  transcript. Polls every 3s while recording — independent of segment
+ *  churn so calls always complete instead of being aborted mid-flight by
+ *  rapid transcript updates. New phrases are MERGED with prior ones so
+ *  the queue grows monotonically across the session. */
+function useSymptomPhrasesFromLLM(
+  segments: { text: string }[],
+  isRecording: boolean,
+): string[] {
+  const [phrases, setPhrases] = useState<string[]>([]);
+  // Latest segments via ref so the polling effect can read them without
+  // re-running on every transcript update (which would abort the call).
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+
+  // Clear ONLY when starting a new recording session.
+  const wasRecordingRef = useRef(isRecording);
+  useEffect(() => {
+    if (isRecording && !wasRecordingRef.current) setPhrases([]);
+    wasRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  useEffect(() => {
+    if (!isRecording) return;
+    let cancelled = false;
+
+    const tick = async () => {
+      const transcript = segmentsRef.current
+        .map((s) => s.text)
+        .join(" ")
+        .trim();
+      if (transcript.length < 6) return;
+      try {
+        const result = await chatJSON<{ phrases?: string[] }>(
+          [
+            {
+              role: "system",
+              content:
+                "You are extracting clinically structured key phrases from a Thai patient interview transcript that GROWS over time — every call has the full transcript so far. " +
+                "Use the standard HPI mnemonic OLD CARTS plus Social and PMH/Med categories. " +
+                "Be exhaustive: extract EVERY distinct clinical detail mentioned so far, do not summarize or merge. " +
+                'Output ONLY JSON: {"phrases":["...","..."]} — up to 20 short Thai phrases, each ≤24 characters, each a readable noun/verb chunk (not a sentence). ' +
+                "Cover ALL of these when present, in this priority order:\n" +
+                "• Onset — เริ่มเป็นเมื่อไร / สาเหตุที่กระตุ้น (เช่น 'เริ่มเมื่อวาน', 'หลังยกของหนัก')\n" +
+                "• Location — ตำแหน่งที่เป็น (เช่น 'ปวดเอว', 'แน่นหน้าอก')\n" +
+                "• Duration — เป็นมานาน/ความต่อเนื่อง (เช่น 'มา 3 วัน', 'เป็น ๆ หาย ๆ')\n" +
+                "• Character — ลักษณะอาการ (เช่น 'แปลบ', 'ตื้อ ๆ', 'แสบร้อน')\n" +
+                "• Aggravating / Alleviating — ปัจจัยกระตุ้นหรือบรรเทา (เช่น 'แย่ตอนนอน', 'ดีขึ้นเมื่อพัก')\n" +
+                "• Radiation — ร้าวไปที่ไหน (เช่น 'ร้าวลงขา')\n" +
+                "• Timing — ช่วงเวลา/ความถี่ (เช่น 'ทุกเช้า', 'หลังกินข้าว')\n" +
+                "• Severity — ความรุนแรง (เช่น 'ปวดมาก ระดับ 8/10', 'พอทนได้')\n" +
+                "• Social / Behavior — พฤติกรรม + ไลฟ์สไตล์ที่เกี่ยว (เช่น 'สูบบุหรี่ 10 มวน/วัน', 'นั่งทำงานนาน', 'นอนดึก', 'ดื่มเหล้า')\n" +
+                "• PMH / Meds — โรคประจำตัว + ยาที่กินอยู่ (เช่น 'เป็นเบาหวาน', 'กินยาความดัน', 'แพ้ยา NSAID')\n" +
+                "Skip greetings, names, ages, occupations unless they map to one of the categories above (e.g. 'พนักงานออฟฟิศ' is fine as Social context). " +
+                "Deduplicate. " +
+                'If nothing clinically relevant yet, return {"phrases":[]}.',
+            },
+            { role: "user", content: transcript },
+          ],
+          { temperature: 0.2, maxTokens: 600, fast: true },
+        );
+        if (cancelled) return;
+        const next = Array.isArray(result?.phrases)
+          ? result.phrases.filter(
+              (p): p is string =>
+                typeof p === "string" && p.length > 0 && p.length <= 32,
+            )
+          : [];
+        if (next.length === 0) return;
+        setPhrases((prev) => {
+          // Merge — keep all prior phrases, append only new ones.
+          const seen = new Set(prev);
+          const additions = next.filter((p) => !seen.has(p));
+          return additions.length ? [...prev, ...additions] : prev;
+        });
+      } catch {
+        // Silent — next tick will retry with a fresh transcript snapshot.
+      }
+    };
+
+    // Fire once immediately, then poll on a fixed cadence so calls
+    // always have time to complete and accumulate.
+    tick();
+    const interval = window.setInterval(tick, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isRecording]);
+
+  return phrases;
+}
+
+interface Pin {
+  text: string;
+  /** Monotonic release order — used for palette / rotation variation. */
+  orderIndex: number;
+  /** Locked random position (% of card). Never changes once assigned. */
+  x: number;
+  y: number;
+}
+
+/** Normalize a phrase for dedupe — strip whitespace, drop trailing
+ *  punctuation, and collapse interior spaces so trivially different
+ *  outputs from the LLM ("ปวด ท้อง " vs "ปวดท้อง") collapse to one pin. */
+function normalizePhrase(text: string): string {
+  return text
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[\.,!?…]+$/u, "");
+}
+
+/** Pick a random spot inside the hero card that (a) stays clear of the
+ *  central avatar/title cluster and (b) keeps a minimum distance from
+ *  any post-it already placed. Bails to a random fallback after enough
+ *  attempts so the wall never silently drops a pin. */
+function pickRandomPosition(taken: { x: number; y: number }[]): {
+  x: number;
+  y: number;
+} {
+  // Coordinates are expressed as % of the hero card.
+  const MIN_X = 2;
+  const MAX_X = 78; // leave room for ~170px post-it width
+  const MIN_Y = 4;
+  const MAX_Y = 80;
+  // Avoid the central avatar/title/buttons region.
+  const CENTER = { x0: 36, x1: 64, y0: 22, y1: 90 };
+  const MIN_DIST_X = 14;
+  const MIN_DIST_Y = 16;
+
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const x = MIN_X + Math.random() * (MAX_X - MIN_X);
+    const y = MIN_Y + Math.random() * (MAX_Y - MIN_Y);
+    if (
+      x > CENTER.x0 &&
+      x < CENTER.x1 &&
+      y > CENTER.y0 &&
+      y < CENTER.y1
+    ) {
+      continue;
+    }
+    const collides = taken.some(
+      (p) => Math.abs(p.x - x) < MIN_DIST_X && Math.abs(p.y - y) < MIN_DIST_Y,
+    );
+    if (collides) continue;
+    return { x, y };
+  }
+  // Best-effort fallback — anywhere outside the center zone.
+  return {
+    x: Math.random() > 0.5
+      ? MAX_X - Math.random() * 20
+      : MIN_X + Math.random() * 20,
+    y: MIN_Y + Math.random() * (MAX_Y - MIN_Y),
+  };
+}
+
+/** Post-it wall: as the LLM surfaces new clinical phrases, each one is
+ *  released onto its own random position inside the hero card. Position
+ *  is locked per pin so post-its don't shuffle while new ones arrive.
+ *  The center cluster (avatar/title/buttons) is treated as a no-go zone. */
+function SpeechBubbles({ segments, isRecording }: SpeechBubblesProps) {
+  const phrases = useSymptomPhrasesFromLLM(segments, isRecording);
+  const [pins, setPins] = useState<Pin[]>([]);
+  const releaseCounterRef = useRef(0);
+  const wasRecordingRef = useRef(isRecording);
+
+  // Clear the wall only when a new recording session begins.
+  useEffect(() => {
+    if (isRecording && !wasRecordingRef.current) {
+      setPins([]);
+      releaseCounterRef.current = 0;
+    }
+    wasRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  // Release a fresh phrase roughly every second while recording.
+  useEffect(() => {
+    if (!isRecording) return;
+    const pinnedKeys = new Set(pins.map((p) => normalizePhrase(p.text)));
+    const next = phrases.find((p) => !pinnedKeys.has(normalizePhrase(p)));
+    if (!next) return;
+    const t = setTimeout(() => {
+      setPins((prev) => {
+        const key = normalizePhrase(next);
+        if (prev.some((p) => normalizePhrase(p.text) === key)) return prev;
+        const { x, y } = pickRandomPosition(prev);
+        const orderIndex = releaseCounterRef.current;
+        releaseCounterRef.current += 1;
+        return [...prev, { text: next, orderIndex, x, y }];
+      });
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [phrases, pins, isRecording]);
+
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0">
+      <AnimatePresence>
+        {pins.map((pin) => (
+          <PostItNote
+            key={pin.text}
+            text={pin.text}
+            x={pin.x}
+            y={pin.y}
+            index={pin.orderIndex}
+          />
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// Post-it palette — soft pastels with matching ink color. Cycled per
+// bubble index so neighbouring notes look distinct.
+const POSTIT_PALETTE: { bg: string; ink: string; border: string }[] = [
+  { bg: "#fff7c2", ink: "#7c5b00", border: "#f3e29a" }, // classic yellow
+  { bg: "#ffd9e4", ink: "#8a1c4a", border: "#f9bcd0" }, // pink
+  { bg: "#c8e4ff", ink: "#0c3d72", border: "#a9d0f3" }, // blue
+  { bg: "#d2f5d6", ink: "#1d5e2a", border: "#b3e3ba" }, // mint
+];
+
+interface PostItNoteProps {
+  text: string;
+  /** Position in % of the parent hero card. */
+  x: number;
+  y: number;
+  index: number;
+}
+
+/** Post-it note with a pen-writing animation. Text reveals character by
+ *  character; a pencil hovers at the end while writing and lifts off
+ *  when the note is complete. Each note is rotated a few degrees and
+ *  cycles through the pastel palette so the wall reads like a real
+ *  bulletin board. */
+function PostItNote({ text, x, y, index }: PostItNoteProps) {
+  const palette = POSTIT_PALETTE[index % POSTIT_PALETTE.length];
+  // Stable per-bubble rotation: -7° → +7° based on index hash.
+  const rotation = (((index * 53) % 14) - 7) | 0;
+
+  const [typed, setTyped] = useState("");
+  useEffect(() => {
+    setTyped("");
+    let i = 0;
+    const id = window.setInterval(() => {
+      i += 1;
+      setTyped(text.slice(0, i));
+      if (i >= text.length) window.clearInterval(id);
+    }, 55);
+    return () => window.clearInterval(id);
+  }, [text]);
+
+  const isWriting = typed.length < text.length;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.7, y: 14, rotate: 0 }}
+      animate={{
+        opacity: 1,
+        scale: 1,
+        y: [0, -4, 0],
+        rotate: rotation,
+      }}
+      exit={{ opacity: 0, scale: 0.85, y: -10, rotate: rotation + 4 }}
+      transition={{
+        opacity: { duration: 0.4 },
+        scale: { duration: 0.4, ease: [0.34, 1.6, 0.5, 1] },
+        rotate: { duration: 0.5 },
+        y: {
+          duration: 3 + (index % 3) * 0.4,
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay: (index % 4) * 0.18,
+        },
+      }}
+      className="absolute w-[170px]"
+      style={{ left: `${x}%`, top: `${y}%` }}
+    >
+      <div
+        className="relative px-4 py-3 shadow-[2px_4px_10px_rgba(0,0,0,0.08)]"
+        style={{
+          background: palette.bg,
+          borderTop: `1px solid ${palette.border}`,
+          // Sticky-note "tape" peel: a tiny darker fold at top-left
+          backgroundImage: `linear-gradient(135deg, rgba(0,0,0,0.04) 0 8px, transparent 8px)`,
+        }}
+      >
+        <p
+          className="text-[13px] font-medium leading-snug"
+          style={{ color: palette.ink, fontFamily: "'Caveat', 'Noto Sans Thai Looped', cursive" }}
+        >
+          {typed}
+          {isWriting && (
+            <motion.span
+              animate={{ opacity: [1, 0, 1] }}
+              transition={{ duration: 0.7, repeat: Infinity }}
+              className="ml-0.5 inline-block h-[14px] w-px align-middle"
+              style={{ background: palette.ink }}
+            />
+          )}
+        </p>
+        {/* Pen — hovers at the bottom-right while writing, with a tiny
+            scribble jitter so it reads as "in motion". */}
+        <AnimatePresence>
+          {isWriting && (
+            <motion.div
+              initial={{ opacity: 0, y: -6, rotate: -30 }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                rotate: [-30, -22, -34, -26, -32],
+                x: [0, 1, -1, 1, 0],
+              }}
+              exit={{ opacity: 0, y: -16, rotate: -40, transition: { duration: 0.35 } }}
+              transition={{
+                rotate: { duration: 0.5, repeat: Infinity, ease: "linear" },
+                x: { duration: 0.5, repeat: Infinity, ease: "linear" },
+              }}
+              className="absolute -bottom-3 -right-2"
+              style={{ originX: 0.5, originY: 0.5 }}
+            >
+              <IconPencil
+                className="h-6 w-6"
+                stroke={2}
+                style={{ color: palette.ink }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
+interface ProfilePreviewCardProps {
+  populatedCount: number;
+}
+
+/** Skeleton-style preview of the patient profile that will be extracted
+ *  from the transcript. Matches the Figma exactly: avatar circle + 2 lines
+ *  + 6 field stubs in a 3×2 grid. When the LLM has populated fields the
+ *  count is surfaced in the header to indicate progress. */
+// Demo patient — fills the preview card so the page reads as a real
+// post-ID-card scan, not a wireframe. Wire to the extracted A2UI response
+// once that path is stable.
+interface DemoField {
+  label: string;
+  value: string;
+  /** When set, render with a mask toggle (eye icon) — used for PDPA-sensitive
+   *  identifiers like the citizen ID. */
+  sensitive?: boolean;
+}
+const DEMO_PATIENT: {
+  initial: string;
+  name: string;
+  hn: string;
+  fields: DemoField[];
+} = {
+  initial: "ส",
+  name: "นายสมชาย ใจดี",
+  hn: "HN 0001234",
+  fields: [
+    { label: "เลขบัตรประชาชน", value: "1-2345-67890-12-3", sensitive: true },
+    { label: "วันเกิด", value: "12 มี.ค. 2522 (45 ปี)" },
+    { label: "เพศ", value: "ชาย" },
+    { label: "กรุ๊ปเลือด", value: "O Rh+" },
+    { label: "เบอร์โทร", value: "081-234-5678" },
+    { label: "ที่อยู่", value: "123/45 ถ.สุขุมวิท คลองเตย กรุงเทพฯ" },
+  ],
+};
+
+/** Mask a Thai citizen ID (or any digit-with-dash string), keeping the
+ *  last `visible` digits readable. Dashes are preserved so the layout
+ *  doesn't reflow when the user toggles the eye. */
+function maskId(value: string, visible = 4): string {
+  const digits = value.replace(/\D/g, "");
+  const keep = digits.slice(-visible);
+  const masked = "X".repeat(Math.max(0, digits.length - visible)) + keep;
+  // Re-insert dashes at the original positions.
+  let i = 0;
+  return value.replace(/\d/g, () => masked[i++] ?? "X");
+}
+
+function ProfilePreviewCard({ populatedCount }: ProfilePreviewCardProps) {
+  return (
+    <Card
+      shadow="sm"
+      radius="lg"
+      className="h-full min-h-0 border border-neutral-200/60 bg-white"
+    >
+      {/* Header — avatar + name + HN. Matches Figma 995:1428 / 995:1432. */}
+      <CardHeader className="flex items-center gap-5 px-6 pb-3 pt-6">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-200 via-sky-100 to-sky-200 text-3xl font-semibold text-violet-900/70">
+          {DEMO_PATIENT.initial}
+        </div>
+        <div className="flex flex-1 flex-col gap-0.5">
+          <p className="text-[17px] font-semibold text-neutral-900">
+            {DEMO_PATIENT.name}
+          </p>
+          <p className="text-[13px] text-neutral-500">{DEMO_PATIENT.hn}</p>
+        </div>
+        {populatedCount > 0 && (
+          <span className="shrink-0 self-start rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700">
+            {populatedCount} ฟิลด์
+          </span>
+        )}
+      </CardHeader>
+
+      <Divider className="bg-[#f4f4f4]" />
+
+      {/* Body — 3×2 patient field grid. Each cell: small label + value.
+          Sensitive fields (citizen ID) render with a mask + eye toggle. */}
+      <CardBody className="flex min-h-0 flex-1 flex-col justify-center overflow-hidden p-6">
+        <div className="grid grid-cols-3 gap-x-6 gap-y-5">
+          {DEMO_PATIENT.fields.map((f) => (
+            <PatientField key={f.label} field={f} />
+          ))}
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+/** Single patient field — label on top, value below. Sensitive fields
+ *  start masked and reveal on eye-toggle. */
+function PatientField({ field }: { field: DemoField }) {
+  const [revealed, setRevealed] = useState(false);
+  const isMasked = field.sensitive && !revealed;
+  const display = isMasked ? maskId(field.value) : field.value;
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <p className="truncate text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+        {field.label}
+      </p>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <p className="truncate text-[14px] font-medium text-neutral-900">
+          {display}
+        </p>
+        {field.sensitive && (
+          <button
+            type="button"
+            onClick={() => setRevealed((v) => !v)}
+            aria-label={revealed ? "ซ่อนข้อมูล" : "แสดงข้อมูล"}
+            title={revealed ? "ซ่อนข้อมูล" : "แสดงข้อมูล"}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+          >
+            {revealed ? (
+              <IconEyeOff className="h-3.5 w-3.5" stroke={1.75} />
+            ) : (
+              <IconEye className="h-3.5 w-3.5" stroke={1.75} />
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface TranscriptionCardProps {
+  prompt: string;
+  segments: { text: string; speaker?: number }[];
+  onPromptChange: (v: string) => void;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+}
+
+/** Live transcription panel — header with title + disclaimer, body shows
+ *  the accumulated transcript. The user can edit the text before sending
+ *  it for extraction (matches the prior editing affordance). */
+function TranscriptionCard({
+  prompt,
+  segments,
+  onPromptChange,
+  textareaRef,
+}: TranscriptionCardProps) {
+  const hasContent = prompt.trim().length > 0 || segments.length > 0;
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      {/* Section label sits outside the card — matches Figma 992:1383
+          (parent flex col with label + white card). */}
+      <p className="px-1 text-sm font-medium text-black">Transcription</p>
+      {/* Single white card holds header row + transcript body. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 rounded-2xl bg-white p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium text-[#3e3425]">บทสนทนา</p>
+          <p className="text-[11px] text-[#3e3425]/55">
+            *ผลลัพธ์ขึ้นอยู่กับสภาพแวดล้อมและความชัดเจนของเสียงที่ไมโครโฟนได้รับ
+          </p>
+        </div>
+        {hasContent ? (
+          <textarea
+            ref={textareaRef}
+            value={prompt}
+            onChange={(e) => onPromptChange(e.target.value)}
+            className="min-h-0 flex-1 resize-none bg-transparent text-sm leading-relaxed text-[#5d4d37] focus:outline-none"
+          />
+        ) : (
+          <p className="min-h-0 flex-1 text-sm leading-relaxed text-neutral-400">
+            ยังไม่มีบทสนทนา — กด "เริ่มฟัง" เพื่อเริ่มซักประวัติ หรือพิมพ์ลงในกล่องนี้ได้เลย
+          </p>
+        )}
       </div>
     </div>
   );

@@ -37,6 +37,7 @@ export default function WidgetRenderer({ widget }: { widget: Widget }) {
         {widget.kind === "line-chart" && <LineChart data={data} />}
         {widget.kind === "bar-chart" && <BarChart data={data} />}
         {widget.kind === "table" && <Table data={data} />}
+        {widget.kind === "info" && <Info message={widget.message} />}
       </div>
     </motion.div>
   );
@@ -196,6 +197,16 @@ function Table({ data }: { data: ReturnType<typeof queryDataSource> }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function Info({ message }: { message?: string }) {
+  return (
+    <div className="flex h-full items-center justify-center px-2">
+      <p className="whitespace-pre-line text-center text-[length:var(--theme-text-sm)] leading-relaxed text-[var(--theme-neutral)]/75">
+        {message ?? "ไม่มีข้อมูลสำหรับคำขอนี้ในแคตตาล็อก"}
+      </p>
     </div>
   );
 }

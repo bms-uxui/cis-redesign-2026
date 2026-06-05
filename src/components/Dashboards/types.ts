@@ -4,7 +4,7 @@
  * `source` references must match an id from the data-source catalog.
  */
 
-export type WidgetKind = "kpi" | "line-chart" | "bar-chart" | "table";
+export type WidgetKind = "kpi" | "line-chart" | "bar-chart" | "table" | "info";
 
 export interface LayoutCell {
   /** Column start (1-indexed in a 4-col grid). */
@@ -29,6 +29,8 @@ export interface Widget {
   metric?: string;
   /** Filters applied to the data source. */
   filters?: Record<string, string | number | boolean>;
+  /** For info widgets: the body text to render. */
+  message?: string;
   /** Widget-specific render props (e.g. format hints). */
   props?: Record<string, unknown>;
   layout: LayoutCell;
