@@ -5,20 +5,15 @@ import {
   IconArrowUp,
   IconX,
   IconSparkles,
-  IconArrowsMaximize,
+  IconMessagePlus,
+  IconSettings,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router";
 import { useDictationContext } from "../contexts/DictationContext";
-import AI_DOCTOR from "../assets/figma/ai-mode-doctor.png";
+import { useAiva } from "../contexts/AivaContext";
 
 const EASE_TV: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-const QUICK_PROMPTS = [
-  "สรุปผู้ป่วยรายนี้",
-  "ค้นแนวทาง Sepsis",
-  "ช่วยเขียน SOAP",
-  "ICD-10 จากอาการ",
-];
+const QUICK_PROMPTS = ["สรุปผู้ป่วยรายนี้", "ช่วยเขียน SOAP"];
 
 interface AivaDrawerProps {
   open: boolean;
@@ -26,8 +21,8 @@ interface AivaDrawerProps {
 }
 
 export default function AivaDrawer({ open, onClose }: AivaDrawerProps) {
-  const navigate = useNavigate();
   const { isRecording, startSession, stopSession, segments } = useDictationContext();
+  const { initialPrompt } = useAiva();
   const [prompt, setPrompt] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -41,10 +36,14 @@ export default function AivaDrawer({ open, onClose }: AivaDrawerProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Focus input when opening
+  // Focus input + seed prompt when opening. If the caller passed an
+  // initialPrompt via the context (e.g. "ถามหมอเมย์" from a search bar),
+  // pre-fill it so the user can hit Enter immediately.
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 280);
-  }, [open]);
+    if (!open) return;
+    if (initialPrompt) setPrompt(initialPrompt);
+    setTimeout(() => inputRef.current?.focus(), 280);
+  }, [open, initialPrompt]);
 
   // Stream live transcript into the prompt while recording
   useEffect(() => {
@@ -63,125 +62,85 @@ export default function AivaDrawer({ open, onClose }: AivaDrawerProps) {
     console.log("[aiva-drawer] submit", prompt);
   };
 
-  const handleExpand = () => {
-    onClose();
-    navigate("/ai");
-  };
-
   return (
-    <AnimatePresence>
+    <AnimatePresence initial={false}>
       {open && (
-        <>
-          {/* Scrim — click to dismiss. Light so the underlying page still
-              feels present (Aiva is *ambient*, not modal). */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            onClick={onClose}
-            className="fixed inset-0 z-[60] bg-neutral-900/15 backdrop-blur-[2px]"
-          />
+        <motion.aside
+          initial={{ width: 0, opacity: 0 }}
+          animate={{ width: 360, opacity: 1 }}
+          exit={{ width: 0, opacity: 0 }}
+          transition={{ duration: 0.45, ease: EASE_TV }}
+          className="relative z-0 shrink-0 overflow-hidden"
+          style={{
+            // Floating card slot: top aligns with banner row (80px topbar
+            // reserve + 16px page padding). Right + bottom 16px gutter
+            // matches the page's own gutters.
+            marginTop: "calc(80px + var(--theme-space-md))",
+            marginBottom: "var(--theme-space-md)",
+            height:
+              "calc(100vh - 80px - var(--theme-space-md) - var(--theme-space-md))",
+          }}
+        >
+          <div className="flex h-full w-[360px] flex-col pr-[var(--theme-space-md)]">
+            <div className="flex min-h-0 flex-1 flex-col rounded-[calc(var(--theme-radius-box)*1.5)] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] shadow-[0_4px_12px_rgba(0,0,0,0.05)] overflow-hidden">
 
-          {/* Drawer panel */}
-          <motion.aside
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ duration: 0.45, ease: EASE_TV }}
-            className="fixed bottom-4 right-4 top-4 z-[61] flex w-[420px] flex-col overflow-hidden rounded-[28px] border border-white/60 bg-white shadow-[0_30px_70px_rgba(60,30,170,0.18),0_4px_12px_rgba(0,0,0,0.06)]"
-            style={{
-              isolation: "isolate",
-              transform: "translateZ(0)",
-              willChange: "transform",
-            }}
-          >
-            {/* Soft inner gradient — keep visual continuity with /ai */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 -z-10"
-              style={{
-                background:
-                  "radial-gradient(60% 40% at 100% 0%, rgba(225,210,255,0.45) 0%, rgba(255,255,255,0) 60%)," +
-                  "radial-gradient(50% 40% at 0% 100%, rgba(255,225,200,0.4) 0%, rgba(255,255,255,0) 60%)",
-              }}
-            />
-
-            {/* Header */}
-            <header className="flex items-start justify-between px-6 pt-6">
-              <div className="flex items-center gap-3">
-                <img
-                  src={AI_DOCTOR}
-                  alt="เมย์"
-                  decoding="async"
-                  className="h-14 w-auto object-contain drop-shadow-[0_4px_10px_rgba(120,90,220,0.25)]"
-                />
-                <div>
-                  <p className="text-xs font-normal text-neutral-500">
-                    ถามเมย์อะไรก็ได้
-                  </p>
-                  <h2 className="text-lg font-semibold text-neutral-900">
-                    สวัสดีค่ะ คุณหมอ
-                  </h2>
-                </div>
-              </div>
+            {/* Header — sparkle on the left, action icons on the right.
+                Subtle bottom border separates it from the chat body. */}
+            <header className="flex items-center justify-between border-b border-[var(--theme-neutral)]/10 p-[var(--theme-space-md)]">
+              <IconSparkles
+                className="h-5 w-5 text-[var(--theme-primary)]"
+                stroke={2}
+              />
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handleExpand}
-                  aria-label="เปิดเต็มจอ"
-                  title="เปิดเต็มจอ"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-900"
+                <IconButton
+                  label="แชทใหม่"
+                  onClick={() => setPrompt("")}
                 >
-                  <IconArrowsMaximize className="h-4 w-4" stroke={1.75} />
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  aria-label="ปิด"
-                  title="ปิด (Esc)"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-900"
-                >
+                  <IconMessagePlus className="h-4 w-4" stroke={1.75} />
+                </IconButton>
+                <IconButton label="ตั้งค่า">
+                  <IconSettings className="h-4 w-4" stroke={1.75} />
+                </IconButton>
+                <IconButton label="ปิด (Esc)" onClick={onClose}>
                   <IconX className="h-4 w-4" stroke={1.75} />
-                </button>
+                </IconButton>
               </div>
             </header>
 
-            {/* Conversation/empty state — currently a hint area, will host
-                message history once the LLM is wired. */}
-            <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
-              <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4">
-                <div className="flex items-center gap-2 text-xs font-semibold text-violet-700">
-                  <IconSparkles className="h-3.5 w-3.5" stroke={2} />
-                  เริ่มต้นด่วน
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {QUICK_PROMPTS.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => {
-                        setPrompt(p);
-                        inputRef.current?.focus();
-                      }}
-                      className="rounded-full border border-white bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-[0_2px_6px_rgba(0,0,0,0.03)] transition hover:border-violet-200 hover:text-violet-700"
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
+            {/* Greeting + quick chips. Clean, no card — text and outlined
+                pills sit directly on the panel surface. */}
+            <div className="flex flex-1 flex-col gap-[var(--theme-space-md)] overflow-y-auto p-[var(--theme-space-md)]">
+              <div className="flex flex-col gap-1 pt-2">
+                <p className="text-[length:var(--theme-text-lg)] font-medium text-[var(--theme-primary)]">
+                  สวัสดี, คุณหมอ
+                </p>
+                <h2 className="text-[length:var(--theme-text-xl)] font-semibold text-[var(--theme-neutral)]">
+                  ให้เมย์ช่วยอะไร?
+                </h2>
               </div>
-
-              <p className="px-1 text-xs text-neutral-400">
-                เมย์รู้บริบทของหน้าที่คุณกำลังเปิดอยู่ — ถามเกี่ยวกับผู้ป่วยรายนี้ได้เลย
-              </p>
+              <div className="flex flex-wrap gap-2">
+                {QUICK_PROMPTS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => {
+                      setPrompt(p);
+                      inputRef.current?.focus();
+                    }}
+                    className="rounded-full border border-[var(--theme-primary)]/50 bg-transparent px-4 py-2 text-[length:var(--theme-text-sm)] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Prompt bar — same affordances as /ai mode */}
-            <div className="px-6 pb-6">
+            {/* Input area — subtle filled bg, no thick border. Mic + send
+                float at the bottom-right of the textarea. */}
+            <div className="border-t border-[var(--theme-neutral)]/10 p-[var(--theme-space-md)]">
               <div
-                className={`flex items-end gap-2 rounded-2xl border bg-white px-4 py-3 transition ${
-                  isRecording ? "border-violet-400 ring-2 ring-violet-100" : "border-neutral-200"
+                className={`relative rounded-2xl bg-[var(--theme-base)] p-3 transition ${
+                  isRecording ? "ring-2 ring-[var(--theme-primary)]/30" : ""
                 }`}
               >
                 <textarea
@@ -194,43 +153,66 @@ export default function AivaDrawer({ open, onClose }: AivaDrawerProps) {
                       handleSubmit();
                     }
                   }}
-                  placeholder="ถามอะไรก็ได้…"
-                  rows={1}
-                  className="min-h-[28px] max-h-[140px] flex-1 resize-none bg-transparent text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none"
+                  placeholder="ถามอะไรก็ได้..."
+                  rows={2}
+                  className="block min-h-[48px] max-h-[140px] w-full resize-none bg-transparent pr-20 text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)] placeholder:text-[var(--theme-neutral)]/45 focus:outline-none"
                 />
-                <button
-                  type="button"
-                  onClick={handleMic}
-                  aria-label={isRecording ? "หยุดบันทึก" : "เริ่มบันทึกเสียง"}
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${
-                    isRecording
-                      ? "bg-rose-500 text-white shadow-[0_4px_12px_rgba(244,63,94,0.4)]"
-                      : "text-neutral-500 hover:bg-neutral-100"
-                  }`}
-                >
-                  {isRecording ? (
-                    <span className="block h-2.5 w-2.5 rounded-sm bg-white" />
-                  ) : (
-                    <IconMicrophone className="h-4 w-4" stroke={1.75} />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={!prompt.trim()}
-                  aria-label="ส่ง"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.18)] transition disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  <IconArrowUp className="h-4 w-4" stroke={2} />
-                </button>
+                <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleMic}
+                    aria-label={isRecording ? "หยุดบันทึก" : "เริ่มบันทึกเสียง"}
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${
+                      isRecording
+                        ? "bg-rose-500 text-white"
+                        : "text-[var(--theme-neutral)]/65 hover:bg-[var(--theme-neutral)]/10 hover:text-[var(--theme-neutral)]"
+                    }`}
+                  >
+                    {isRecording ? (
+                      <span className="block h-2.5 w-2.5 rounded-sm bg-white" />
+                    ) : (
+                      <IconMicrophone className="h-4 w-4" stroke={1.75} />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={!prompt.trim()}
+                    aria-label="ส่ง"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--theme-neutral)]/45 transition hover:text-[var(--theme-neutral)] disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <IconArrowUp className="h-4 w-4" stroke={2} />
+                  </button>
+                </div>
               </div>
-              <p className="mt-2 text-center text-[10px] text-neutral-400">
-                Cmd K เพื่อเรียกเมย์จากทุกหน้า · Esc เพื่อปิด
+              <p className="mt-[var(--theme-space-md)] text-[length:var(--theme-text-xs)] leading-relaxed text-[var(--theme-neutral)]/55">
+                เมย์เป็น AI ใช้ประกอบการตัดสินใจของแพทย์เท่านั้น — ตรวจสอบข้อมูลก่อนใช้งานทุกครั้ง
               </p>
             </div>
-          </motion.aside>
-        </>
+          </div>
+          </div>
+        </motion.aside>
       )}
     </AnimatePresence>
+  );
+}
+
+interface IconButtonProps {
+  label: string;
+  onClick?: () => void;
+  children: React.ReactNode;
+}
+
+function IconButton({ label, onClick, children }: IconButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-[var(--theme-neutral)]/55 transition hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-neutral)]"
+    >
+      {children}
+    </button>
   );
 }

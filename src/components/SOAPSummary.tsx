@@ -112,7 +112,7 @@ export default function SOAPSummary() {
             variant="bordered"
             startContent={<IconPlus className="h-4 w-4" stroke={2} />}
             className="w-full border-violet-200 bg-violet-50/40 font-medium text-violet-700"
-            onPress={() => navigate("/ai")}
+            onPress={() => navigate("/")}
           >
             เริ่มเคสใหม่
           </Button>

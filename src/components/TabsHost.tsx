@@ -1,12 +1,16 @@
 import { Routes, Route } from "react-router";
 import { useTabs } from "../contexts/TabsContext";
 import App from "../App";
-import PatientOPDCard from "./PatientOPDCard";
-import AIMode from "./AIMode";
 import NewPatientByVoice from "./NewPatientByVoice";
 import SOAPSummary from "./SOAPSummary";
 import AllMenus from "./AllMenus";
 import Settings from "./Settings";
+import DoctorSchedule from "./DoctorSchedule";
+import Automation from "./Automation";
+import AutomationBuilder from "./Automation/Builder";
+import Dashboards from "./Dashboards";
+import DashboardView from "./Dashboards/View";
+import PatientOPD from "./PatientOPD";
 
 /**
  * Renders every open tab simultaneously. Only the active tab is visible —
@@ -33,13 +37,16 @@ export default function TabsHost() {
           >
             <Routes location={isActive ? undefined : tab.path}>
               <Route path="/" element={<App />} />
-              <Route path="/ai" element={<AIMode />} />
               <Route path="/menus" element={<AllMenus />} />
+              <Route path="/schedule" element={<DoctorSchedule />} />
+              <Route path="/automation" element={<Automation />} />
+              <Route path="/automation/:id" element={<AutomationBuilder />} />
+              <Route path="/dashboards" element={<Dashboards />} />
+              <Route path="/dashboards/:id" element={<DashboardView />} />
+              <Route path="/opd" element={<PatientOPD />} />
+              <Route path="/opd/:hn" element={<PatientOPD />} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/patient" element={<PatientOPDCard />} />
               <Route path="/patient/new" element={<NewPatientByVoice />} />
-              <Route path="/patient/new/manual" element={<PatientOPDCard />} />
-              <Route path="/patient/:hn" element={<PatientOPDCard />} />
               <Route path="/soap" element={<SOAPSummary />} />
             </Routes>
           </div>

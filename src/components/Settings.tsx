@@ -69,7 +69,7 @@ const NAV: NavItemFlat[] = [
 
 export default function Settings() {
   const toast = useToast();
-  const { collapsed: sidebarCollapsed } = useSidebar();
+  const { collapsed: sidebarCollapsed, railHidden } = useSidebar();
   const {
     isDirty: themeDirty,
     commit: commitTheme,
@@ -120,13 +120,17 @@ export default function Settings() {
       <div
         className={[
           "mr-4 pb-4 pt-4 transition-[margin] duration-300 ease-out",
-          sidebarCollapsed ? "lg:ml-[106px]" : "lg:ml-[415px]",
+          railHidden
+            ? "ml-4"
+            : sidebarCollapsed
+              ? "ml-[106px]"
+              : "ml-[370px]",
         ].join(" ")}
       >
         {/* Two-column sheet — same rounded-3xl + soft shadow as Home cards.
             Fixed to the remaining viewport height so the sidebar stays put
             while only <main> scrolls. */}
-        <div className="grid h-[calc(100vh-7rem)] grid-cols-[240px_1fr] overflow-hidden rounded-3xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] shadow-sm">
+        <div className="grid h-[calc(100vh-7rem)] grid-cols-[240px_1fr] overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] shadow-sm">
           {/* Sidebar — mirrors Home's left nav. Independent overflow so it
               never grows the page; in practice the nav is short enough not
               to need to scroll. */}

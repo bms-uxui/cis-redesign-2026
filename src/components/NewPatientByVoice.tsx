@@ -30,6 +30,7 @@ import {
 import { Button } from "@heroui/react";
 import type { SaveCommitField } from "./SaveCommitOverlay";
 import { useDictationContext } from "../contexts/DictationContext";
+import { useSidebar } from "../contexts/SidebarContext";
 import { chat } from "../services/ai/llm";
 import {
   A2UI_CATALOG_SYSTEM,
@@ -59,6 +60,7 @@ export default function NewPatientByVoice() {
   const navigate = useNavigate();
   const toast = useToast();
   const { isRecording, startSession, stopSession, segments, source } = useDictationContext();
+  const { collapsed: sidebarCollapsed, railHidden } = useSidebar();
 
   const [phase, setPhase] = useState<Phase>("input");
   const [prompt, setPrompt] = useState("");
@@ -270,93 +272,22 @@ export default function NewPatientByVoice() {
   }, [extracted]);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#f8f9fc] pt-[60px]">
-      {/* ── Left sidebar — recent intake cases ─────────────────────────── */}
-      <aside className="flex w-[260px] shrink-0 flex-col border-r border-neutral-200 bg-white">
-        <div className="border-b border-neutral-100 p-4">
-          <Button
-            variant="bordered"
-            startContent={<IconPlus className="h-4 w-4" stroke={2} />}
-            className="w-full border-violet-200 bg-violet-50/40 font-medium text-violet-700"
-            onPress={() => navigate("/ai")}
-          >
-            เริ่มเคสใหม่
-          </Button>
-        </div>
-        <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-[13px] font-medium text-neutral-600">
-            ผู้ป่วยใหม่ล่าสุด
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="กรอง"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
-            >
-              <IconAdjustmentsHorizontal className="h-4 w-4" stroke={1.75} />
-            </button>
-            <button
-              type="button"
-              aria-label="เรียงลำดับ"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
-            >
-              <IconSortDescending className="h-4 w-4" stroke={1.75} />
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto px-3 pb-4">
-          <div className="mt-2 mb-1 flex items-center gap-1.5 px-2 text-[12px] text-neutral-500">
-            <IconCalendar className="h-3.5 w-3.5" stroke={1.75} />
-            29/05/2569
-          </div>
-          <div className="rounded-lg bg-violet-50/60 px-3 py-2.5 ring-1 ring-violet-200">
-            <div className="flex items-center justify-between">
-              <span className="rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
-                NEW
-              </span>
-              <span className="text-[11px] text-neutral-500">กำลังบันทึก</span>
-            </div>
-            <div className="mt-1.5 text-[13px] font-medium text-neutral-800">
-              ผู้ป่วยใหม่ (ยังไม่บันทึก)
-            </div>
-          </div>
-        </div>
-        <div className="border-t border-neutral-100 px-4 py-3 text-[11px] text-neutral-400">
-          ระบบเก็บบันทึกชั่วคราวไว้ 24 ชั่วโมงเท่านั้น
-        </div>
-      </aside>
-
+    <div className="min-h-screen w-full bg-[var(--theme-base)]">
+      {/* Reserve space for the floating TopBar card (top-4 + h-16 = 80px). */}
+      <div className="h-20 shrink-0" aria-hidden />
+      <div
+        className={[
+          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
+          // Match the global sidebar width: hidden=16, collapsed=106, expanded=415.
+          railHidden
+            ? "ml-4"
+            : sidebarCollapsed
+              ? "ml-[106px]"
+              : "ml-[370px]",
+        ].join(" ")}
+      >
       {/* ── Main panel ─────────────────────────────────────────────────── */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Top toolbar */}
-        <header className="flex items-center justify-between gap-4 border-b border-neutral-100 bg-white px-6 py-3">
-          <nav className="flex items-center gap-2 text-[14px] text-neutral-600">
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className="flex items-center gap-1.5 hover:text-neutral-900"
-            >
-              <IconHome className="h-4 w-4" stroke={1.75} />
-              <span>หน้าหลัก</span>
-            </button>
-            <IconChevronRight className="h-4 w-4 text-neutral-400" stroke={1.75} />
-            <span className="rounded-md bg-violet-100 px-2 py-0.5 text-[12px] font-semibold text-violet-700">
-              NEW
-            </span>
-            <span className="font-medium text-neutral-900">ผู้ป่วยใหม่</span>
-          </nav>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="bordered"
-              startContent={<IconKeyboard className="h-4 w-4" stroke={1.75} />}
-              className="h-9 border-neutral-200 bg-white text-[13px] font-medium text-neutral-700"
-              onPress={() => navigate("/patient/new/manual")}
-            >
-              กรอกแบบฟอร์มเอง
-            </Button>
-          </div>
-        </header>
-
         {/* Scrollable content area */}
         <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-6 overflow-y-auto px-6 py-6">
         <PageHeader
@@ -651,7 +582,7 @@ export default function NewPatientByVoice() {
         <footer className="flex items-center justify-between border-t border-neutral-100 bg-white px-6 py-3 text-[13px]">
           <button
             type="button"
-            onClick={() => navigate("/ai")}
+            onClick={() => navigate("/")}
             className="flex items-center gap-1.5 text-neutral-600 hover:text-rose-600"
           >
             <IconTrash className="h-4 w-4" stroke={1.75} />
@@ -683,6 +614,7 @@ export default function NewPatientByVoice() {
           </div>
         </footer>
       </main>
+      </div>
     </div>
   );
 }

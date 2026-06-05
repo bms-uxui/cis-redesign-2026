@@ -43,7 +43,6 @@ const HOME_TAB: Tab = {
 function titleForPath(path: string): string {
   const p = path.split("?")[0];
   if (p === "/") return "หน้าหลัก";
-  if (p === "/ai") return "Aiva";
   if (p === "/soap") return "บันทึก SOAP";
   if (p === "/menus") return "เมนูทั้งหมด";
   if (p === "/settings") return "การตั้งค่า";

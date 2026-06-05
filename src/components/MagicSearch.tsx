@@ -51,7 +51,7 @@ export default function MagicSearch({
     if (onSubmit) {
       onSubmit(q);
     } else {
-      navigate("/ai", { state: { prompt: q } });
+      navigate("/", { state: { prompt: q } });
     }
   };
 

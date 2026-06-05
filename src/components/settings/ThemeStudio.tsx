@@ -1,10 +1,15 @@
 import {
   COLOR_TOKENS,
+  SHADOW_KEYS,
+  TEXT_KEYS,
   THEME_PRESETS,
   contentColorFor,
   useTheme,
   type ColorToken,
   type ThemeRadius,
+  type ThemeShadow,
+  type ThemeSpacing,
+  type ThemeText,
 } from "../../contexts/ThemeContext";
 import { Button } from "@heroui/react";
 import { IconRefresh } from "@tabler/icons-react";
@@ -28,6 +33,29 @@ const RADIUS_LABELS: Record<keyof ThemeRadius, string> = {
   selector: "ปุ่มเล็ก / ป้าย",
 };
 
+const SPACING_LABELS: Record<keyof ThemeSpacing, { th: string; min: number; max: number }> = {
+  xs: { th: "XS", min: 0, max: 8 },
+  sm: { th: "SM", min: 4, max: 16 },
+  md: { th: "MD", min: 8, max: 24 },
+  lg: { th: "LG", min: 16, max: 40 },
+  xl: { th: "XL", min: 24, max: 64 },
+};
+
+const TEXT_LABELS: Record<keyof ThemeText, { th: string; min: number; max: number }> = {
+  xs: { th: "XS", min: 10, max: 14 },
+  sm: { th: "SM", min: 12, max: 16 },
+  md: { th: "Body", min: 14, max: 18 },
+  lg: { th: "LG", min: 16, max: 24 },
+  xl: { th: "XL", min: 20, max: 32 },
+  "2xl": { th: "2XL", min: 24, max: 48 },
+};
+
+const SHADOW_LABELS: Record<keyof ThemeShadow, string> = {
+  sm: "การ์ด",
+  md: "ป๊อปโอเวอร์",
+  lg: "โมดัล",
+};
+
 /**
  * Rich theme generator panel for the Settings page. Mirrors the daisyUI
  * theme generator vocabulary (preset row, per-token swatches & hex inputs,
@@ -35,8 +63,17 @@ const RADIUS_LABELS: Record<keyof ThemeRadius, string> = {
  * variables on the document root.
  */
 export default function ThemeStudio() {
-  const { config, colors, setColor, setRadius, applyPreset, resetToDefault } =
-    useTheme();
+  const {
+    config,
+    colors,
+    setColor,
+    setRadius,
+    setSpacing,
+    setText,
+    setShadow,
+    applyPreset,
+    resetToDefault,
+  } = useTheme();
   const activePresetId = config.presetId;
 
   return (
@@ -56,7 +93,12 @@ export default function ThemeStudio() {
             radius="full"
             className="h-9 px-3 text-[12px] font-medium text-[var(--theme-neutral)]/60 data-[hover=true]:bg-[var(--theme-primary-soft)]"
             startContent={<IconRefresh className="h-3.5 w-3.5" stroke={1.75} />}
-            onPress={() => resetToDefault()}
+            onPress={(e) => {
+              const t = (e.target as HTMLElement | null)?.getBoundingClientRect?.();
+              resetToDefault(
+                t ? { x: t.left + t.width / 2, y: t.top + t.height / 2 } : undefined,
+              );
+            }}
           >
             รีเซ็ต
           </Button>
@@ -66,7 +108,7 @@ export default function ThemeStudio() {
             <button
               key={p.id}
               type="button"
-              onClick={() => applyPreset(p.id)}
+              onClick={(e) => applyPreset(p.id, { x: e.clientX, y: e.clientY })}
               aria-current={activePresetId === p.id ? "true" : undefined}
               className={[
                 "group relative flex cursor-pointer flex-col gap-2 rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm",
@@ -197,6 +239,58 @@ export default function ThemeStudio() {
         </div>
       </section>
 
+      {/* Spacing scale */}
+      <section className="flex flex-col gap-3">
+        <p className="text-[14px] font-medium text-[var(--theme-neutral)]">ระยะห่าง</p>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          {(Object.keys(SPACING_LABELS) as (keyof ThemeSpacing)[]).map((key) => (
+            <SpacingRow
+              key={key}
+              label={SPACING_LABELS[key].th}
+              min={SPACING_LABELS[key].min}
+              max={SPACING_LABELS[key].max}
+              value={config.spacing[key]}
+              onChange={(v) => setSpacing(key, v)}
+            />
+          ))}
+        </div>
+      </section>
+
+      {/* Type scale */}
+      <section className="flex flex-col gap-3">
+        <p className="text-[14px] font-medium text-[var(--theme-neutral)]">ขนาดตัวอักษร</p>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          {TEXT_KEYS.map((key) => (
+            <TextRow
+              key={key}
+              label={TEXT_LABELS[key].th}
+              min={TEXT_LABELS[key].min}
+              max={TEXT_LABELS[key].max}
+              value={config.text[key]}
+              onChange={(v) => setText(key, v)}
+            />
+          ))}
+        </div>
+      </section>
+
+      {/* Shadow / elevation */}
+      <section className="flex flex-col gap-3">
+        <p className="text-[14px] font-medium text-[var(--theme-neutral)]">เงา</p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {SHADOW_KEYS.map((key) => (
+            <ShadowRow
+              key={key}
+              tokenKey={key}
+              label={SHADOW_LABELS[key]}
+              blur={config.shadow[key].blur}
+              opacity={config.shadow[key].opacity}
+              onChangeBlur={(v) => setShadow(key, "blur", v)}
+              onChangeOpacity={(v) => setShadow(key, "opacity", v)}
+            />
+          ))}
+        </div>
+      </section>
+
       {/* Live preview */}
       <Preview />
     </div>
@@ -264,7 +358,7 @@ function RadiusRow({ label, value, onChange }: RadiusRowProps) {
       <input
         type="range"
         min={0}
-        max={32}
+        max={48}
         step={1}
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value, 10))}
@@ -275,6 +369,142 @@ function RadiusRow({ label, value, onChange }: RadiusRowProps) {
         aria-hidden
         className="mt-1 h-8 w-full border-2 border-dashed border-[var(--theme-primary)]/40 bg-[var(--theme-primary)]/[0.06]"
         style={{ borderRadius: value }}
+      />
+    </div>
+  );
+}
+
+interface SpacingRowProps {
+  label: string;
+  min: number;
+  max: number;
+  value: number;
+  onChange: (v: number) => void;
+}
+
+function SpacingRow({ label, min, max, value, onChange }: SpacingRowProps) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[13px] font-medium text-[var(--theme-neutral)]">{label}</p>
+        <span className="font-mono text-[12px] text-[var(--theme-neutral)]/55">{value}px</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value, 10))}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-neutral-200 accent-[var(--theme-primary)]"
+        aria-label={label}
+      />
+      <div
+        aria-hidden
+        className="mt-1 flex h-8 w-full items-center rounded-md bg-[var(--theme-primary)]/[0.06]"
+      >
+        <span
+          className="h-full rounded-md bg-[var(--theme-primary)]/30"
+          style={{ width: value }}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface TextRowProps {
+  label: string;
+  min: number;
+  max: number;
+  value: number;
+  onChange: (v: number) => void;
+}
+
+function TextRow({ label, min, max, value, onChange }: TextRowProps) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[13px] font-medium text-[var(--theme-neutral)]">{label}</p>
+        <span className="font-mono text-[12px] text-[var(--theme-neutral)]/55">{value}px</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value, 10))}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-neutral-200 accent-[var(--theme-primary)]"
+        aria-label={label}
+      />
+      <div
+        aria-hidden
+        className="mt-1 flex h-10 w-full items-center justify-center rounded-md bg-[var(--theme-primary)]/[0.06] text-[var(--theme-neutral)]"
+        style={{ fontSize: value, lineHeight: 1.2 }}
+      >
+        Aa ก
+      </div>
+    </div>
+  );
+}
+
+interface ShadowRowProps {
+  tokenKey: "sm" | "md" | "lg";
+  label: string;
+  blur: number;
+  opacity: number;
+  onChangeBlur: (v: number) => void;
+  onChangeOpacity: (v: number) => void;
+}
+
+function ShadowRow({
+  tokenKey,
+  label,
+  blur,
+  opacity,
+  onChangeBlur,
+  onChangeOpacity,
+}: ShadowRowProps) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[13px] font-medium text-[var(--theme-neutral)]">{label}</p>
+        <span className="font-mono text-[11px] uppercase text-[var(--theme-neutral)]/55">
+          {tokenKey}
+        </span>
+      </div>
+      <label className="flex items-center justify-between gap-2 text-[11px] text-[var(--theme-neutral)]/60">
+        <span>Blur</span>
+        <span className="font-mono">{blur}px</span>
+      </label>
+      <input
+        type="range"
+        min={0}
+        max={64}
+        step={1}
+        value={blur}
+        onChange={(e) => onChangeBlur(parseInt(e.target.value, 10))}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-neutral-200 accent-[var(--theme-primary)]"
+        aria-label={`${label} blur`}
+      />
+      <label className="flex items-center justify-between gap-2 text-[11px] text-[var(--theme-neutral)]/60">
+        <span>Opacity</span>
+        <span className="font-mono">{opacity.toFixed(2)}</span>
+      </label>
+      <input
+        type="range"
+        min={0}
+        max={0.4}
+        step={0.01}
+        value={opacity}
+        onChange={(e) => onChangeOpacity(parseFloat(e.target.value))}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-neutral-200 accent-[var(--theme-primary)]"
+        aria-label={`${label} opacity`}
+      />
+      <div
+        aria-hidden
+        className="mt-2 h-12 w-full rounded-md bg-[var(--theme-surface)]"
+        style={{ boxShadow: `var(--theme-shadow-${tokenKey})` }}
       />
     </div>
   );

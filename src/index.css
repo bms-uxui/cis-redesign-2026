@@ -31,14 +31,16 @@
 html,
 body {
   overscroll-behavior: none;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
   font-family: "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--color-background);
-  color: var(--color-text);
+  background-color: var(--theme-base);
+  color: var(--theme-neutral);
   margin: 0;
 }
 
@@ -46,8 +48,137 @@ body {
   min-height: 100vh;
 }
 
+/* Every enabled clickable should show a pointer. Saves us from sprinkling
+   `cursor-pointer` on every button + role="button" in the codebase. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+summary,
+label[for],
+select:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 /* Force Google Sans on everything (overrides Radix Theme font) */
 *,
 .radix-themes {
   font-family: "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif !important;
+}
+
+/* Override Radix Themes `--color-background` (its default `white` or a stray
+   accent value) so the body/Radix containers use our theme base color
+   instead. Without this, Radix's panel/background tokens can bleed into
+   areas like the AI panel column. */
+.radix-themes {
+  --color-background: var(--theme-base) !important;
+}
+
+/* ============================================
+   Theme transitions
+   Slider tweaks update CSS vars instantly (no per-element CSS transition —
+   it would force every node on the page to repaint, killing perf). Preset
+   swaps use the View Transitions API: the browser snapshots the page,
+   React applies the new theme synchronously, then a clip-path circle
+   expands from the click point so the new look "wraps over" the old one.
+   The snapshot is a single bitmap layer the GPU can composite cheaply.
+   ============================================ */
+::view-transition-old(root) {
+  /* Old screen drifts back slightly and softens — gives the new layer
+     depth, makes the reveal read as a forward motion instead of a slide. */
+  animation: theme-old-settle 720ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+::view-transition-new(root) {
+  animation: theme-reveal 720ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  will-change: clip-path;
+}
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0 at var(--theme-reveal-x, 50vw) var(--theme-reveal-y, 50vh));
+  }
+  to {
+    clip-path: circle(var(--theme-reveal-r, 150vmax) at var(--theme-reveal-x, 50vw) var(--theme-reveal-y, 50vh));
+  }
+}
+@keyframes theme-old-settle {
+  from {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  to {
+    transform: scale(0.98);
+    filter: brightness(0.94);
+  }
+}
+
+/* Magic search ring — rotates the conic gradient angle in place (via a
+   typed @property) so the element itself stays still and the painted
+   stops sweep around. Rotating the element with `transform` instead
+   would expose the rotated bounding box outside the modal. */
+@property --magic-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes magic-ring-spin {
+  to {
+    --magic-angle: 360deg;
+  }
+}
+@keyframes magic-pulse {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.025);
+  }
+}
+.magic-ring {
+  background: conic-gradient(
+    from var(--magic-angle),
+    var(--theme-primary),
+    var(--theme-accent),
+    color-mix(in srgb, white 70%, var(--theme-primary)),
+    var(--theme-accent),
+    var(--theme-primary),
+    var(--theme-primary)
+  );
+  /* Slower spin + cubic ease so the bright head glides through corners
+     instead of snapping — feels closer to a fluid light cycle. */
+  animation: magic-ring-spin 4.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  padding: 2.5px;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--theme-primary) 70%, transparent));
+}
+.magic-halo {
+  animation: magic-pulse 3.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+/* Reduced-motion users get nothing fancy. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+    clip-path: none !important;
+  }
 }

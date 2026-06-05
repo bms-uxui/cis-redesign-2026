@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { motion, type Variants } from "framer-motion";
 import { useSidebar } from "../contexts/SidebarContext";
+import { searchMenuEntries, type MenuEntry } from "./Sidebar/menuIndex";
 import {
   IconSearch,
   IconUserPlus,
@@ -44,7 +45,6 @@ interface FeaturedTile {
 const FEATURED: FeaturedTile[] = [
   { label: "ลงทะเบียนผู้ป่วยใหม่", Icon: IconUserPlus, to: "/patient/new", tint: "bg-[#3485ff]" },
   { label: "บันทึก SOAP", Icon: IconSparkles, to: "/soap", tint: "bg-[#8b5cf6]" },
-  { label: "Aiva ผู้ช่วย AI", Icon: IconBrain, to: "/ai", tint: "bg-[#ec4899]", badge: "Beta" },
   { label: "Telehealth", Icon: IconVideo, to: "/patient", tint: "bg-[#f59e0b]" },
   { label: "One Stop Service", Icon: IconBuildingHospital, to: "/patient", tint: "bg-[#10b981]", badge: "Beta" },
   { label: "Claims Submission", Icon: IconReceipt2, to: "/patient", tint: "bg-[#ef4444]" },
@@ -73,26 +73,23 @@ const RECENT: RecentRow[] = [
 
 export default function AllMenus() {
   const navigate = useNavigate();
-  const { collapsed: sidebarCollapsed } = useSidebar();
+  const { collapsed: sidebarCollapsed, railHidden, openMenu, pushRecent } =
+    useSidebar();
   const [query, setQuery] = useState("");
+  const isSearching = query.trim().length > 0;
 
-  const matches = (text: string) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return text.toLowerCase().includes(q);
+  // When the user types, search the full sidebar menu index — same behavior
+  // as the global ⌘/ palette. When empty, fall back to the curated
+  // Featured + Recent surfaces below.
+  const searchResults = useMemo<MenuEntry[]>(() => {
+    if (!isSearching) return [];
+    return searchMenuEntries(query).slice(0, 50);
+  }, [query, isSearching]);
+
+  const handleSelect = (entry: MenuEntry) => {
+    openMenu(entry.railKey, entry.childKey);
+    pushRecent(entry.id);
   };
-
-  const featured = useMemo(
-    () => FEATURED.filter((f) => matches(f.label)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query],
-  );
-
-  const recent = useMemo(
-    () => RECENT.filter((r) => matches(r.label) || matches(r.group)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query],
-  );
 
   return (
     <div className="min-h-screen w-full bg-[var(--theme-base)]">
@@ -101,57 +98,26 @@ export default function AllMenus() {
 
       <div
         className={[
-          "flex flex-col gap-6 mr-4 pb-24 pt-4 transition-[margin] duration-300 ease-out",
-          sidebarCollapsed ? "lg:ml-[106px]" : "lg:ml-[415px]",
+          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
+          railHidden
+            ? "ml-4"
+            : sidebarCollapsed
+              ? "ml-[106px]"
+              : "ml-[370px]",
         ].join(" ")}
       >
+        <div className="mx-auto flex h-full w-full max-w-[960px] flex-col gap-6 overflow-y-auto px-8 pb-8 pt-16 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
         {/* Context line — matches Figma's "Create file in:" header */}
-        <p className="text-[14px] text-[var(--theme-neutral)]/60">
+        <p className="text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)]/60">
           เริ่มงานใหม่ใน{" "}
           <span className="font-medium text-[var(--theme-neutral)]">
             โรงพยาบาลทดสอบ BMS · OPD
           </span>
         </p>
 
-        {/* Featured action tiles */}
-        <motion.div
-          variants={stagger}
-          initial="hidden"
-          animate="show"
-          className="grid grid-cols-3 gap-3 sm:grid-cols-6"
-        >
-          {featured.map((f) => (
-            <motion.button
-              key={f.label}
-              variants={fadeUp}
-              type="button"
-              onClick={() => navigate(f.to)}
-              className="group relative flex h-[140px] flex-col items-center justify-center gap-3 rounded-2xl border border-[#e5e7eb] bg-[var(--theme-surface)] px-3 py-4 text-center transition hover:-translate-y-0.5 hover:border-[#9db6fb] hover:shadow-[0_8px_24px_rgba(157,182,251,0.25)]"
-            >
-              {f.badge && (
-                <span className="absolute right-2 top-2 rounded-md bg-black/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-neutral)]/60">
-                  {f.badge}
-                </span>
-              )}
-              <span
-                className={`flex h-12 w-12 items-center justify-center rounded-full ${f.tint} text-white`}
-              >
-                <f.Icon className="h-6 w-6" stroke={1.75} />
-              </span>
-              <span className="text-[13px] font-medium leading-tight text-[var(--theme-neutral)]">
-                {f.label}
-              </span>
-            </motion.button>
-          ))}
-          {featured.length === 0 && (
-            <p className="col-span-full py-6 text-center text-[13px] text-[var(--theme-neutral)]/50">
-              ไม่พบรายการแนะนำ
-            </p>
-          )}
-        </motion.div>
-
-        {/* Search */}
-        <div className="relative mt-2">
+        {/* Search — drives the same menu index as the global ⌘/ palette,
+            so typing here finds every rail and panel item across the app. */}
+        <div className="relative">
           <IconSearch
             className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--theme-neutral)]/40"
             stroke={1.75}
@@ -160,44 +126,111 @@ export default function AllMenus() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="ค้นหา"
+            placeholder="ค้นหาเมนูทั้งระบบ..."
             autoFocus
-            className="h-11 w-full rounded-lg bg-[var(--theme-neutral)]/10 pl-11 pr-4 text-[14px] text-[var(--theme-neutral)] placeholder:text-[var(--theme-neutral)]/40 outline-none transition focus:bg-[var(--theme-surface)] focus:shadow-[0_0_0_2px_rgba(52,133,255,0.3)]"
+            className="h-12 w-full rounded-[var(--theme-radius-field)] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] pl-11 pr-4 text-[length:var(--theme-text-md)] text-[var(--theme-neutral)] placeholder:text-[var(--theme-neutral)]/40 outline-none transition focus:border-[var(--theme-primary)] focus:shadow-[0_0_0_3px_var(--theme-primary-soft)]"
           />
         </div>
 
-        {/* Recent menus list */}
-        <section className="flex flex-col gap-2">
-          <p className="text-[13px] text-[var(--theme-neutral)]/60">เมนูล่าสุด</p>
-          <div className="flex flex-col">
-            {recent.map((r) => (
-              <button
-                key={r.label}
-                type="button"
-                onClick={() => navigate(r.to)}
-                className="group grid grid-cols-[44px_1fr_auto] items-center gap-4 rounded-lg px-2 py-2 text-left transition hover:bg-white"
-              >
-                <span
-                  className={`flex h-11 w-11 items-center justify-center rounded-lg ${r.tint} text-white`}
+        {isSearching ? (
+          <section className="flex flex-col gap-2">
+            <p className="text-[length:var(--theme-text-xs)] font-semibold uppercase tracking-[0.08em] text-[var(--theme-neutral)]/45">
+              ผลการค้นหา ({searchResults.length})
+            </p>
+            <div className="flex flex-col">
+              {searchResults.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => handleSelect(entry)}
+                  className="group flex items-center gap-4 rounded-[var(--theme-radius-field)] px-3 py-2.5 text-left transition hover:bg-[var(--theme-primary-soft)]"
                 >
-                  <r.Icon className="h-5 w-5" stroke={1.75} />
-                </span>
-                <span className="flex flex-col">
-                  <span className="text-[14px] font-medium text-[var(--theme-neutral)]">
-                    {r.label}
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--theme-radius-field)] bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]">
+                    <IconSearch className="h-4 w-4" stroke={1.75} />
                   </span>
-                  <span className="text-[12px] text-[var(--theme-neutral)]/50">{r.group}</span>
-                </span>
-                <span className="text-[12px] text-[var(--theme-neutral)]/50">{r.usedAgo}</span>
-              </button>
-            ))}
-            {recent.length === 0 && (
-              <p className="py-6 text-center text-[13px] text-[var(--theme-neutral)]/50">
-                ไม่พบเมนูที่ตรงกับ "{query}"
-              </p>
-            )}
-          </div>
-        </section>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-[length:var(--theme-text-sm)] font-medium text-[var(--theme-neutral)]">
+                      {entry.label}
+                    </span>
+                    {entry.breadcrumb && (
+                      <span className="truncate text-[length:var(--theme-text-xs)] text-[var(--theme-neutral)]/55">
+                        {entry.breadcrumb}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))}
+              {searchResults.length === 0 && (
+                <p className="py-6 text-center text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)]/50">
+                  ไม่พบเมนูที่ตรงกับ "{query}"
+                </p>
+              )}
+            </div>
+          </section>
+        ) : (
+          <>
+            {/* Featured action tiles */}
+            <motion.div
+              variants={stagger}
+              initial="hidden"
+              animate="show"
+              className="grid grid-cols-3 gap-3 sm:grid-cols-6"
+            >
+              {FEATURED.map((f) => (
+                <motion.button
+                  key={f.label}
+                  variants={fadeUp}
+                  type="button"
+                  onClick={() => navigate(f.to)}
+                  className="group relative flex h-[140px] flex-col items-center justify-center gap-3 rounded-2xl border border-[#e5e7eb] bg-[var(--theme-surface)] px-3 py-4 text-center transition hover:-translate-y-0.5 hover:border-[#9db6fb] hover:shadow-[0_8px_24px_rgba(157,182,251,0.25)]"
+                >
+                  {f.badge && (
+                    <span className="absolute right-2 top-2 rounded-md bg-black/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-[var(--theme-neutral)]/60">
+                      {f.badge}
+                    </span>
+                  )}
+                  <span
+                    className={`flex h-12 w-12 items-center justify-center rounded-full ${f.tint} text-white`}
+                  >
+                    <f.Icon className="h-6 w-6" stroke={1.75} />
+                  </span>
+                  <span className="text-[13px] font-medium leading-tight text-[var(--theme-neutral)]">
+                    {f.label}
+                  </span>
+                </motion.button>
+              ))}
+            </motion.div>
+
+            {/* Recent menus list */}
+            <section className="flex flex-col gap-2">
+              <p className="text-[13px] text-[var(--theme-neutral)]/60">เมนูล่าสุด</p>
+              <div className="flex flex-col">
+                {RECENT.map((r) => (
+                  <button
+                    key={r.label}
+                    type="button"
+                    onClick={() => navigate(r.to)}
+                    className="group grid grid-cols-[44px_1fr_auto] items-center gap-4 rounded-lg px-2 py-2 text-left transition hover:bg-[var(--theme-primary-soft)]"
+                  >
+                    <span
+                      className={`flex h-11 w-11 items-center justify-center rounded-lg ${r.tint} text-white`}
+                    >
+                      <r.Icon className="h-5 w-5" stroke={1.75} />
+                    </span>
+                    <span className="flex flex-col">
+                      <span className="text-[14px] font-medium text-[var(--theme-neutral)]">
+                        {r.label}
+                      </span>
+                      <span className="text-[12px] text-[var(--theme-neutral)]/50">{r.group}</span>
+                    </span>
+                    <span className="text-[12px] text-[var(--theme-neutral)]/50">{r.usedAgo}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+        </div>
       </div>
     </div>
   );

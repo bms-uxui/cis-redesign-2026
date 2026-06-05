@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import type { ReactNode } from "react";
 
 /**
@@ -61,11 +62,62 @@ export interface ThemeRadius {
   selector: number;
 }
 
+/**
+ * Spacing scale (px). Named by size, not role — `sm` is small spacing
+ * regardless of where it's used. Components compose: `var(--theme-space-md)`
+ * for card padding, `var(--theme-space-lg)` for section gap, etc.
+ */
+export interface ThemeSpacing {
+  xs: number;
+  sm: number;
+  md: number;
+  lg: number;
+  xl: number;
+}
+
+export const SPACING_KEYS: (keyof ThemeSpacing)[] = ["xs", "sm", "md", "lg", "xl"];
+
+/** Type scale (px). `md` is body copy; the rest fan out around it. */
+export interface ThemeText {
+  xs: number;
+  sm: number;
+  md: number;
+  lg: number;
+  xl: number;
+  "2xl": number;
+}
+
+export const TEXT_KEYS: (keyof ThemeText)[] = ["xs", "sm", "md", "lg", "xl", "2xl"];
+
+/**
+ * Shadow scale — three elevation levels. Each level is described by blur
+ * and opacity; the y-offset is derived (half the blur) so a single slider
+ * pair gives a believable elevation without a CSS string editor.
+ */
+export interface ThemeShadowLevel {
+  blur: number;
+  opacity: number;
+}
+
+export interface ThemeShadow {
+  /** Resting cards / panels. */
+  sm: ThemeShadowLevel;
+  /** Popovers, dropdowns. */
+  md: ThemeShadowLevel;
+  /** Modals, full overlays. */
+  lg: ThemeShadowLevel;
+}
+
+export const SHADOW_KEYS: (keyof ThemeShadow)[] = ["sm", "md", "lg"];
+
 export interface ThemeConfig {
   /** id of the active preset (when the user hasn't customised away from one). */
   presetId: string;
   colors: ThemeColors;
   radius: ThemeRadius;
+  spacing: ThemeSpacing;
+  text: ThemeText;
+  shadow: ThemeShadow;
 }
 
 export interface ThemePreset {
@@ -73,12 +125,22 @@ export interface ThemePreset {
   name: string;
   colors: ThemeColors;
   radius: ThemeRadius;
+  spacing: ThemeSpacing;
+  text: ThemeText;
+  shadow: ThemeShadow;
 }
+
+const DEFAULT_TEXT: ThemeText = { xs: 12, sm: 14, md: 16, lg: 20, xl: 24, "2xl": 28 };
+const DEFAULT_SHADOW: ThemeShadow = {
+  sm: { blur: 4, opacity: 0.06 },
+  md: { blur: 16, opacity: 0.12 },
+  lg: { blur: 40, opacity: 0.18 },
+};
 
 export const THEME_PRESETS: ThemePreset[] = [
   {
     id: "bms",
-    name: "BMS Default",
+    name: "Default",
     colors: {
       primary: "#3485ff",
       secondary: "#8b5cf6",
@@ -92,6 +154,9 @@ export const THEME_PRESETS: ThemePreset[] = [
       error: "#ef4444",
     },
     radius: { box: 16, field: 12, selector: 8 },
+    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
+    text: { ...DEFAULT_TEXT },
+    shadow: { sm: { ...DEFAULT_SHADOW.sm }, md: { ...DEFAULT_SHADOW.md }, lg: { ...DEFAULT_SHADOW.lg } },
   },
   {
     id: "dark",
@@ -110,6 +175,9 @@ export const THEME_PRESETS: ThemePreset[] = [
       error: "#ff6467",
     },
     radius: { box: 16, field: 12, selector: 8 },
+    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
+    text: { ...DEFAULT_TEXT },
+    shadow: { sm: { ...DEFAULT_SHADOW.sm }, md: { ...DEFAULT_SHADOW.md }, lg: { ...DEFAULT_SHADOW.lg } },
   },
   {
     id: "sunset",
@@ -127,6 +195,9 @@ export const THEME_PRESETS: ThemePreset[] = [
       error: "#dc2626",
     },
     radius: { box: 24, field: 16, selector: 8 },
+    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
+    text: { ...DEFAULT_TEXT },
+    shadow: { sm: { ...DEFAULT_SHADOW.sm }, md: { ...DEFAULT_SHADOW.md }, lg: { ...DEFAULT_SHADOW.lg } },
   },
   {
     id: "forest",
@@ -144,6 +215,9 @@ export const THEME_PRESETS: ThemePreset[] = [
       error: "#dc2626",
     },
     radius: { box: 12, field: 10, selector: 6 },
+    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
+    text: { ...DEFAULT_TEXT },
+    shadow: { sm: { ...DEFAULT_SHADOW.sm }, md: { ...DEFAULT_SHADOW.md }, lg: { ...DEFAULT_SHADOW.lg } },
   },
   {
     id: "lavender",
@@ -161,6 +235,9 @@ export const THEME_PRESETS: ThemePreset[] = [
       error: "#ef4444",
     },
     radius: { box: 20, field: 14, selector: 10 },
+    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
+    text: { ...DEFAULT_TEXT },
+    shadow: { sm: { ...DEFAULT_SHADOW.sm }, md: { ...DEFAULT_SHADOW.md }, lg: { ...DEFAULT_SHADOW.lg } },
   },
   {
     id: "mono",
@@ -178,16 +255,30 @@ export const THEME_PRESETS: ThemePreset[] = [
       error: "#171717",
     },
     radius: { box: 4, field: 4, selector: 4 },
+    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
+    text: { ...DEFAULT_TEXT },
+    shadow: { sm: { ...DEFAULT_SHADOW.sm }, md: { ...DEFAULT_SHADOW.md }, lg: { ...DEFAULT_SHADOW.lg } },
   },
 ];
 
 const DEFAULT_PRESET = THEME_PRESETS[0];
 
-const DEFAULT_CONFIG: ThemeConfig = {
-  presetId: DEFAULT_PRESET.id,
-  colors: { ...DEFAULT_PRESET.colors },
-  radius: { ...DEFAULT_PRESET.radius },
-};
+function clonePreset(p: ThemePreset): ThemeConfig {
+  return {
+    presetId: p.id,
+    colors: { ...p.colors },
+    radius: { ...p.radius },
+    spacing: { ...p.spacing },
+    text: { ...p.text },
+    shadow: {
+      sm: { ...p.shadow.sm },
+      md: { ...p.shadow.md },
+      lg: { ...p.shadow.lg },
+    },
+  };
+}
+
+const DEFAULT_CONFIG: ThemeConfig = clonePreset(DEFAULT_PRESET);
 
 interface ThemeContextValue {
   /** Live draft — every edit goes here, CSS variables follow this. */
@@ -203,8 +294,16 @@ interface ThemeContextValue {
   setPrimary: (hex: string) => void;
   setColor: (token: ColorToken, hex: string) => void;
   setRadius: (key: keyof ThemeRadius, value: number) => void;
-  applyPreset: (presetId: string) => void;
-  resetToDefault: () => void;
+  setSpacing: (key: keyof ThemeSpacing, value: number) => void;
+  setText: (key: keyof ThemeText, value: number) => void;
+  setShadow: (
+    key: keyof ThemeShadow,
+    field: keyof ThemeShadowLevel,
+    value: number,
+  ) => void;
+  /** `origin` is the {x,y} screen coordinate the reveal animation expands from. */
+  applyPreset: (presetId: string, origin?: { x: number; y: number }) => void;
+  resetToDefault: (origin?: { x: number; y: number }) => void;
   /** Persist the draft — call from the page save bar. */
   commit: () => void;
   /** Discard the draft, revert preview to applied. */
@@ -273,6 +372,23 @@ function applyConfigToDocument(config: ThemeConfig) {
     `${config.radius.selector}px`,
   );
 
+  SPACING_KEYS.forEach((key) => {
+    root.style.setProperty(`--theme-space-${key}`, `${config.spacing[key]}px`);
+  });
+
+  TEXT_KEYS.forEach((key) => {
+    root.style.setProperty(`--theme-text-${key}`, `${config.text[key]}px`);
+  });
+
+  SHADOW_KEYS.forEach((key) => {
+    const { blur, opacity } = config.shadow[key];
+    const offset = Math.max(1, Math.round(blur / 2));
+    root.style.setProperty(
+      `--theme-shadow-${key}`,
+      `0 ${offset}px ${blur}px rgba(0, 0, 0, ${opacity})`,
+    );
+  });
+
   // Let native widgets (scrollbars, form controls) follow the canvas brightness.
   const isDark = isDarkConfig(colors);
   root.style.colorScheme = isDark ? "dark" : "light";
@@ -286,10 +402,18 @@ function loadConfig(): ThemeConfig {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_CONFIG;
     const parsed = JSON.parse(raw) as Partial<ThemeConfig>;
+    const parsedShadow = parsed.shadow ?? ({} as Partial<ThemeShadow>);
     return {
       presetId: parsed.presetId ?? DEFAULT_CONFIG.presetId,
       colors: { ...DEFAULT_CONFIG.colors, ...(parsed.colors ?? {}) },
       radius: { ...DEFAULT_CONFIG.radius, ...(parsed.radius ?? {}) },
+      spacing: { ...DEFAULT_CONFIG.spacing, ...(parsed.spacing ?? {}) },
+      text: { ...DEFAULT_CONFIG.text, ...(parsed.text ?? {}) },
+      shadow: {
+        sm: { ...DEFAULT_CONFIG.shadow.sm, ...(parsedShadow.sm ?? {}) },
+        md: { ...DEFAULT_CONFIG.shadow.md, ...(parsedShadow.md ?? {}) },
+        lg: { ...DEFAULT_CONFIG.shadow.lg, ...(parsedShadow.lg ?? {}) },
+      },
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -309,11 +433,24 @@ function configsEqual(a: ThemeConfig, b: ThemeConfig): boolean {
   for (const k of COLOR_TOKENS) {
     if (a.colors[k] !== b.colors[k]) return false;
   }
-  return (
-    a.radius.box === b.radius.box &&
-    a.radius.field === b.radius.field &&
-    a.radius.selector === b.radius.selector
-  );
+  if (
+    a.radius.box !== b.radius.box ||
+    a.radius.field !== b.radius.field ||
+    a.radius.selector !== b.radius.selector
+  ) {
+    return false;
+  }
+  for (const k of SPACING_KEYS) {
+    if (a.spacing[k] !== b.spacing[k]) return false;
+  }
+  for (const k of TEXT_KEYS) {
+    if (a.text[k] !== b.text[k]) return false;
+  }
+  for (const k of SHADOW_KEYS) {
+    if (a.shadow[k].blur !== b.shadow[k].blur) return false;
+    if (a.shadow[k].opacity !== b.shadow[k].opacity) return false;
+  }
+  return true;
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -358,23 +495,96 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const applyPreset = useCallback<ThemeContextValue["applyPreset"]>((id) => {
-    const preset = THEME_PRESETS.find((p) => p.id === id);
-    if (!preset) return;
-    setDraft({
-      presetId: preset.id,
-      colors: { ...preset.colors },
-      radius: { ...preset.radius },
-    });
+  const setSpacing = useCallback<ThemeContextValue["setSpacing"]>(
+    (key, value) => {
+      const clamped = Math.max(0, Math.min(64, Math.round(value)));
+      setDraft((c) => ({
+        ...c,
+        presetId: "custom",
+        spacing: { ...c.spacing, [key]: clamped },
+      }));
+    },
+    [],
+  );
+
+  const setText = useCallback<ThemeContextValue["setText"]>((key, value) => {
+    const clamped = Math.max(8, Math.min(48, Math.round(value)));
+    setDraft((c) => ({
+      ...c,
+      presetId: "custom",
+      text: { ...c.text, [key]: clamped },
+    }));
   }, []);
 
-  const resetToDefault = useCallback(() => {
-    setDraft({
-      presetId: DEFAULT_PRESET.id,
-      colors: { ...DEFAULT_PRESET.colors },
-      radius: { ...DEFAULT_PRESET.radius },
-    });
-  }, []);
+  const setShadow = useCallback<ThemeContextValue["setShadow"]>(
+    (key, field, value) => {
+      const clamped =
+        field === "opacity"
+          ? Math.max(0, Math.min(1, Number(value.toFixed(2))))
+          : Math.max(0, Math.min(80, Math.round(value)));
+      setDraft((c) => ({
+        ...c,
+        presetId: "custom",
+        shadow: {
+          ...c.shadow,
+          [key]: { ...c.shadow[key], [field]: clamped },
+        },
+      }));
+    },
+    [],
+  );
+
+  // Whole-page transitions for preset swaps use the View Transitions API:
+  // the browser snapshots the page, applies the new theme synchronously,
+  // then a CSS clip-path reveal expands a circle out from the click point
+  // (see index.css). Falls back to a plain setState when the API or
+  // motion-prefs say no.
+  const transitionSetDraft = useCallback(
+    (next: ThemeConfig, origin?: { x: number; y: number }) => {
+      const reduce =
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      const doc = document as Document & {
+        startViewTransition?: (cb: () => void) => unknown;
+      };
+      if (reduce || typeof doc.startViewTransition !== "function") {
+        setDraft(next);
+        return;
+      }
+      const root = document.documentElement;
+      const x = origin?.x ?? window.innerWidth / 2;
+      const y = origin?.y ?? window.innerHeight / 2;
+      // The reveal radius needs to cover the farthest corner from the
+      // origin or the circle finishes before the edge does.
+      const maxRadius = Math.hypot(
+        Math.max(x, window.innerWidth - x),
+        Math.max(y, window.innerHeight - y),
+      );
+      root.style.setProperty("--theme-reveal-x", `${x}px`);
+      root.style.setProperty("--theme-reveal-y", `${y}px`);
+      root.style.setProperty("--theme-reveal-r", `${maxRadius}px`);
+      doc.startViewTransition(() => {
+        flushSync(() => setDraft(next));
+      });
+    },
+    [],
+  );
+
+  const applyPreset = useCallback<ThemeContextValue["applyPreset"]>(
+    (id, origin) => {
+      const preset = THEME_PRESETS.find((p) => p.id === id);
+      if (!preset) return;
+      transitionSetDraft(clonePreset(preset), origin);
+    },
+    [transitionSetDraft],
+  );
+
+  const resetToDefault = useCallback<ThemeContextValue["resetToDefault"]>(
+    (origin) => {
+      transitionSetDraft(clonePreset(DEFAULT_PRESET), origin);
+    },
+    [transitionSetDraft],
+  );
 
   const commit = useCallback(() => {
     setApplied(draft);
@@ -396,6 +606,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setPrimary,
       setColor,
       setRadius,
+      setSpacing,
+      setText,
+      setShadow,
       applyPreset,
       resetToDefault,
       commit,
@@ -408,6 +621,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setPrimary,
       setColor,
       setRadius,
+      setSpacing,
+      setText,
+      setShadow,
       applyPreset,
       resetToDefault,
       commit,
