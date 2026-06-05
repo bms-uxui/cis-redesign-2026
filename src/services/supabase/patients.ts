@@ -1,4 +1,4 @@
-import { supabase } from "../../utils/supabase";
+import { requireSupabase } from "../../utils/supabase";
 import type { Patient } from "../../types";
 
 // Row stored in the public.patients table. Mirrors the Patient interface
@@ -58,7 +58,7 @@ export async function upsertPatient(
   profile?: Record<string, unknown>,
 ) {
   const row = toRow(patient, profile);
-  const { data, error } = await supabase
+  const { data, error } = await requireSupabase()
     .from("patients")
     .upsert(row, { onConflict: "hn" })
     .select()
@@ -68,7 +68,7 @@ export async function upsertPatient(
 }
 
 export async function fetchPatient(hn: string) {
-  const { data, error } = await supabase
+  const { data, error } = await requireSupabase()
     .from("patients")
     .select("*")
     .eq("hn", hn)
