@@ -207,7 +207,7 @@ export default function Sidebar() {
       aria-label="Sidebar"
       aria-hidden={railHidden}
       className={[
-        "fixed bottom-4 top-4 z-30 hidden flex-row overflow-hidden rounded-[var(--theme-radius-box)] shadow-[var(--theme-shadow-sm)] transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] lg:flex",
+        "fixed bottom-4 top-4 z-30 hidden flex-row overflow-hidden rounded-[16px] shadow-[var(--theme-shadow-sm)] transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] lg:flex",
         // When hidden the whole sidebar slides off the left edge. Tab-focus
         // is removed via aria-hidden + pointer-events-none below.
         railHidden
