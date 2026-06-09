@@ -102,7 +102,7 @@ export default function Dashboards() {
       <div className="h-20 shrink-0" aria-hidden />
       <div
         className={[
-          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
+          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[24px] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
           railHidden
             ? "ml-4"
             : sidebarCollapsed

@@ -126,7 +126,7 @@ export default function TopBar() {
         // Floating card aligned with the sidebar's top edge — slides left
         // when the sidebar collapses, or all the way to the page edge when
         // the sidebar is fully hidden.
-        "fixed top-4 right-4 h-16 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] transition-[left] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+        "fixed top-4 right-4 h-16 overflow-hidden rounded-[16px] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] transition-[left] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
       ].join(" ")}
       style={{ left: `${leftPx}px` }}
     >
@@ -252,7 +252,7 @@ export default function TopBar() {
       </div>
 
       {/* User pill — click to open the account menu */}
-      <div className="absolute right-4 top-1/2 -translate-y-1/2">
+      <div className="absolute right-[3px] top-1/2 -translate-y-1/2">
         <Dropdown
           placement="bottom-end"
           offset={8}
@@ -269,7 +269,7 @@ export default function TopBar() {
               type="button"
               aria-label="เมนูผู้ใช้"
               title="เมนูผู้ใช้"
-              className="flex items-center gap-2 rounded-2xl bg-[var(--theme-surface)] px-3 py-2 outline-none transition hover:bg-[var(--theme-primary-soft)] focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]/40"
+              className="flex items-center gap-2 rounded-[12px] bg-[var(--theme-surface)] px-3 py-2 outline-none transition hover:bg-[var(--theme-primary-soft)] focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]/40"
             >
               <p className="whitespace-nowrap text-[14px] font-medium text-[var(--theme-neutral)]">
                 นพ.ราอูล มันเมาะ

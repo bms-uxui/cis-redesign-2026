@@ -99,7 +99,7 @@ export default function PatientOPD() {
       <div className="h-20 shrink-0" aria-hidden />
       <div
         className={[
-          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
+          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[24px] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
           railHidden
             ? "ml-4"
             : sidebarCollapsed
@@ -216,9 +216,11 @@ function PatientHeader({
       >
         <IconChevronLeft className="h-5 w-5" stroke={1.75} />
       </button>
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--theme-primary)] text-[length:var(--theme-text-md)] font-bold text-white">
-        {p.firstName.slice(0, 1)}
-      </div>
+      <img
+        src={`https://randomuser.me/api/portraits/${p.gender === "F" ? "women" : "men"}/${(parseInt(p.hn.replace(/\D/g, "").slice(-2) || "0", 10)) % 90}.jpg`}
+        alt={`${p.firstName} ${p.lastName}`}
+        className="h-12 w-12 shrink-0 rounded-full bg-[var(--theme-neutral)]/8 object-cover"
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <p className="truncate text-[length:var(--theme-text-lg)] font-semibold text-[var(--theme-neutral)]">
           {p.prefix}

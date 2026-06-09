@@ -11,6 +11,7 @@ import AutomationBuilder from "./Automation/Builder";
 import Dashboards from "./Dashboards";
 import DashboardView from "./Dashboards/View";
 import PatientOPD from "./PatientOPD";
+import PatientRegister from "./PatientRegister";
 
 /**
  * Renders every open tab simultaneously. Only the active tab is visible —
@@ -44,6 +45,7 @@ export default function TabsHost() {
               <Route path="/dashboards" element={<Dashboards />} />
               <Route path="/dashboards/:id" element={<DashboardView />} />
               <Route path="/opd" element={<PatientOPD />} />
+              <Route path="/opd/register" element={<PatientRegister />} />
               <Route path="/opd/:hn" element={<PatientOPD />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/patient/new" element={<NewPatientByVoice />} />
