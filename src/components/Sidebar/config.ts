@@ -119,7 +119,7 @@ const OPD_PANEL: PanelDef = {
     {
       items: [
         { key: "opd-card", label: "OPD Card", Icon: IconAddressBook, navigateTo: "/opd" },
-        { key: "register", label: "ลงทะเบียน", Icon: IconClipboardText, navigateTo: "/opd/register" },
+        { key: "register", label: "ทะเบียนผู้ป่วย", Icon: IconClipboardText, navigateTo: "/opd/register" },
         { key: "send", label: "ส่งตรวจ", Icon: IconStethoscope },
         { key: "appointment", label: "การนัดหมาย", Icon: IconCalendarEvent },
         { key: "treatment", label: "การรักษา", Icon: IconActivity },

@@ -1,8 +1,18 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { IconPlus, IconTrash, IconUser } from "@tabler/icons-react";
+import {
+  IconPlus,
+  IconTrash,
+  IconUser,
+  IconArrowUp,
+  IconMicrophone,
+  IconPlayerStopFilled,
+  IconLoader2,
+} from "@tabler/icons-react";
 import { useSidebar } from "../../contexts/SidebarContext";
 import { useTabs } from "../../contexts/TabsContext";
+import { useDictation } from "../../hooks/useDictation";
+import DateRangePicker from "../DateRangePicker";
 
 const EASE_TV: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -12,22 +22,23 @@ interface RegisteredPatient {
   cid: string;
   hn: string;
   lastVisit: string;
+  time: string;
 }
 
 const REGISTERED: RegisteredPatient[] = [
-  { name: "นางสาวอรทัย จันทร์ประเสริฐ", cid: "1309901234567", hn: "0812345678", lastVisit: "05 ก.ย. 2568" },
-  { name: "นายปริญญา วัฒนชัย", cid: "1356701234567", hn: "0856789012", lastVisit: "09 ก.พ. 2568" },
-  { name: "นางสาวธนิดา หาญกล้า", cid: "1334509876543", hn: "0845678901", lastVisit: "28 ธ.ค. 2569" },
-  { name: "นายสุนทร พงษ์พิทักษ์", cid: "1312901234567", hn: "0801234567", lastVisit: "11 ก.ค. 2570" },
-  { name: "นายวีรยุทธ เจริญสุข", cid: "1311209876543", hn: "0898765432", lastVisit: "22 ม.ค. 2570" },
-  { name: "นางสาวปวีณา ศรีสวัสดิ์", cid: "1345609876541", hn: "0865432198", lastVisit: "15 ส.ค. 2567" },
-  { name: "นายธนกร สิงห์ทอง", cid: "1324501234789", hn: "0823456789", lastVisit: "30 เม.ย. 2569" },
-  { name: "นางสาวพรทิพย์ บุญญาภิบาล", cid: "1387609876543", hn: "0834567890", lastVisit: "17 ต.ค. 2571" },
-  { name: "นางสาวกาญจนา พูลสุข", cid: "1378609876543", hn: "0878901234", lastVisit: "04 มี.ค. 2567" },
-  { name: "นายธวัชชัย บุญรักษา", cid: "1345901234567", hn: "0890123456", lastVisit: "23 พ.ย. 2568" },
-  { name: "นางสาวสุมิตรา ศรีทอง", cid: "1367809876543", hn: "0823456780", lastVisit: "07 ส.ค. 2570" },
-  { name: "นายวรพล เกษมสุข", cid: "1304501234567", hn: "0834567891", lastVisit: "19 เม.ย. 2569" },
-  { name: "นางสาวปิยนุช แก้วประเสริฐ", cid: "1328609876543", hn: "0812345679", lastVisit: "01 ก.พ. 2571" },
+  { name: "นางสาวอรทัย จันทร์ประเสริฐ", cid: "1309901234567", hn: "0812345678", lastVisit: "05 ก.ย. 2568", time: "09:24 น." },
+  { name: "นายปริญญา วัฒนชัย", cid: "1356701234567", hn: "0856789012", lastVisit: "09 ก.พ. 2568", time: "13:05 น." },
+  { name: "นางสาวธนิดา หาญกล้า", cid: "1334509876543", hn: "0845678901", lastVisit: "28 ธ.ค. 2569", time: "10:47 น." },
+  { name: "นายสุนทร พงษ์พิทักษ์", cid: "1312901234567", hn: "0801234567", lastVisit: "11 ก.ค. 2570", time: "08:30 น." },
+  { name: "นายวีรยุทธ เจริญสุข", cid: "1311209876543", hn: "0898765432", lastVisit: "22 ม.ค. 2570", time: "15:12 น." },
+  { name: "นางสาวปวีณา ศรีสวัสดิ์", cid: "1345609876541", hn: "0865432198", lastVisit: "15 ส.ค. 2567", time: "11:58 น." },
+  { name: "นายธนกร สิงห์ทอง", cid: "1324501234789", hn: "0823456789", lastVisit: "30 เม.ย. 2569", time: "14:03 น." },
+  { name: "นางสาวพรทิพย์ บุญญาภิบาล", cid: "1387609876543", hn: "0834567890", lastVisit: "17 ต.ค. 2571", time: "09:50 น." },
+  { name: "นางสาวกาญจนา พูลสุข", cid: "1378609876543", hn: "0878901234", lastVisit: "04 มี.ค. 2567", time: "16:21 น." },
+  { name: "นายธวัชชัย บุญรักษา", cid: "1345901234567", hn: "0890123456", lastVisit: "23 พ.ย. 2568", time: "10:15 น." },
+  { name: "นางสาวสุมิตรา ศรีทอง", cid: "1367809876543", hn: "0823456780", lastVisit: "07 ส.ค. 2570", time: "13:42 น." },
+  { name: "นายวรพล เกษมสุข", cid: "1304501234567", hn: "0834567891", lastVisit: "19 เม.ย. 2569", time: "08:55 น." },
+  { name: "นางสาวปิยนุช แก้วประเสริฐ", cid: "1328609876543", hn: "0812345679", lastVisit: "01 ก.พ. 2571", time: "14:38 น." },
 ];
 
 // Gender-matched portrait photo, deterministic per patient so it never shuffles.
@@ -42,6 +53,28 @@ export default function PatientRegister() {
   const { railHidden } = useSidebar();
   const { openTab } = useTabs();
   const [rows, setRows] = useState<RegisteredPatient[]>(REGISTERED);
+  const [query, setQuery] = useState("");
+
+  // Voice search — records, transcribes (Thai), and drops the text into the
+  // search box live. Isolated from the clinical-note dictation session.
+  const voice = useDictation({
+    language: "th",
+    prompt:
+      "ค้นหาผู้ป่วย: ชื่อ-นามสกุล, เลขบัตรประชาชน (CID), HN. Thai names and digits.",
+    onPartial: (_chunk, full) => setQuery(full),
+    onResult: (full) => setQuery(full),
+  });
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.cid.includes(q) ||
+        r.hn.includes(q),
+    );
+  }, [rows, query]);
 
   return (
     <div className="min-h-screen w-full bg-[var(--theme-base)]">
@@ -57,7 +90,7 @@ export default function PatientRegister() {
           <header className="flex items-start justify-between gap-4 p-4">
             <div className="flex flex-col gap-1">
               <h1 className="text-[length:var(--theme-text-xl)] font-bold leading-tight text-[var(--theme-neutral)]">
-                ทะเบียนรายชื่อผู้ป่วย
+                ทะเบียนผู้ป่วย
               </h1>
               <p className="text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)]/55">
                 รายชื่อผู้ป่วยที่ดำเนินการลงทะเบียนเข้าสู่ระบบเรียบร้อยแล้ว
@@ -72,6 +105,66 @@ export default function PatientRegister() {
               ลงทะเบียนผู้ป่วยใหม่
             </button>
           </header>
+
+          {/* Filter / search bar (from Figma — colors mapped to design system) */}
+          <div className="flex items-center gap-3 px-4 pb-3">
+            {/* Search field with inline send button */}
+            <div className="flex h-12 flex-1 items-center rounded-full border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] pl-5 pr-1.5 transition focus-within:border-[var(--theme-primary)] focus-within:shadow-[0_0_0_3px_var(--theme-primary-soft)]">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="ค้นหา HN, เลขบัตรประชาชน, ชื่อ-นามสกุล..."
+                className="h-full flex-1 bg-transparent text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)] outline-none placeholder:text-[var(--theme-neutral)]/45"
+              />
+              <button
+                type="button"
+                aria-label="ค้นหา"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--theme-primary)] text-white transition hover:brightness-105 active:scale-95"
+              >
+                <IconArrowUp className="h-5 w-5" stroke={2} />
+              </button>
+            </div>
+
+            {/* Voice search (speech-to-text) */}
+            <button
+              type="button"
+              onClick={() => voice.toggle("mic")}
+              disabled={voice.status === "requesting"}
+              aria-label={voice.isActive ? "หยุดบันทึกเสียง" : "ค้นหาด้วยเสียง"}
+              aria-pressed={voice.isActive}
+              title={
+                voice.status === "transcribing"
+                  ? "กำลังถอดเสียง…"
+                  : voice.isActive
+                    ? "กำลังฟัง… แตะเพื่อหยุด"
+                    : "ค้นหาด้วยเสียง"
+              }
+              className={[
+                "flex h-12 w-12 shrink-0 items-center justify-center rounded-full border transition",
+                voice.isActive
+                  ? "border-[var(--theme-error)] bg-[var(--theme-error)] text-white shadow-[0_0_0_4px_color-mix(in_srgb,var(--theme-error)_25%,transparent)]"
+                  : "border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] text-[var(--theme-neutral)]/70 hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-primary)]",
+                voice.status === "requesting" ? "opacity-60" : "",
+              ].join(" ")}
+            >
+              {voice.status === "transcribing" ? (
+                <IconLoader2 className="h-5 w-5 animate-spin" stroke={1.75} />
+              ) : voice.isActive ? (
+                <IconPlayerStopFilled className="h-5 w-5" />
+              ) : (
+                <IconMicrophone className="h-5 w-5" stroke={1.75} />
+              )}
+            </button>
+
+            {/* Date range picker (Figma 1086:2035 — themed) */}
+            <DateRangePicker
+              className="w-[300px] shrink-0"
+              defaultValue={{
+                start: new Date(2026, 5, 12), // 12 มิ.ย. 2569
+                end: new Date(2026, 6, 12), //   12 ก.ค. 2569
+              }}
+            />
+          </div>
 
           {/* Column headers */}
           <div className="grid grid-cols-[minmax(0,1.4fr)_1fr_1fr_1fr_44px] items-center gap-4 border-y border-[var(--theme-neutral)]/10 bg-[var(--theme-base)]/30 px-4 py-3">
@@ -92,15 +185,15 @@ export default function PatientRegister() {
 
           {/* Rows */}
           <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-            {rows.length === 0 ? (
+            {filtered.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-20">
                 <IconUser className="h-6 w-6 text-[var(--theme-neutral)]/25" stroke={1.5} />
                 <p className="text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)]/50">
-                  ยังไม่มีรายชื่อผู้ป่วย
+                  {query.trim() ? "ไม่พบรายชื่อที่ค้นหา" : "ยังไม่มีรายชื่อผู้ป่วย"}
                 </p>
               </div>
             ) : (
-              rows.map((r, i) => (
+              filtered.map((r, i) => (
                 <motion.div
                   key={r.cid}
                   initial={{ opacity: 0, y: 6 }}
@@ -128,7 +221,7 @@ export default function PatientRegister() {
                     {r.hn}
                   </span>
                   <span className="truncate text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)]/80">
-                    {r.lastVisit}
+                    {r.lastVisit} {r.time}
                   </span>
 
                   <button
