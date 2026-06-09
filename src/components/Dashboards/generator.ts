@@ -313,7 +313,7 @@ export function validateDashboard(d: unknown): string[] {
     errors.push("widgets array required (non-empty)");
   else {
     const validSources = new Set(DATA_SOURCES.map((s) => s.id));
-    const validKinds = new Set(["kpi", "line-chart", "bar-chart", "table"]);
+    const validKinds = new Set(["kpi", "line-chart", "bar-chart", "table", "info"]);
     dash.widgets.forEach((w, i) => {
       if (!w || typeof w !== "object") {
         errors.push(`widget[${i}] not an object`);

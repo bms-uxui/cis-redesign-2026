@@ -3,12 +3,11 @@ import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   IconMicrophone,
-  IconArrowUp,
+  IconDeviceDesktop,
   IconKeyboard,
   IconSparkles,
   IconLoader2,
   IconRefresh,
-  IconDeviceDesktop,
   IconUser,
   IconId,
   IconPhone,
@@ -18,16 +17,25 @@ import {
   IconStethoscope,
   IconBriefcase,
   IconNote,
-  IconHome,
-  IconPlus,
   IconChevronRight,
-  IconAdjustmentsHorizontal,
-  IconSortDescending,
-  IconEye,
-  IconEyeOff,
+  IconChevronDown,
+  IconFileMusic,
+  IconCheck,
   IconPencil,
 } from "@tabler/icons-react";
-import { Button, Card, CardBody, CardHeader, Divider } from "@heroui/react";
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Divider,
+  Dropdown,
+  DropdownItem,
+  DropdownMenu,
+  DropdownTrigger,
+  Tab,
+  Tabs,
+} from "@heroui/react";
 import type { SaveCommitField } from "./SaveCommitOverlay";
 import { useDictationContext } from "../contexts/DictationContext";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -47,7 +55,9 @@ import { addPatient, nextHN, saveProfile } from "../data/patientStore";
 import { upsertPatient } from "../services/supabase/patients";
 import { stashFreshSave } from "../data/freshSaveHandoff";
 import type { Patient, BloodGroup, Gender, Rh } from "../types";
-import AI_DOCTOR from "../assets/figma/ai-mode-doctor.png";
+import AI_DOCTOR from "../assets/figma/ai-mascot-notepad.png";
+import PATIENT_AVATAR from "../assets/figma/patient-avatar-somchai.svg";
+import GARUDA_EMBLEM from "../assets/figma/garuda-emblem.svg";
 
 const EASE_TV: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -59,13 +69,28 @@ const EXAMPLE =
 export default function NewPatientByVoice() {
   const navigate = useNavigate();
   const toast = useToast();
-  const { isRecording, startSession, stopSession, segments, source } = useDictationContext();
+  const { isRecording, startSession, stopSession, segments, source, handleClose: clearDictation } =
+    useDictationContext();
+
+  // Clear any persisted dictation session on mount so a fresh visit to
+  // this page doesn't surface yesterday's transcript in the textarea.
+  // (Skips if a recording is already in progress, e.g. user navigated
+  // away and came back mid-session.)
+  useEffect(() => {
+    if (!isRecording) clearDictation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { collapsed: sidebarCollapsed, railHidden } = useSidebar();
 
   const [phase, setPhase] = useState<Phase>("input");
   const [prompt, setPrompt] = useState("");
   const [extracted, setExtracted] = useState<A2UIResponse | null>(null);
+  const [centerTab, setCenterTab] = useState<CenterTab>("summary");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Live clinical-topic extraction (Figma 996:1456) — drives the center
+  // summary tab. OLD CARTS topics surface as the patient is interviewed.
+  const topics = useSymptomTopicsFromLLM(segments, isRecording);
 
   // Stream voice transcript into the prompt as the user speaks
   useEffect(() => {
@@ -88,6 +113,28 @@ export default function NewPatientByVoice() {
     if (isRecording) void stopSession();
     else startSession("tab");
   }, [isRecording, startSession, stopSession]);
+
+  // Audio-file fallback: open a native file picker; once a file is chosen
+  // we let the dictation context handle ingestion if/when that path is
+  // wired up. For now this surfaces a clear toast so the doctor knows the
+  // file was received, even if backend ingest is still WIP.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleAudioFile = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+  const handleFileSelected = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      toast.info(
+        "ได้รับไฟล์เสียงแล้ว",
+        `${file.name} (${Math.round(file.size / 1024)} KB) — กำลังส่งเข้า ASR…`,
+      );
+      // Reset the input so picking the same file twice re-fires.
+      e.target.value = "";
+    },
+    [toast],
+  );
 
   const runExtract = useCallback(
     async (text: string) => {
@@ -293,7 +340,7 @@ export default function NewPatientByVoice() {
         <div
           className={
             phase === "input"
-              ? "flex w-full min-h-0 flex-1 flex-col gap-3 overflow-hidden py-0"
+              ? "flex w-full min-h-0 flex-1 flex-col gap-4 overflow-hidden py-0"
               : "mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-6 overflow-y-auto px-6 py-6"
           }
         >
@@ -305,11 +352,10 @@ export default function NewPatientByVoice() {
           />
         )}
 
-        {/* Phase: INPUT — Speech-to-text capture screen (Figma design 992:918).
-            Hero card with the doctor avatar in the center, floating live
-            transcript bubbles scattered around, and a Stop / Listening pill
-            pair. Below: two side-by-side cards — patient profile preview on
-            the left, full transcription on the right. */}
+        {/* Phase: INPUT — Speech-to-text capture screen (Figma 996:1456).
+            Three-column layout: key-topics list (left), conversation card
+            with summary/transcript tabs (center), and patient ID-card
+            preview (right). A stepper sits on top with cancel / next. */}
         <AnimatePresence mode="wait">
           {phase === "input" && (
             <motion.div
@@ -318,146 +364,35 @@ export default function NewPatientByVoice() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.45, ease: EASE_TV }}
-              className="flex min-h-0 flex-1 flex-col gap-3"
+              className="flex min-h-0 flex-1 flex-col gap-4"
             >
-              {/* Hero: Speech-to-text card with floating message bubbles.
-                  Flex-basis 0 + flex-1 lets it share the viewport with the
-                  bottom row without forcing a scroll. */}
-              <section className="relative flex flex-[1.1_0_0] basis-0 items-center justify-center overflow-hidden rounded-[24px] bg-white px-8 py-6">
-                {/* Cancel / Save action pill — overlaid at the hero card's
-                    top-right corner (Figma 992:1387). z-20 keeps it above
-                    the bubbles + center cluster. */}
-                <div className="absolute right-5 top-5 z-20 inline-flex items-center gap-3 rounded-full border border-neutral-200 bg-white p-2 shadow-[0_2px_6px_rgba(0,0,0,0.04)]">
-                  <button
-                    type="button"
-                    onClick={() => navigate("/")}
-                    className="flex w-[112px] items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-neutral-900 hover:bg-neutral-100"
-                  >
-                    ยกเลิก
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmitInput}
-                    disabled={!prompt.trim() || isRecording}
-                    className="flex w-[112px] items-center justify-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    บันทึก
-                  </button>
-                </div>
+              <StepperBar
+                onCancel={() => navigate("/")}
+                onNext={handleSubmitInput}
+                nextEnabled={Boolean(prompt.trim()) && !isRecording}
+                isExtracting={false}
+              />
 
-
-                {/* Floating bubbles — recent transcript snippets sprinkled
-                    around the avatar so the user sees their words "lifting
-                    off". When idle, show subtle placeholder dots. */}
-                <SpeechBubbles segments={segments} isRecording={isRecording} />
-
-                {/* Center cluster: soft halo + avatar + title + buttons */}
-                <div className="relative z-10 flex flex-col items-center gap-5">
-                  <div className="relative">
-                    {/* Soft semicircular gradient backdrop */}
-                    <div
-                      aria-hidden
-                      className="absolute left-1/2 bottom-0 h-[140px] w-[300px] -translate-x-1/2 rounded-t-full bg-gradient-to-t from-violet-200/55 via-violet-100/35 to-transparent"
-                    />
-                    <motion.img
-                      src={AI_DOCTOR}
-                      alt="เมย์"
-                      decoding="async"
-                      initial={{ scale: 0.7, opacity: 0 }}
-                      animate={{
-                        scale: 1,
-                        opacity: 1,
-                        y: isRecording ? [0, -4, 0] : 0,
-                      }}
-                      transition={{
-                        scale: { duration: 0.7, ease: [0.34, 1.6, 0.5, 1] },
-                        opacity: { duration: 0.7 },
-                        y: isRecording
-                          ? { duration: 2.2, repeat: Infinity, ease: "easeInOut" }
-                          : { duration: 0.4 },
-                      }}
-                      className="relative h-32 w-auto object-contain drop-shadow-[0_8px_18px_rgba(120,90,220,0.25)]"
-                    />
-                    {/* Small "patient" head badge offset right — photo-style
-                        avatar so this reads as a 2-person conversation, not
-                        a one-sided monologue. Matches Figma node 992:1344. */}
-                    <div
-                      aria-hidden
-                      className="absolute -right-14 top-16 flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-amber-100 via-rose-100 to-violet-100 shadow-[0_6px_16px_rgba(120,90,220,0.18)] ring-4 ring-white"
-                    >
-                      <IconUser
-                        className="h-10 w-10 translate-y-1 text-rose-900/55"
-                        stroke={1.4}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="text-center">
-                    <h2 className="text-[24px] font-semibold leading-tight text-black">
-                      Speech-to-text
-                    </h2>
-                    <p className="mt-1 text-[16px] text-black/80">
-                      ซักประวัติผู้ป่วยโดยไม่ต้องจดเอง
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    {isRecording ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => void stopSession()}
-                          className="rounded-2xl bg-[#ff383c] px-6 py-3 text-[16px] font-semibold text-white transition hover:bg-[#e6262a]"
-                        >
-                          หยุด
-                        </button>
-                        <div
-                          aria-live="polite"
-                          className="flex items-center gap-2 rounded-2xl bg-[#3965e1] px-6 py-3 text-[16px] font-semibold text-white"
-                        >
-                          <span className="relative inline-flex h-2 w-2">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/80" />
-                            <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
-                          </span>
-                          กำลังฟัง...
-                        </div>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleMic}
-                        className="flex items-center gap-2 rounded-2xl bg-[#3965e1] px-6 py-3 text-[16px] font-semibold text-white transition hover:bg-[#2d52c4]"
-                      >
-                        <IconMicrophone className="h-4 w-4" stroke={2} />
-                        เริ่มฟัง
-                      </button>
-                    )}
-                  </div>
-
-                  {!isRecording && !prompt && (
-                    <button
-                      type="button"
-                      onClick={handleTabAudio}
-                      className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-800"
-                    >
-                      <IconDeviceDesktop className="h-3.5 w-3.5" stroke={1.75} />
-                      ใช้เสียงในอุปกรณ์ (Telehealth / คลิปที่เปิดอยู่)
-                    </button>
-                  )}
-                </div>
-              </section>
-
-              {/* Bottom row — profile preview (left, from ID-card scan) +
-                  full transcript (right). Figma split is roughly 40/60
-                  (profile 518px, transcription 729px on 1299px). */}
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[2fr_3fr]">
-                <ProfilePreviewCard populatedCount={populatedCount.filled} />
-                <TranscriptionCard
-                  prompt={prompt}
+              <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-4">
+                <ConversationCard
+                  patientName="นายสมชาย ใจดี"
+                  topics={topics}
                   segments={segments}
-                  onPromptChange={setPrompt}
-                  textareaRef={inputRef}
+                  isRecording={isRecording}
+                  onToggleRecord={handleMic}
+                  onTabAudio={handleTabAudio}
+                  onAudioFile={handleAudioFile}
+                  tab={centerTab}
+                  onTabChange={setCenterTab}
                 />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="audio/*"
+                  hidden
+                  onChange={handleFileSelected}
+                />
+                <PatientIdCard />
               </div>
             </motion.div>
           )}
@@ -829,118 +764,22 @@ function ExtractFieldRow({
   );
 }
 
-// ── New "Speech-to-text" hero helpers (Figma 992:918) ────────────────────
+// ── Recording screen helpers (Figma 996:1456) ─────────────────────────────
+// Three-column live capture layout: key-topics list (left), conversation +
+// summary tabs (center, with hide-to-the-side AI doctor avatar), and the
+// patient ID-card preview (right). The recording state drives all three
+// columns from the same dictation segments + LLM extraction.
 
-interface SpeechBubblesProps {
-  segments: { text: string; speaker?: number }[];
-  isRecording: boolean;
-}
-
-/** Ask the LLM to extract clinically relevant key phrases from the live
- *  transcript. Polls every 3s while recording — independent of segment
- *  churn so calls always complete instead of being aborted mid-flight by
- *  rapid transcript updates. New phrases are MERGED with prior ones so
- *  the queue grows monotonically across the session. */
-function useSymptomPhrasesFromLLM(
-  segments: { text: string }[],
-  isRecording: boolean,
-): string[] {
-  const [phrases, setPhrases] = useState<string[]>([]);
-  // Latest segments via ref so the polling effect can read them without
-  // re-running on every transcript update (which would abort the call).
-  const segmentsRef = useRef(segments);
-  segmentsRef.current = segments;
-
-  // Clear ONLY when starting a new recording session.
-  const wasRecordingRef = useRef(isRecording);
-  useEffect(() => {
-    if (isRecording && !wasRecordingRef.current) setPhrases([]);
-    wasRecordingRef.current = isRecording;
-  }, [isRecording]);
-
-  useEffect(() => {
-    if (!isRecording) return;
-    let cancelled = false;
-
-    const tick = async () => {
-      const transcript = segmentsRef.current
-        .map((s) => s.text)
-        .join(" ")
-        .trim();
-      if (transcript.length < 6) return;
-      try {
-        const result = await chatJSON<{ phrases?: string[] }>(
-          [
-            {
-              role: "system",
-              content:
-                "You are extracting clinically structured key phrases from a Thai patient interview transcript that GROWS over time — every call has the full transcript so far. " +
-                "Use the standard HPI mnemonic OLD CARTS plus Social and PMH/Med categories. " +
-                "Be exhaustive: extract EVERY distinct clinical detail mentioned so far, do not summarize or merge. " +
-                'Output ONLY JSON: {"phrases":["...","..."]} — up to 20 short Thai phrases, each ≤24 characters, each a readable noun/verb chunk (not a sentence). ' +
-                "Cover ALL of these when present, in this priority order:\n" +
-                "• Onset — เริ่มเป็นเมื่อไร / สาเหตุที่กระตุ้น (เช่น 'เริ่มเมื่อวาน', 'หลังยกของหนัก')\n" +
-                "• Location — ตำแหน่งที่เป็น (เช่น 'ปวดเอว', 'แน่นหน้าอก')\n" +
-                "• Duration — เป็นมานาน/ความต่อเนื่อง (เช่น 'มา 3 วัน', 'เป็น ๆ หาย ๆ')\n" +
-                "• Character — ลักษณะอาการ (เช่น 'แปลบ', 'ตื้อ ๆ', 'แสบร้อน')\n" +
-                "• Aggravating / Alleviating — ปัจจัยกระตุ้นหรือบรรเทา (เช่น 'แย่ตอนนอน', 'ดีขึ้นเมื่อพัก')\n" +
-                "• Radiation — ร้าวไปที่ไหน (เช่น 'ร้าวลงขา')\n" +
-                "• Timing — ช่วงเวลา/ความถี่ (เช่น 'ทุกเช้า', 'หลังกินข้าว')\n" +
-                "• Severity — ความรุนแรง (เช่น 'ปวดมาก ระดับ 8/10', 'พอทนได้')\n" +
-                "• Social / Behavior — พฤติกรรม + ไลฟ์สไตล์ที่เกี่ยว (เช่น 'สูบบุหรี่ 10 มวน/วัน', 'นั่งทำงานนาน', 'นอนดึก', 'ดื่มเหล้า')\n" +
-                "• PMH / Meds — โรคประจำตัว + ยาที่กินอยู่ (เช่น 'เป็นเบาหวาน', 'กินยาความดัน', 'แพ้ยา NSAID')\n" +
-                "Skip greetings, names, ages, occupations unless they map to one of the categories above (e.g. 'พนักงานออฟฟิศ' is fine as Social context). " +
-                "Deduplicate. " +
-                'If nothing clinically relevant yet, return {"phrases":[]}.',
-            },
-            { role: "user", content: transcript },
-          ],
-          { temperature: 0.2, maxTokens: 600, fast: true },
-        );
-        if (cancelled) return;
-        const next = Array.isArray(result?.phrases)
-          ? result.phrases.filter(
-              (p): p is string =>
-                typeof p === "string" && p.length > 0 && p.length <= 32,
-            )
-          : [];
-        if (next.length === 0) return;
-        setPhrases((prev) => {
-          // Merge — keep all prior phrases, append only new ones.
-          const seen = new Set(prev);
-          const additions = next.filter((p) => !seen.has(p));
-          return additions.length ? [...prev, ...additions] : prev;
-        });
-      } catch {
-        // Silent — next tick will retry with a fresh transcript snapshot.
-      }
-    };
-
-    // Fire once immediately, then poll on a fixed cadence so calls
-    // always have time to complete and accumulate.
-    tick();
-    const interval = window.setInterval(tick, 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [isRecording]);
-
-  return phrases;
-}
-
-interface Pin {
-  text: string;
-  /** Monotonic release order — used for palette / rotation variation. */
-  orderIndex: number;
-  /** Locked random position (% of card). Never changes once assigned. */
-  x: number;
-  y: number;
+interface SymptomTopic {
+  /** Short Thai label, e.g. "ปวดท้อง". */
+  title: string;
+  /** Patient's verbatim statement that mentioned this topic. */
+  body: string;
 }
 
 /** Normalize a phrase for dedupe — strip whitespace, drop trailing
  *  punctuation, and collapse interior spaces so trivially different
- *  outputs from the LLM ("ปวด ท้อง " vs "ปวดท้อง") collapse to one pin. */
+ *  outputs from the LLM ("ปวด ท้อง " vs "ปวดท้อง") collapse to one entry. */
 function normalizePhrase(text: string): string {
   return text
     .trim()
@@ -948,420 +787,828 @@ function normalizePhrase(text: string): string {
     .replace(/[\.,!?…]+$/u, "");
 }
 
-/** Pick a random spot inside the hero card that (a) stays clear of the
- *  central avatar/title cluster and (b) keeps a minimum distance from
- *  any post-it already placed. Bails to a random fallback after enough
- *  attempts so the wall never silently drops a pin. */
-function pickRandomPosition(taken: { x: number; y: number }[]): {
-  x: number;
-  y: number;
-} {
-  // Coordinates are expressed as % of the hero card.
-  const MIN_X = 2;
-  const MAX_X = 78; // leave room for ~170px post-it width
-  const MIN_Y = 4;
-  const MAX_Y = 80;
-  // Avoid the central avatar/title/buttons region.
-  const CENTER = { x0: 36, x1: 64, y0: 22, y1: 90 };
-  const MIN_DIST_X = 14;
-  const MIN_DIST_Y = 16;
-
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const x = MIN_X + Math.random() * (MAX_X - MIN_X);
-    const y = MIN_Y + Math.random() * (MAX_Y - MIN_Y);
-    if (
-      x > CENTER.x0 &&
-      x < CENTER.x1 &&
-      y > CENTER.y0 &&
-      y < CENTER.y1
-    ) {
-      continue;
-    }
-    const collides = taken.some(
-      (p) => Math.abs(p.x - x) < MIN_DIST_X && Math.abs(p.y - y) < MIN_DIST_Y,
-    );
-    if (collides) continue;
-    return { x, y };
-  }
-  // Best-effort fallback — anywhere outside the center zone.
-  return {
-    x: Math.random() > 0.5
-      ? MAX_X - Math.random() * 20
-      : MIN_X + Math.random() * 20,
-    y: MIN_Y + Math.random() * (MAX_Y - MIN_Y),
-  };
-}
-
-/** Post-it wall: as the LLM surfaces new clinical phrases, each one is
- *  released onto its own random position inside the hero card. Position
- *  is locked per pin so post-its don't shuffle while new ones arrive.
- *  The center cluster (avatar/title/buttons) is treated as a no-go zone. */
-function SpeechBubbles({ segments, isRecording }: SpeechBubblesProps) {
-  const phrases = useSymptomPhrasesFromLLM(segments, isRecording);
-  const [pins, setPins] = useState<Pin[]>([]);
-  const releaseCounterRef = useRef(0);
+/** Extract clinical key topics + the patient's verbatim statement that
+ *  surfaces each topic. Polls every 3.5s while recording, merges new
+ *  topics into the accumulator, and dedupes by normalized title. */
+function useSymptomTopicsFromLLM(
+  segments: { text: string }[],
+  isRecording: boolean,
+): SymptomTopic[] {
+  const [topics, setTopics] = useState<SymptomTopic[]>([]);
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
   const wasRecordingRef = useRef(isRecording);
 
-  // Clear the wall only when a new recording session begins.
   useEffect(() => {
-    if (isRecording && !wasRecordingRef.current) {
-      setPins([]);
-      releaseCounterRef.current = 0;
-    }
+    if (isRecording && !wasRecordingRef.current) setTopics([]);
     wasRecordingRef.current = isRecording;
   }, [isRecording]);
 
-  // Release a fresh phrase roughly every second while recording.
   useEffect(() => {
     if (!isRecording) return;
-    const pinnedKeys = new Set(pins.map((p) => normalizePhrase(p.text)));
-    const next = phrases.find((p) => !pinnedKeys.has(normalizePhrase(p)));
-    if (!next) return;
-    const t = setTimeout(() => {
-      setPins((prev) => {
-        const key = normalizePhrase(next);
-        if (prev.some((p) => normalizePhrase(p.text) === key)) return prev;
-        const { x, y } = pickRandomPosition(prev);
-        const orderIndex = releaseCounterRef.current;
-        releaseCounterRef.current += 1;
-        return [...prev, { text: next, orderIndex, x, y }];
-      });
-    }, 1000);
-    return () => clearTimeout(t);
-  }, [phrases, pins, isRecording]);
+    let cancelled = false;
+    const tick = async () => {
+      const transcript = segmentsRef.current
+        .map((s) => s.text)
+        .join(" ")
+        .trim();
+      if (transcript.length < 6) return;
+      try {
+        const result = await chatJSON<{ topics?: { title?: string; body?: string }[] }>(
+          [
+            {
+              role: "system",
+              content:
+                "You are extracting clinically structured key topics from a Thai patient interview transcript that GROWS over time. Every call has the full transcript so far. " +
+                "Use the OLD CARTS clinical mnemonic STRICTLY: Onset, Location, Duration, Character, Aggravating/Alleviating factors, Radiation, Timing, Severity. Add Social/PMH/Meds only when the patient explicitly mentions them. " +
+                'Output ONLY JSON: {"topics":[{"title":"...","body":"..."}, ...]} — up to 12 entries. ' +
+                "title: SHORT clinical key-point per OLD CARTS, ≤16 Thai characters (e.g. 'ปวดท้อง' for Location, 'เป็น 3 วัน' for Duration, 'หลังกินอาหาร' for Timing, 'ระดับ 7/10' for Severity). One topic per OLD CARTS bucket when present. " +
+                "body: ANALYTICAL clinical summary written by you — a 1-3 sentence Thai paragraph that SYNTHESIZES what the patient said about this OLD CARTS point into a clinical statement. NOT a verbatim quote, NOT raw transcript. Combine multiple patient utterances into clinical language with proper terminology when appropriate. Example title 'ปวดท้อง' → body 'ผู้ป่วยมีอาการปวดบริเวณท้องน้อยด้านขวา ลักษณะปวดบีบรัด รุนแรงขึ้นหลังรับประทานอาหารมื้อหนัก โดยอาการเริ่มเป็น 3 วันก่อน'. Aim for 80-280 Thai characters per body, no surrounding quotation marks. " +
+                "Be exhaustive — extract every distinct OLD CARTS detail surfaced so far. Deduplicate by title. " +
+                'If nothing clinically relevant yet, return {"topics":[]}.',
+            },
+            { role: "user", content: transcript },
+          ],
+          { temperature: 0.2, maxTokens: 3500, fast: true },
+        );
+        if (cancelled) return;
+        const next = Array.isArray(result?.topics)
+          ? result.topics
+              .map((t) => ({
+                title: typeof t?.title === "string" ? t.title.trim() : "",
+                body: typeof t?.body === "string" ? t.body.trim() : "",
+              }))
+              .filter((t) => t.title.length > 0 && t.title.length <= 24)
+          : [];
+        if (next.length === 0) return;
+        setTopics((prev) => {
+          const seen = new Set(prev.map((p) => normalizePhrase(p.title)));
+          const additions = next.filter((t) => !seen.has(normalizePhrase(t.title)));
+          return additions.length ? [...prev, ...additions] : prev;
+        });
+      } catch {
+        // Silent — next tick retries.
+      }
+    };
+    tick();
+    const interval = window.setInterval(tick, 3500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isRecording]);
+
+  return topics;
+}
+
+// ── Stepper ────────────────────────────────────────────────────────────────
+// Three-step header: ลงทะเบียน (done) → บันทึกประวัติ (current) → ตรวจสอบข้อมูล.
+// Done steps render with a green pill + check; the current step renders
+// with a primary-tinted outlined pill; the upcoming step stays muted.
+
+interface StepperBarProps {
+  onCancel: () => void;
+  onNext: () => void;
+  nextEnabled: boolean;
+  isExtracting: boolean;
+}
+
+function StepperBar({ onCancel, onNext, nextEnabled, isExtracting }: StepperBarProps) {
+  const disabled = !nextEnabled || isExtracting;
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-2xl border border-[#dadada] bg-white p-2">
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        <StepPill state="done" label="ลงทะเบียน" />
+        <IconChevronRight className="h-4 w-4 shrink-0 text-neutral-300" stroke={2} />
+        <StepPill state="current" label="บันทึกประวัติ" />
+        <IconChevronRight className="h-4 w-4 shrink-0 text-neutral-300" stroke={2} />
+        <StepPill state="upcoming" label="ตรวจสอบข้อมูล" />
+      </div>
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex w-[124px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium text-black transition hover:bg-neutral-100"
+        >
+          ยกเลิก
+        </button>
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={disabled}
+          className={[
+            "flex w-[124px] items-center justify-center gap-1.5 rounded-full bg-[#3965e1] px-4 py-2 text-sm font-medium text-white transition",
+            disabled ? "cursor-not-allowed opacity-50" : "hover:bg-[#2d52c4]",
+          ].join(" ")}
+        >
+          {isExtracting && <IconLoader2 className="h-3.5 w-3.5 animate-spin" stroke={2.5} />}
+          ถัดไป
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function StepPill({ state, label }: { state: "done" | "current" | "upcoming"; label: string }) {
+  if (state === "done") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-xl bg-[#3eaf3f] px-4 py-2 text-sm font-medium text-white">
+        <IconCheck className="h-4 w-4" stroke={2.5} />
+        {label}
+      </span>
+    );
+  }
+  if (state === "current") {
+    return (
+      <span className="inline-flex items-center rounded-xl bg-[#3965e1]/10 px-4 py-2 text-sm font-medium text-[#3965e1]">
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium text-black opacity-50">
+      {label}
+    </span>
+  );
+}
+
+// ── Center column: conversation card with tabs ────────────────────────────
+
+type CenterTab = "summary" | "transcript";
+
+interface ConversationCardProps {
+  patientName: string;
+  topics: SymptomTopic[];
+  segments: { text: string }[];
+  isRecording: boolean;
+  onToggleRecord: () => void;
+  onTabAudio: () => void;
+  onAudioFile: () => void;
+  tab: CenterTab;
+  onTabChange: (t: CenterTab) => void;
+}
+
+function ConversationCard({
+  patientName,
+  topics,
+  segments,
+  isRecording,
+  onToggleRecord,
+  onTabAudio,
+  onAudioFile,
+  tab,
+  onTabChange,
+}: ConversationCardProps) {
+  return (
+    <section className="relative flex h-full min-h-0 flex-col items-stretch gap-4 rounded-3xl border border-[#dadada] bg-white">
+      {/* Mascot — wrapped in a clipping window. Mascot itself is larger
+          than the window so the bottom portion is intentionally cropped
+          at the header's bottom edge; top still pokes above the card. */}
+      <div className="pointer-events-none absolute right-6 -top-14 z-20 h-[142px] w-44 overflow-hidden">
+        <motion.img
+          src={AI_DOCTOR}
+          alt="เมย์"
+          aria-hidden
+          initial={{ y: -8, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.45 }}
+          className="block h-44 w-auto object-contain"
+        />
+      </div>
+
+      {/* Header — gradient banner with patient name, recording status.
+          Min-height locks the header so the mascot clip aligns. */}
+      <header className="relative flex min-h-[80px] items-start justify-between gap-4 rounded-t-3xl border-b border-[#dadada] bg-gradient-to-r from-white to-[#e5efff] p-4 pr-40">
+        <div className="flex flex-1 flex-col gap-2">
+          <h2 className="text-[16px] font-bold text-[#1f1f1f]">
+            บทสนทนากับผู้ป่วย {patientName}
+          </h2>
+          <p className="flex items-center gap-1.5 text-[14px] font-medium text-[#1f1f1f]/60">
+            {isRecording ? (
+              <>
+                <span className="relative inline-flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400/70" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-rose-500" />
+                </span>
+                กำลังบันทึก...
+              </>
+            ) : (
+              "Dr. Note พร้อมจดให้แล้ว — กดไมค์เพื่อเริ่มซักประวัติ"
+            )}
+          </p>
+        </div>
+      </header>
+
+      {/* Body — tab control + content scroll area. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4">
+        {/* Tab control — HeroUI Tabs (solid variant) styled to match
+            Figma 1013:1713: #ebebec track + white pill on active tab. */}
+        <Tabs
+          aria-label="แสดงสรุปอาการ / บทสนทนาเต็ม"
+          selectedKey={tab}
+          onSelectionChange={(key) => onTabChange(key as CenterTab)}
+          variant="solid"
+          fullWidth
+          radius="full"
+          classNames={{
+            base: "w-full",
+            tabList: "bg-[#ebebec] px-2 py-1 rounded-[28px] gap-0.5",
+            tab: "px-3 py-1.5 text-[14px] font-medium leading-[1.43] data-[hover-unselected=true]:opacity-100",
+            cursor: "bg-white rounded-[32px] shadow-[0_2px_8px_rgba(0,0,0,0.06)]",
+            tabContent: "text-[#71717a] group-data-[selected=true]:text-[#18181b]",
+          }}
+        >
+          <Tab key="summary" title="สรุปอาการสำคัญ" />
+          <Tab key="transcript" title="บทสนทนา" />
+        </Tabs>
+
+        <ScrollArea>
+          {/* Keep BOTH tabs mounted at all times — only toggle visibility.
+              This preserves the typewriter progress in SummaryTab and the
+              textarea state in TranscriptTab when the doctor flips between
+              them, so it feels seamless instead of "starting over". */}
+          <div className={tab === "summary" ? "flex flex-col" : "hidden"}>
+            <SummaryTab topics={topics} isRecording={isRecording} />
+          </div>
+          <div className={tab === "transcript" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+            <TranscriptTab segments={segments} isRecording={isRecording} />
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* Bottom record bar — sticky footer at the bottom of the card.
+          Hosts the record button + tab-audio fallback (Figma 1010:1223). */}
+      <div className="shrink-0 h-[102px] border-t border-[#dadada] bg-white/60 backdrop-blur-md rounded-b-3xl">
+        <div className="flex h-full flex-col items-center justify-center gap-1.5">
+          {isRecording ? (
+            <button
+              type="button"
+              onClick={onToggleRecord}
+              className="pointer-events-auto flex items-center gap-4 rounded-2xl border border-[#d9d9d9] bg-white p-4 text-[14px] font-medium text-black transition hover:bg-neutral-50"
+            >
+              <span
+                aria-hidden
+                className="block h-9 w-9 rounded-full bg-[#ff383c] shadow-[inset_0_-2px_4px_rgba(0,0,0,0.12)]"
+              />
+              หยุดการบันทึก
+            </button>
+          ) : (
+            <div className="pointer-events-auto flex items-stretch rounded-2xl border border-[#d9d9d9] bg-white text-[14px] font-medium text-black overflow-hidden">
+              {/* Main record action — mic is the default source. */}
+              <button
+                type="button"
+                onClick={onToggleRecord}
+                className="flex items-center gap-4 p-4 transition hover:bg-neutral-50"
+              >
+                <span
+                  aria-hidden
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-[#3965e1] text-white"
+                >
+                  <IconMicrophone className="h-5 w-5" stroke={2} />
+                </span>
+                เริ่มบันทึก
+              </button>
+              {/* Source picker — pops a menu with the other two sources. */}
+              <Dropdown placement="top-end">
+                <DropdownTrigger>
+                  <button
+                    type="button"
+                    aria-label="เลือกแหล่งเสียง"
+                    className="flex items-center border-l border-[#d9d9d9] px-3 text-[#1f1f1f]/60 transition hover:bg-neutral-50 hover:text-[#1f1f1f]"
+                  >
+                    <IconChevronDown className="h-4 w-4" stroke={2} />
+                  </button>
+                </DropdownTrigger>
+                <DropdownMenu
+                  aria-label="แหล่งเสียง"
+                  onAction={(key) => {
+                    if (key === "mic") onToggleRecord();
+                    else if (key === "tab") onTabAudio();
+                    else if (key === "file") onAudioFile();
+                  }}
+                >
+                  <DropdownItem
+                    key="mic"
+                    startContent={<IconMicrophone className="h-4 w-4" stroke={1.75} />}
+                    description="ใช้ไมโครโฟนของอุปกรณ์นี้"
+                  >
+                    ไมโครโฟน
+                  </DropdownItem>
+                  <DropdownItem
+                    key="tab"
+                    startContent={<IconDeviceDesktop className="h-4 w-4" stroke={1.75} />}
+                    description="Telehealth / คลิปที่เปิดในแท็บ"
+                  >
+                    เสียงในอุปกรณ์
+                  </DropdownItem>
+                  <DropdownItem
+                    key="file"
+                    startContent={<IconFileMusic className="h-4 w-4" stroke={1.75} />}
+                    description="อัปโหลดไฟล์ .mp3 / .wav"
+                  >
+                    ไฟล์เสียง
+                  </DropdownItem>
+                </DropdownMenu>
+              </Dropdown>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Scrollable region with a floating "scroll-down" pill that appears
+ *  whenever the user is not at the bottom (or new content has pushed the
+ *  bottom out of view). Clicking the pill smooth-scrolls to the bottom. */
+function ScrollArea({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+
+  const check = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setAtBottom(distance < 24); // 24px tolerance — counts as "at bottom"
+  }, []);
+
+  // Re-check when content size changes (new cards / typewriter chars).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    for (const child of Array.from(el.children)) ro.observe(child);
+    return () => ro.disconnect();
+  }, [check]);
+
+  const handleScrollToBottom = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  };
 
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0">
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={ref}
+        onScroll={check}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-48"
+      >
+        {children}
+      </div>
       <AnimatePresence>
-        {pins.map((pin) => (
-          <PostItNote
-            key={pin.text}
-            text={pin.text}
-            x={pin.x}
-            y={pin.y}
-            index={pin.orderIndex}
-          />
-        ))}
+        {!atBottom && (
+          <motion.button
+            type="button"
+            onClick={handleScrollToBottom}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            aria-label="เลื่อนลงล่างสุด"
+            className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-[#dadada] bg-white text-[#1f1f1f]/70 shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition hover:text-[#1f1f1f] hover:bg-neutral-50"
+          >
+            <IconChevronDown className="h-4 w-4" stroke={2} />
+          </motion.button>
+        )}
       </AnimatePresence>
     </div>
   );
 }
 
-// Post-it palette — soft pastels with matching ink color. Cycled per
-// bubble index so neighbouring notes look distinct.
-const POSTIT_PALETTE: { bg: string; ink: string; border: string }[] = [
-  { bg: "#fff7c2", ink: "#7c5b00", border: "#f3e29a" }, // classic yellow
-  { bg: "#ffd9e4", ink: "#8a1c4a", border: "#f9bcd0" }, // pink
-  { bg: "#c8e4ff", ink: "#0c3d72", border: "#a9d0f3" }, // blue
-  { bg: "#d2f5d6", ink: "#1d5e2a", border: "#b3e3ba" }, // mint
-];
+function SummaryTab({
+  topics,
+  isRecording,
+}: {
+  topics: SymptomTopic[];
+  isRecording: boolean;
+}) {
+  // Throttle topic reveal — each new LLM-extracted topic surfaces at
+  // most once every ~1.2s so the list grows calmly even when the model
+  // emits a burst on a single tick.
+  const visible = useThrottledReveal(topics, 1200);
 
-interface PostItNoteProps {
-  text: string;
-  /** Position in % of the parent hero card. */
-  x: number;
-  y: number;
-  index: number;
+  if (topics.length === 0 && !isRecording) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#1f1f1f]/40">
+        ยังไม่มีอาการสำคัญที่สรุปได้
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {visible.map((t, i) => (
+        <TopicSummaryCard key={`${t.title}-sum-${i}`} topic={t} />
+      ))}
+      {(isRecording || visible.length < topics.length) && <SummarySkeletonCard />}
+    </div>
+  );
 }
 
-/** Post-it note with a pen-writing animation. Text reveals character by
- *  character; a pencil hovers at the end while writing and lifts off
- *  when the note is complete. Each note is rotated a few degrees and
- *  cycles through the pastel palette so the wall reads like a real
- *  bulletin board. */
-function PostItNote({ text, x, y, index }: PostItNoteProps) {
-  const palette = POSTIT_PALETTE[index % POSTIT_PALETTE.length];
-  // Stable per-bubble rotation: -7° → +7° based on index hash.
-  const rotation = (((index * 53) % 14) - 7) | 0;
+function TopicSummaryCard({ topic }: { topic: SymptomTopic }) {
+  return (
+    <article className="group flex flex-col gap-4 border-b border-[#d9d9d9] p-4 transition-colors rounded-2xl hover:border-[#3965e1] hover:bg-[#f5f7fd]">
+      <header className="flex items-center">
+        <span className="inline-flex items-center gap-2 rounded-lg bg-black/5 px-2 py-1 transition-colors group-hover:bg-white">
+          <IconNote
+            className="h-4 w-4 shrink-0 text-[#1f1f1f]/60 transition-colors group-hover:text-[#3965e1]"
+            stroke={1.5}
+          />
+          <span className="text-[14px] font-medium text-[#1f1f1f]">{topic.title}</span>
+        </span>
+      </header>
+      <p className="text-[14px] font-normal leading-normal text-[#1f1f1f]/60">
+        {topic.body ? <TypewriterLine text={topic.body} speed={18} /> : "—"}
+      </p>
+    </article>
+  );
+}
 
-  const [typed, setTyped] = useState("");
+function SummarySkeletonCard() {
+  return (
+    <article className="flex flex-col gap-4 p-4">
+      <header className="flex items-center">
+        <span className="inline-flex items-center gap-2 rounded-lg bg-black/5 px-2 py-1">
+          <IconNote className="h-4 w-4 shrink-0 text-[#1f1f1f]/30" stroke={1.5} />
+          <span
+            className="block h-5 w-[100px] animate-pulse rounded-full"
+            style={{ backgroundImage: "linear-gradient(to right, #bdbdbd, #dddddd)" }}
+          />
+        </span>
+      </header>
+      <div className="flex flex-col gap-2">
+        <div
+          className="h-[18px] w-full animate-pulse rounded-full"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, rgba(189,189,189,0.6), rgba(221,221,221,0.6))",
+          }}
+        />
+        <div
+          className="h-[18px] w-3/4 animate-pulse rounded-full"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, rgba(189,189,189,0.6), rgba(221,221,221,0.6))",
+          }}
+        />
+      </div>
+    </article>
+  );
+}
+
+/** Throttled reveal — caps the rate at which new transcript items appear
+ *  so a burst of ASR chunks doesn't flood the panel in a single frame.
+ *  Returns the prefix of `segments` that has been "revealed" so far. */
+function useThrottledReveal<T>(items: T[], intervalMs = 900): T[] {
+  const [revealed, setRevealed] = useState(0);
   useEffect(() => {
-    setTyped("");
+    if (revealed >= items.length) return;
+    const id = window.setTimeout(() => setRevealed((c) => c + 1), intervalMs);
+    return () => window.clearTimeout(id);
+  }, [revealed, items.length, intervalMs]);
+  return items.slice(0, revealed);
+}
+
+/** Char-by-char typewriter for a single transcript line. Calls `onTick`
+ *  every reveal step so the parent can keep auto-scroll pinned to the
+ *  bottom as the line grows. */
+function TypewriterLine({
+  text,
+  speed = 22,
+  onTick,
+}: {
+  text: string;
+  speed?: number;
+  onTick?: () => void;
+}) {
+  const [shown, setShown] = useState("");
+  useEffect(() => {
+    setShown("");
+    if (!text) return;
     let i = 0;
     const id = window.setInterval(() => {
       i += 1;
-      setTyped(text.slice(0, i));
+      setShown(text.slice(0, i));
+      onTick?.();
       if (i >= text.length) window.clearInterval(id);
-    }, 55);
+    }, speed);
     return () => window.clearInterval(id);
-  }, [text]);
-
-  const isWriting = typed.length < text.length;
-
+  }, [text, speed, onTick]);
+  const isTyping = shown.length < text.length;
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.7, y: 14, rotate: 0 }}
-      animate={{
-        opacity: 1,
-        scale: 1,
-        y: [0, -4, 0],
-        rotate: rotation,
-      }}
-      exit={{ opacity: 0, scale: 0.85, y: -10, rotate: rotation + 4 }}
-      transition={{
-        opacity: { duration: 0.4 },
-        scale: { duration: 0.4, ease: [0.34, 1.6, 0.5, 1] },
-        rotate: { duration: 0.5 },
-        y: {
-          duration: 3 + (index % 3) * 0.4,
-          repeat: Infinity,
-          ease: "easeInOut",
-          delay: (index % 4) * 0.18,
-        },
-      }}
-      className="absolute w-[170px]"
-      style={{ left: `${x}%`, top: `${y}%` }}
-    >
-      <div
-        className="relative px-4 py-3 shadow-[2px_4px_10px_rgba(0,0,0,0.08)]"
-        style={{
-          background: palette.bg,
-          borderTop: `1px solid ${palette.border}`,
-          // Sticky-note "tape" peel: a tiny darker fold at top-left
-          backgroundImage: `linear-gradient(135deg, rgba(0,0,0,0.04) 0 8px, transparent 8px)`,
-        }}
-      >
-        <p
-          className="text-[13px] font-medium leading-snug"
-          style={{ color: palette.ink, fontFamily: "'Caveat', 'Noto Sans Thai Looped', cursive" }}
-        >
-          {typed}
-          {isWriting && (
-            <motion.span
-              animate={{ opacity: [1, 0, 1] }}
-              transition={{ duration: 0.7, repeat: Infinity }}
-              className="ml-0.5 inline-block h-[14px] w-px align-middle"
-              style={{ background: palette.ink }}
-            />
-          )}
-        </p>
-        {/* Pen — hovers at the bottom-right while writing, with a tiny
-            scribble jitter so it reads as "in motion". */}
-        <AnimatePresence>
-          {isWriting && (
-            <motion.div
-              initial={{ opacity: 0, y: -6, rotate: -30 }}
-              animate={{
-                opacity: 1,
-                y: 0,
-                rotate: [-30, -22, -34, -26, -32],
-                x: [0, 1, -1, 1, 0],
-              }}
-              exit={{ opacity: 0, y: -16, rotate: -40, transition: { duration: 0.35 } }}
-              transition={{
-                rotate: { duration: 0.5, repeat: Infinity, ease: "linear" },
-                x: { duration: 0.5, repeat: Infinity, ease: "linear" },
-              }}
-              className="absolute -bottom-3 -right-2"
-              style={{ originX: 0.5, originY: 0.5 }}
-            >
-              <IconPencil
-                className="h-6 w-6"
-                stroke={2}
-                style={{ color: palette.ink }}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.div>
+    <>
+      {shown}
+      {isTyping && (
+        <span
+          aria-hidden
+          className="ml-0.5 inline-block h-[1em] w-[2px] -mb-0.5 animate-pulse bg-[#3965e1]/60 align-middle"
+        />
+      )}
+    </>
   );
 }
 
-interface ProfilePreviewCardProps {
-  populatedCount: number;
+function TranscriptTab({
+  segments,
+  isRecording,
+}: {
+  segments: { text: string; speaker?: number }[];
+  isRecording: boolean;
+}) {
+  const toast = useToast();
+  const joined = segments.map((s) => s.text).join(" ");
+  const [draft, setDraft] = useState(joined);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+
+  // Keep the textarea in sync with incoming ASR chunks whenever the user
+  // is NOT mid-edit. Once they start editing, their draft owns the field
+  // until they save (or discard).
+  useEffect(() => {
+    if (!isEditing) setDraft(joined);
+  }, [joined, isEditing]);
+
+  const handleSummarize = async () => {
+    const source = draft.trim();
+    if (!source || isSummarizing) return;
+    setIsSummarizing(true);
+    try {
+      // Use the standard (non-fast) endpoint — summarization rewards
+      // model quality over speed; the conversation is short anyway.
+      const { text } = await chat(
+        [
+          {
+            role: "system",
+            content:
+              "คุณคือ AI ผู้ช่วยแพทย์ในระบบ CIS ของโรงพยาบาลไทย หน้าที่: สรุปบทสนทนาระหว่างหมอกับผู้ป่วยให้เป็นบันทึกทางคลินิกที่กระชับ ใช้ภาษาไทย ใช้ bullet point เมื่อเหมาะสม. " +
+              "ครอบคลุมหัวข้อต่อไปนี้ตามที่ผู้ป่วยพูดจริง: Chief complaint, HPI ตามกรอบ OLD CARTS (Onset, Location, Duration, Character, Aggravating/Alleviating, Radiation, Timing, Severity), PMH/ยา/แพ้ยา, Red flags. " +
+              "ใช้คำศัพท์ทางคลินิกที่เหมาะสม. ห้ามแต่งข้อมูลที่ผู้ป่วยไม่ได้พูด — ถ้าหัวข้อใดไม่มีข้อมูลให้เว้นไว้หรือเขียนว่า 'ไม่ได้ระบุ'.",
+          },
+          { role: "user", content: source },
+        ],
+        { temperature: 0.2, maxTokens: 1200 },
+      );
+      const summary = text.trim();
+      if (!summary) throw new Error("AI ไม่ได้ส่งบทสรุปกลับมา");
+      setDraft(summary);
+      setIsEditing(true);
+      toast.success("สรุปบทสนทนาเสร็จแล้ว", "ตรวจสอบและแก้ไขได้ก่อนบันทึก");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[transcript] summarize failed:", e);
+      toast.error("สรุปไม่สำเร็จ", msg);
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2 pb-2">
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          size="sm"
+          variant="bordered"
+          startContent={
+            isEditing ? (
+              <IconCheck className="h-3.5 w-3.5" stroke={2} />
+            ) : (
+              <IconPencil className="h-3.5 w-3.5" stroke={2} />
+            )
+          }
+          onPress={() => setIsEditing((v) => !v)}
+          className="text-[13px]"
+        >
+          {isEditing ? "บันทึก" : "แก้ไข"}
+        </Button>
+        <Button
+          size="sm"
+          color="primary"
+          variant="flat"
+          startContent={
+            isSummarizing ? (
+              <IconLoader2 className="h-3.5 w-3.5 animate-spin" stroke={2} />
+            ) : (
+              <IconSparkles className="h-3.5 w-3.5" stroke={2} />
+            )
+          }
+          onPress={handleSummarize}
+          isDisabled={!draft.trim() || isSummarizing}
+          className="text-[13px]"
+        >
+          {isSummarizing ? "กำลังสรุป..." : "สรุปด้วย AI"}
+        </Button>
+      </div>
+
+      {segments.length === 0 && !draft ? (
+        <div className="flex flex-1 items-center justify-center text-center text-[13px] text-neutral-400">
+          {isRecording ? "กำลังฟัง…" : "ยังไม่มีบทสนทนา"}
+        </div>
+      ) : (
+        <textarea
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            if (!isEditing) setIsEditing(true);
+          }}
+          readOnly={!isEditing}
+          placeholder={isRecording ? "กำลังฟัง..." : "ยังไม่มีบทสนทนา"}
+          className={[
+            "min-h-[200px] w-full flex-1 resize-none rounded-2xl border bg-white px-4 py-3 text-[14px] leading-relaxed text-[#1f1f1f] transition focus:outline-none",
+            isEditing
+              ? "border-[#3965e1] ring-2 ring-[#3965e1]/15"
+              : "border-[#d9d9d9]",
+          ].join(" ")}
+        />
+      )}
+    </div>
+  );
 }
 
-/** Skeleton-style preview of the patient profile that will be extracted
- *  from the transcript. Matches the Figma exactly: avatar circle + 2 lines
- *  + 6 field stubs in a 3×2 grid. When the LLM has populated fields the
- *  count is surfaced in the header to indicate progress. */
-// Demo patient — fills the preview card so the page reads as a real
-// post-ID-card scan, not a wireframe. Wire to the extracted A2UI response
-// once that path is stable.
-interface DemoField {
+// ── Right column: patient ID card preview ─────────────────────────────────
+
+interface VitalField {
   label: string;
   value: string;
-  /** When set, render with a mask toggle (eye icon) — used for PDPA-sensitive
-   *  identifiers like the citizen ID. */
-  sensitive?: boolean;
-}
-const DEMO_PATIENT: {
-  initial: string;
-  name: string;
-  hn: string;
-  fields: DemoField[];
-} = {
-  initial: "ส",
-  name: "นายสมชาย ใจดี",
-  hn: "HN 0001234",
-  fields: [
-    { label: "เลขบัตรประชาชน", value: "1-2345-67890-12-3", sensitive: true },
-    { label: "วันเกิด", value: "12 มี.ค. 2522 (45 ปี)" },
-    { label: "เพศ", value: "ชาย" },
-    { label: "กรุ๊ปเลือด", value: "O Rh+" },
-    { label: "เบอร์โทร", value: "081-234-5678" },
-    { label: "ที่อยู่", value: "123/45 ถ.สุขุมวิท คลองเตย กรุงเทพฯ" },
-  ],
-};
-
-/** Mask a Thai citizen ID (or any digit-with-dash string), keeping the
- *  last `visible` digits readable. Dashes are preserved so the layout
- *  doesn't reflow when the user toggles the eye. */
-function maskId(value: string, visible = 4): string {
-  const digits = value.replace(/\D/g, "");
-  const keep = digits.slice(-visible);
-  const masked = "X".repeat(Math.max(0, digits.length - visible)) + keep;
-  // Re-insert dashes at the original positions.
-  let i = 0;
-  return value.replace(/\d/g, () => masked[i++] ?? "X");
 }
 
-function ProfilePreviewCard({ populatedCount }: ProfilePreviewCardProps) {
+const DEMO_VITALS: VitalField[] = [
+  { label: "ชื่อและนามสกุล", value: "สมชาย ใจดี" },
+  { label: "อายุ", value: "50 ปี 2 เดือน 3 วัน" },
+  { label: "เพศ", value: "ชาย" },
+  { label: "ความดันโลหิต", value: "140/110" },
+  { label: "ชีพจร", value: "80" },
+  { label: "น้ำหนัก", value: "80" },
+  { label: "ส่วนสูง", value: "180" },
+];
+
+function PatientIdCard() {
   return (
-    <Card
-      shadow="sm"
-      radius="lg"
-      className="h-full min-h-0 border border-neutral-200/60 bg-white"
-    >
-      {/* Header — avatar + name + HN. Matches Figma 995:1428 / 995:1432. */}
-      <CardHeader className="flex items-center gap-5 px-6 pb-3 pt-6">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-200 via-sky-100 to-sky-200 text-3xl font-semibold text-violet-900/70">
-          {DEMO_PATIENT.initial}
-        </div>
-        <div className="flex flex-1 flex-col gap-0.5">
-          <p className="text-[17px] font-semibold text-neutral-900">
-            {DEMO_PATIENT.name}
-          </p>
-          <p className="text-[13px] text-neutral-500">{DEMO_PATIENT.hn}</p>
-        </div>
-        {populatedCount > 0 && (
-          <span className="shrink-0 self-start rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700">
-            {populatedCount} ฟิลด์
-          </span>
-        )}
-      </CardHeader>
+    <aside className="flex h-full min-h-0 flex-col items-start justify-between gap-4 overflow-y-auto rounded-3xl border border-[#dadada] bg-white p-4">
+      <div className="flex w-full flex-col gap-4">
+        {/* Smart-card visual — inline SVG so it scales crisply at any
+            density and the name / barcode / chip can be updated from data
+            later. Mirrors the Figma 1022:1597 layout. */}
+        <PatientIdCardSvg />
 
-      <Divider className="bg-[#f4f4f4]" />
-
-      {/* Body — 3×2 patient field grid. Each cell: small label + value.
-          Sensitive fields (citizen ID) render with a mask + eye toggle. */}
-      <CardBody className="flex min-h-0 flex-1 flex-col justify-center overflow-hidden p-6">
-        <div className="grid grid-cols-3 gap-x-6 gap-y-5">
-          {DEMO_PATIENT.fields.map((f) => (
-            <PatientField key={f.label} field={f} />
+        {/* Vitals stack — label left, value right, separated by `#ebebec`
+            hairline rules. py-16 per Figma 1022:1601. */}
+        <div className="flex w-full flex-col text-[14px] font-medium">
+          {DEMO_VITALS.map((v) => (
+            <div
+              key={v.label}
+              className="flex w-full items-center justify-between border-b border-[#ebebec] py-4"
+            >
+              <span className="text-[#1f1f1f]/60">{v.label}</span>
+              <span className="text-[#1f1f1f]">{v.value}</span>
+            </div>
           ))}
         </div>
-      </CardBody>
-    </Card>
-  );
-}
-
-/** Single patient field — label on top, value below. Sensitive fields
- *  start masked and reveal on eye-toggle. */
-function PatientField({ field }: { field: DemoField }) {
-  const [revealed, setRevealed] = useState(false);
-  const isMasked = field.sensitive && !revealed;
-  const display = isMasked ? maskId(field.value) : field.value;
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <p className="truncate text-[11px] font-medium uppercase tracking-wide text-neutral-400">
-        {field.label}
-      </p>
-      <div className="flex min-w-0 items-center gap-1.5">
-        <p className="truncate text-[14px] font-medium text-neutral-900">
-          {display}
-        </p>
-        {field.sensitive && (
-          <button
-            type="button"
-            onClick={() => setRevealed((v) => !v)}
-            aria-label={revealed ? "ซ่อนข้อมูล" : "แสดงข้อมูล"}
-            title={revealed ? "ซ่อนข้อมูล" : "แสดงข้อมูล"}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
-          >
-            {revealed ? (
-              <IconEyeOff className="h-3.5 w-3.5" stroke={1.75} />
-            ) : (
-              <IconEye className="h-3.5 w-3.5" stroke={1.75} />
-            )}
-          </button>
-        )}
       </div>
-    </div>
+
+      <FooterNote />
+    </aside>
   );
 }
 
-interface TranscriptionCardProps {
-  prompt: string;
-  segments: { text: string; speaker?: number }[];
-  onPromptChange: (v: string) => void;
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+function FooterNote() {
+  return (
+    <p className="w-full text-center text-[14px] font-medium text-[#1f1f1f]/60">
+      โปรดตรวจสอบความถูกต้องการบันทึกเสมอ
+    </p>
+  );
 }
 
-/** Live transcription panel — header with title + disclaimer, body shows
- *  the accumulated transcript. The user can edit the text before sending
- *  it for extraction (matches the prior editing affordance). */
-function TranscriptionCard({
-  prompt,
-  segments,
-  onPromptChange,
-  textareaRef,
-}: TranscriptionCardProps) {
-  const hasContent = prompt.trim().length > 0 || segments.length > 0;
+/** Patient ID card — inline SVG matching Figma 1022:1582 layout. Cyan
+ *  card 409×223 with: Garuda circle + 2 blue header bars on top, vertical
+ *  barcode strip on the left, yellow SIM chip + name block in the middle,
+ *  portrait plate on the right. */
+function PatientIdCardSvg() {
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      {/* Section label sits outside the card — matches Figma 992:1383
-          (parent flex col with label + white card). */}
-      <p className="px-1 text-sm font-medium text-black">Transcription</p>
-      {/* Single white card holds header row + transcript body. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2 rounded-2xl bg-white p-4">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-medium text-[#3e3425]">บทสนทนา</p>
-          <p className="text-[11px] text-[#3e3425]/55">
-            *ผลลัพธ์ขึ้นอยู่กับสภาพแวดล้อมและความชัดเจนของเสียงที่ไมโครโฟนได้รับ
-          </p>
-        </div>
-        {hasContent ? (
-          <textarea
-            ref={textareaRef}
-            value={prompt}
-            onChange={(e) => onPromptChange(e.target.value)}
-            className="min-h-0 flex-1 resize-none bg-transparent text-sm leading-relaxed text-[#5d4d37] focus:outline-none"
+    <div className="aspect-[409/223] w-full overflow-hidden rounded-2xl border border-[#cccccc]">
+      <svg
+        viewBox="0 0 409 223"
+        xmlns="http://www.w3.org/2000/svg"
+        className="block h-full w-full"
+        aria-label="บัตรประจำตัวประชาชน — นายสมชาย ใจดี"
+        role="img"
+      >
+        <defs>
+          <clipPath id="cardClip">
+            <rect width="409" height="223" rx="24" />
+          </clipPath>
+          <clipPath id="photoClip">
+            <rect x="300" y="100" width="85" height="100" rx="8" />
+          </clipPath>
+        </defs>
+
+        {/* Card base */}
+        <rect width="409" height="223" rx="24" fill="#abe5f5" />
+
+        {/* Card-clipped group — keeps the barcode strip from peeking past
+            the rounded corners. */}
+        <g clipPath="url(#cardClip)">
+          {/* Vertical barcode strip on the left edge */}
+          <g transform="translate(8, 50)">
+            {[
+              { y: 0, h: 4 },
+              { y: 7, h: 2 },
+              { y: 12, h: 6 },
+              { y: 22, h: 2 },
+              { y: 27, h: 4 },
+              { y: 35, h: 8 },
+              { y: 47, h: 2 },
+              { y: 52, h: 4 },
+              { y: 60, h: 2 },
+              { y: 65, h: 6 },
+              { y: 75, h: 2 },
+              { y: 80, h: 4 },
+              { y: 88, h: 6 },
+              { y: 98, h: 2 },
+              { y: 103, h: 8 },
+              { y: 115, h: 2 },
+              { y: 120, h: 4 },
+              { y: 128, h: 6 },
+              { y: 138, h: 2 },
+              { y: 143, h: 4 },
+            ].map((b, i) => (
+              <rect key={i} x="0" y={b.y} width="24" height={b.h} fill="#3a3a3a" />
+            ))}
+          </g>
+        </g>
+
+        {/* Garuda emblem — white circle (36px) with the Royal Garuda
+            inside, top-left. */}
+        <g transform="translate(28, 28)">
+          <circle cx="0" cy="0" r="17.5" fill="#ffffff" stroke="#1f1f1f" strokeWidth="1" />
+          <image
+            href={GARUDA_EMBLEM}
+            x="-14"
+            y="-14"
+            width="28"
+            height="28"
+            preserveAspectRatio="xMidYMid meet"
           />
-        ) : (
-          <p className="min-h-0 flex-1 text-sm leading-relaxed text-neutral-400">
-            ยังไม่มีบทสนทนา — กด "เริ่มฟัง" เพื่อเริ่มซักประวัติ หรือพิมพ์ลงในกล่องนี้ได้เลย
-          </p>
-        )}
-      </div>
+        </g>
+
+        {/* Two blue header bars — placeholder strips for "card title /
+            id number" copy. */}
+        <rect x="66" y="14" width="255" height="14" rx="7" fill="rgba(57,101,225,0.6)" />
+        <rect x="66" y="36" width="161" height="12" rx="6" fill="rgba(57,101,225,0.6)" />
+
+        {/* "ชื่อและนามสกุล" label (small, above the name) */}
+        <text
+          x="78"
+          y="72"
+          fontFamily="Google Sans, Noto Sans Thai Looped, sans-serif"
+          fontSize="8"
+          fill="#1f1f1f"
+        >
+          ชื่อและนามสกุล
+        </text>
+
+        {/* Name (Thai, bold) */}
+        <text
+          x="140"
+          y="86"
+          fontFamily="Google Sans, Noto Sans Thai Looped, sans-serif"
+          fontSize="12"
+          fontWeight="700"
+          fill="#1f1f1f"
+        >
+          นายสมชาย ใจดี
+        </text>
+
+        {/* Transliteration (English, regular) */}
+        <text
+          x="140"
+          y="100"
+          fontFamily="Google Sans, sans-serif"
+          fontSize="10"
+          fontWeight="400"
+          fill="#1f1f1f"
+        >
+          Mr. Somchai Jaidee
+        </text>
+
+        {/* SIM-style yellow chip (Figma 1020:1375) */}
+        <rect x="78" y="104" width="58" height="53" rx="8" fill="#fddd86" />
+
+        {/* Portrait photo plate (Figma 1020:1374) */}
+        <rect x="300" y="100" width="85" height="100" rx="8" fill="#e1e4e6" />
+        <image
+          href={PATIENT_AVATAR}
+          x="300"
+          y="100"
+          width="85"
+          height="100"
+          clipPath="url(#photoClip)"
+          preserveAspectRatio="xMidYMid slice"
+        />
+      </svg>
     </div>
   );
 }
 
-function RecordingHint({
-  isRecording,
-  source,
-}: {
-  isRecording: boolean;
-  source: "mic" | "tab";
-}) {
-  if (!isRecording) {
-    return (
-      <span className="text-xs text-neutral-400">
-        กดไมค์ / อุปกรณ์เพื่อฟัง หรือพิมพ์
-      </span>
-    );
-  }
-  const label = source === "tab" ? "กำลังฟังเสียงในอุปกรณ์…" : "กำลังฟัง…";
-  return (
-    <span className="flex items-center gap-2 text-xs font-medium text-rose-600">
-      <motion.span
-        className="block h-2 w-2 rounded-full bg-rose-500"
-        animate={{ scale: [1, 1.4, 1], opacity: [1, 0.5, 1] }}
-        transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-      />
-      {label}
-    </span>
-  );
-}

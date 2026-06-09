@@ -1,22 +1,21 @@
 /**
- * Conversational clinical chat assistant.
+ * Conversational clinical chat assistant — table-driven.
  *
  * Two-step tool-use loop:
- *   1. PLAN — Ask the LLM to either reply directly (small talk, follow-up
- *      that needs no data) OR emit a JSON plan of data-source queries to
- *      run against our catalog. LLM may NOT invent sources or values.
- *   2. SYNTHESIZE — If queries were planned, fetch them in parallel via
- *      the dashboard data API, hand the results back to the LLM, and ask
- *      for a concise Thai answer that uses the data.
+ *   1. PLAN  — Ask the LLM to either reply directly or pick the RAW TABLES
+ *              it needs to answer the user's question. The LLM is not
+ *              limited to pre-baked aggregators; it computes from raw rows.
+ *   2. ANSWER — Ship the chosen tables as JSON, plus the CIS app knowledge,
+ *              and ask the model to produce a concise Thai reply that
+ *              cites concrete values from the rows.
  *
- * Output is plain text — the chat surface renders it as a normal message.
- * No UI generation. This keeps the chat conversational; A2UI dashboard
- * rendering stays available as a separate entry point for prompts that
- * explicitly want a visual report.
+ * Why tables instead of an aggregator catalog: any question the user can
+ * imagine ("คนที่แพ้ยา", "คนน้ำหนักเกิน 90 + BMI > 30", "นัดเฉพาะคลินิกหัวใจ
+ * สัปดาห์ที่แล้ว") can be answered without adding code — the LLM filters /
+ * counts / groups directly from the rows.
  */
 import { chat, chatJSON } from "./ai/llm";
-import { DATA_SOURCES } from "../components/Dashboards/catalog";
-import { resolveBindings, type DataQuery } from "./dashboardData";
+import { buildTableSchemaDoc, fetchTable, tableNames } from "./dataTables";
 import { buildCisKnowledge } from "./cisKnowledge";
 
 export interface ChatMessage {
@@ -30,9 +29,9 @@ interface PlanReply {
 }
 interface PlanFetch {
   kind: "fetch";
-  queries: Record<string, DataQuery>;
-  /** What the assistant intends to look up — used in the synthesis prompt
-   *  so the model knows why it asked for each query. */
+  tables: string[];
+  /** Why the assistant picked these tables — used in the answer step so the
+   *  synthesis knows what to look for in the rows. */
   rationale?: string;
 }
 type Plan = PlanReply | PlanFetch;
@@ -44,8 +43,12 @@ export async function answerChatPrompt(
   const plan = await planStep(userPrompt, history);
   if (plan.kind === "reply") return plan.text.trim();
 
-  const data = await resolveBindings(plan.queries);
-  return synthesizeStep(userPrompt, history, plan, data);
+  const fetched: Record<string, unknown[]> = {};
+  for (const name of plan.tables) {
+    const rows = fetchTable(name);
+    if (rows) fetched[name] = rows;
+  }
+  return answerStep(userPrompt, history, plan, fetched);
 }
 
 // ── Step 1: plan ──────────────────────────────────────────────────────────
@@ -61,102 +64,114 @@ async function planStep(userPrompt: string, history: ChatMessage[]): Promise<Pla
     const plan = await chatJSON<Plan>(messages, {
       responseFormat: "json_object",
       temperature: 0.2,
-      maxTokens: 800,
+      maxTokens: 600,
       fast: true,
     });
-    if (plan.kind === "fetch" && plan.queries) {
-      // Strip any query that references a source not in the catalog —
-      // refuse to fetch fabricated ids.
-      const valid = new Set(DATA_SOURCES.map((s) => s.id));
-      const cleaned: Record<string, DataQuery> = {};
-      for (const [k, q] of Object.entries(plan.queries)) {
-        if (q && typeof q === "object" && valid.has(q.source)) cleaned[k] = q;
-      }
-      return { kind: "fetch", queries: cleaned, rationale: plan.rationale };
+    if (plan.kind === "fetch" && Array.isArray(plan.tables)) {
+      // Drop any table name that doesn't exist in the registry — we refuse
+      // to invent data; an LLM-typo'd table id is silently filtered.
+      const valid = new Set(tableNames());
+      const cleaned = plan.tables.filter((n) => typeof n === "string" && valid.has(n));
+      return { kind: "fetch", tables: cleaned, rationale: plan.rationale };
     }
     if (plan.kind === "reply" && typeof plan.text === "string") return plan;
   } catch (err) {
     console.warn("[chat-assistant] plan step failed:", err);
   }
-  return { kind: "reply", text: "ขออภัย ตอนนี้ระบบไม่สามารถประมวลผลคำถามนี้ได้ ลองพิมพ์ใหม่อีกครั้ง" };
+  return {
+    kind: "reply",
+    text: "ขออภัย ตอนนี้ระบบไม่สามารถประมวลผลคำถามนี้ได้ ลองพิมพ์ใหม่อีกครั้ง",
+  };
 }
 
 function buildPlanPrompt(): string {
-  const sources = DATA_SOURCES.map((s) => {
-    const dims = s.dimensions.length ? ` · dims: [${s.dimensions.join(", ")}]` : "";
-    const meas = s.measures.length ? ` · measures: [${s.measures.join(", ")}]` : "";
-    return `  - "${s.id}" — ${s.description}${dims}${meas}`;
-  }).join("\n");
-
-  const cisKnowledge = buildCisKnowledge();
+  const schema = buildTableSchemaDoc();
+  const list = tableNames().join(", ");
 
   return `You are เมย์ (Mae), an AI clinical assistant for a Thai hospital CIS.
 You talk to the doctor in concise Thai. You know two things deeply:
-  (1) The CIS application itself — every page, sidebar menu, and feature (see § APP KNOWLEDGE below).
-  (2) The clinical data sources catalog (see § DATA CATALOG below).
+  (1) The CIS application itself — every page, sidebar menu, and feature (see § APP KNOWLEDGE).
+  (2) The clinical database — raw tables you can fetch and analyze (see § TABLES).
 
-When the doctor asks about NAVIGATION/HELP ("จะเข้าหน้า X ยังไง", "ใช้ฟีเจอร์ Y ตรงไหน", "shortcut") — reply directly with the path/menu/shortcut from § APP KNOWLEDGE. NEVER invent a path that isn't in that list.
+For NAVIGATION/HELP questions ("จะเข้าหน้า X ยังไง", "shortcut", "ใช้ฟีเจอร์ Y ตรงไหน"): reply directly with a path/menu/shortcut from § APP KNOWLEDGE. NEVER invent a path.
 
-When the doctor asks about CLINICAL DATA (patient info, statistics, no-show, lab values) — you MUST look up real data from § DATA CATALOG first. NEVER invent numbers, names, or fields.
+For CLINICAL/DATA questions: pick the raw TABLES you need, then in the next step you'll receive the rows and produce the answer. You DO NOT need a pre-built aggregator — you can count / filter / group / summarize the rows yourself in step 2.
 
 Output ONE JSON object in one of two shapes. NEVER both. NEVER prose.
 
-# Shape A — Reply directly (use for navigation/help/small talk/follow-up that needs no fresh clinical data)
+# Shape A — Reply directly (small talk, navigation, follow-up that needs no data)
 {
   "kind": "reply",
-  "text": "<concise Thai message>"
+  "text": "<concise Thai message — markdown links [label](/path) for navigation>"
 }
 
-# Shape B — Fetch data first (use when you need clinical data to answer)
+# Shape B — Fetch raw tables (use whenever the answer depends on database content)
 {
   "kind": "fetch",
-  "rationale": "<one sentence — why you are looking these up>",
-  "queries": {
-    "<short_key>": { "source": "<catalog id>", "groupBy"?: "...", "metric"?: "...", "filters"?: { ... } }
-  }
+  "rationale": "<one sentence — why these tables>",
+  "tables": ["<table1>", "<table2>", ...]
 }
+
+Allowed table names: ${list}
 
 # § APP KNOWLEDGE (the CIS application)
-${cisKnowledge}
+${buildCisKnowledge()}
 
-# § DATA CATALOG (ONLY these ids are allowed in Shape B queries)
-${sources}
+# § TABLES (the raw clinical database — you'll receive these rows in step 2)
+${schema}
 
 # Rules
-- For a specific patient (by name or HN), use patient.* sources and include filters.patient_name or filters.patient_hn.
-- Plan multiple queries when needed — they are fetched in parallel.
-- If the catalog has no source for the question, return Shape A with a short Thai message saying so.
-- Do NOT include data values in Shape B — only query specs.
-- In Shape A "text", when suggesting a page write it as a clickable markdown link: \`[ชื่อหน้า](/path)\` — only paths that appear in § APP KNOWLEDGE.
-- Output MUST be valid JSON. No markdown around the JSON envelope itself, no commentary outside JSON.`;
+- Only request tables that are likely to contain the answer. Don't request every table by default; pick the minimum set.
+- For per-patient questions, "patients" usually suffices (it already includes their dx, allergies, meds, latest labs, vitals, risk flags).
+- For trend questions across time, pair "patients" with "lab_history", "vital_history", "visits", or "no_show_history" as appropriate.
+- In Shape A "text", suggest a page using markdown link [ชื่อ](/path) — only paths from § APP KNOWLEDGE.
+- Output MUST be valid JSON. No markdown around the JSON envelope, no commentary.`;
 }
 
-// ── Step 2: synthesize ────────────────────────────────────────────────────
+// ── Step 2: answer ────────────────────────────────────────────────────────
 
-async function synthesizeStep(
+async function answerStep(
   userPrompt: string,
   history: ChatMessage[],
   plan: PlanFetch,
-  data: Record<string, unknown>,
+  rows: Record<string, unknown[]>,
 ): Promise<string> {
-  const system = `You are เมย์ (Mae), an AI clinical assistant. Answer the doctor in concise Thai based ONLY on the data below + the app knowledge.
+  // Truncate row dumps if any single table exceeds a soft cap, to keep the
+  // synthesis prompt under the token budget. The LLM is told about the cap
+  // so it knows the data may be partial.
+  const MAX_ROWS_PER_TABLE = 400;
+  const trimmed: Record<string, { rows: unknown[]; total: number; truncated: boolean }> = {};
+  for (const [name, all] of Object.entries(rows)) {
+    trimmed[name] = {
+      rows: all.slice(0, MAX_ROWS_PER_TABLE),
+      total: all.length,
+      truncated: all.length > MAX_ROWS_PER_TABLE,
+    };
+  }
+
+  const system = `You are เมย์ (Mae), an AI clinical assistant. Answer the doctor in concise Thai based ONLY on the data below.
 
 Plan rationale: ${plan.rationale ?? "(none)"}
 
-Fetched data (key → result):
-${JSON.stringify(data, null, 2)}
+Fetched tables (you must compute the answer yourself by reading these rows):
+${Object.entries(trimmed)
+  .map(
+    ([name, t]) =>
+      `## ${name} (${t.total} rows${t.truncated ? `, first ${t.rows.length} shown` : ""})\n\`\`\`json\n${JSON.stringify(t.rows, null, 1)}\n\`\`\``,
+  )
+  .join("\n\n")}
 
-App knowledge — paths/menus/features (use ONLY paths that appear here):
+App knowledge (use ONLY paths that appear here):
 ${buildCisKnowledge()}
 
 Rules:
-- Use the values from "Fetched data" — never invent or estimate.
-- If a query returned empty/null, say so honestly.
-- When you suggest a page, ALWAYS write it as a clickable markdown link: \`[ชื่อหน้า](/path)\` — the host renders these as real navigation links. Use only paths that appear in app knowledge.
-  Examples:  [ลงทะเบียนผู้ป่วยใหม่](/patient/new)  ·  [OPD ของสมชาย](/opd/00012345)  ·  [แดชบอร์ดของฉัน](/dashboards)
-- Keep the reply to 1-4 sentences unless the doctor asked for a list.
-- Format lists with bullet points (• item). Format tables as compact rows.
-- Speak in Thai. Use clinical terms when appropriate.
+- Use values from the rows above — never invent.
+- Compute counts / filters / groupings yourself by reading the rows.
+- If a table was truncated, mention it in your answer.
+- If the answer requires data we don't have, say so honestly.
+- When suggesting a page, write it as a markdown link [ชื่อ](/path).
+- Reply in concise Thai (1-4 sentences unless the doctor asked for a list).
+- Use bullet (• item) for lists, compact rows for tables.
 - No JSON, no code blocks — plain conversational text + markdown links only.`;
 
   const messages = [
@@ -166,10 +181,10 @@ Rules:
   ];
 
   try {
-    const { text } = await chat(messages, { temperature: 0.3, maxTokens: 700, fast: true });
+    const { text } = await chat(messages, { temperature: 0.3, maxTokens: 900, fast: true });
     return text.trim() || "ไม่พบข้อมูลที่ตอบคำถามนี้";
   } catch (err) {
-    console.warn("[chat-assistant] synthesize failed:", err);
-    return `พบข้อมูลแล้วแต่สรุปไม่สำเร็จ — กรุณาลองใหม่อีกครั้ง`;
+    console.warn("[chat-assistant] answer step failed:", err);
+    return "พบข้อมูลแล้วแต่สรุปไม่สำเร็จ — กรุณาลองใหม่อีกครั้ง";
   }
 }
