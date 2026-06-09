@@ -115,9 +115,11 @@ export default function Sidebar() {
   const handleItemClick = (railKey: string, item: PanelItem) => {
     setPinnedRail(railKey);
     setActiveChild(item.key);
-    // Items currently don't carry their own route — selecting one pins
-    // the section and highlights the row. The host page reads activeChild
-    // from context to decide what to render.
+    // Items with their own route also navigate. Others rely on the host
+    // page reading activeChild from context to decide what to render.
+    if (item.navigateTo) {
+      openTab(item.navigateTo, { title: item.label });
+    }
   };
 
   return (

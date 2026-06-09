@@ -194,9 +194,6 @@ export default function Home() {
                   <br />
                   โดยไม่ต้องจด
                 </p>
-                <p className="text-[14px] leading-[1.6] text-[#1f1f1f]/60">
-                  ให้ Dr. Note จัดการแทนคุณ
-                </p>
               </div>
 
               {/* Hover affordance — small "go to page" chip in the upper
@@ -286,9 +283,6 @@ export default function Home() {
                   สร้างการติดตามข้อมูล
                   <br />
                   ตามที่คุณสนใจ
-                </p>
-                <p className="text-[14px] leading-[1.6] text-[#1f1f1f]/60">
-                  ให้ Dr. Note จัดการแทนคุณ
                 </p>
               </div>
 
