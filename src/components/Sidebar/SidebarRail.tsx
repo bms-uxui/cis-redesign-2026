@@ -1,5 +1,9 @@
 import { Tooltip } from "@heroui/react";
-import { IconAdjustmentsHorizontal } from "@tabler/icons-react";
+import {
+  IconAdjustmentsHorizontal,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
+} from "@tabler/icons-react";
 import EHP_LOGO from "../../assets/figma/ehp-logo.png";
 import type { RailEntry } from "./types";
 
@@ -15,6 +19,14 @@ interface SidebarRailProps {
   onLeave: () => void;
   /** Opens the customize-sidebar modal. */
   onCustomize: () => void;
+  /** Notion-style hide toggle: collapses the entire sidebar offscreen.
+   *  When hidden, a left-edge hover zone (in the parent Sidebar) peeks it
+   *  back; a "lock open" button restores the pinned state. */
+  onHide: () => void;
+  /** True when the rail is showing as an edge-peek overlay (railHidden +
+   *  user hovering the edge). Swaps the hide control for a "lock open"
+   *  affordance so the user can pin it back. */
+  isPeeking?: boolean;
 }
 
 const RAIL_TOOLTIP_CLASSES = {
@@ -31,6 +43,8 @@ export default function SidebarRail({
   onHover,
   onLeave,
   onCustomize,
+  onHide,
+  isPeeking = false,
 }: SidebarRailProps) {
   return (
     <div
@@ -39,11 +53,38 @@ export default function SidebarRail({
       // entering any RailButton cancels it via onHover.
       onMouseLeave={onLeave}
     >
-      <img
-        src={EHP_LOGO}
-        alt="EHP"
-        className="h-10 w-auto shrink-0 object-contain"
-      />
+      {/* Brand + hide / lock-open control. Hovering the logo reveals
+          the toggle button. When the rail is pinned open we show the
+          collapse icon (hide); while edge-peeking we swap to an expand
+          icon labelled "lock sidebar open" (Notion pattern). */}
+      <div className="group relative flex h-10 w-full items-center justify-center">
+        <img
+          src={EHP_LOGO}
+          alt="EHP"
+          className="h-10 w-auto shrink-0 object-contain transition-opacity duration-150 group-hover:opacity-0"
+        />
+        <Tooltip
+          content={isPeeking ? "ตรึงแถบเครื่องมือ" : "ซ่อนแถบเครื่องมือ"}
+          placement="right"
+          delay={120}
+          closeDelay={0}
+          offset={12}
+          classNames={RAIL_TOOLTIP_CLASSES}
+        >
+          <button
+            type="button"
+            onClick={onHide}
+            aria-label={isPeeking ? "ตรึงแถบเครื่องมือ" : "ซ่อนแถบเครื่องมือ"}
+            className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-lg text-[var(--theme-neutral)]/55 opacity-0 transition-opacity duration-150 hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-neutral)] group-hover:opacity-100"
+          >
+            {isPeeking ? (
+              <IconLayoutSidebarLeftExpand className="h-5 w-5" stroke={1.6} />
+            ) : (
+              <IconLayoutSidebarLeftCollapse className="h-5 w-5" stroke={1.6} />
+            )}
+          </button>
+        </Tooltip>
+      </div>
       {/* my-auto vertically centers the menu list between the logo (top)
           and the customize button (bottom). If entries overflow on small
           viewports the column scrolls; on typical desktops the items sit

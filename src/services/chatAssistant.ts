@@ -1,21 +1,20 @@
 /**
- * Conversational clinical chat assistant — table-driven.
+ * Mae — clinical chat assistant powered by the Vercel AI SDK.
  *
- * Two-step tool-use loop:
- *   1. PLAN  — Ask the LLM to either reply directly or pick the RAW TABLES
- *              it needs to answer the user's question. The LLM is not
- *              limited to pre-baked aggregators; it computes from raw rows.
- *   2. ANSWER — Ship the chosen tables as JSON, plus the CIS app knowledge,
- *              and ask the model to produce a concise Thai reply that
- *              cites concrete values from the rows.
+ * The previous two-step planner/synthesizer is gone. Instead we hand the
+ * LLM a set of typed tools (see `chatTools.ts`) and let `generateText`
+ * auto-route: the model decides which tools to call (often multiple in
+ * one turn — e.g. searchPatients → getPatientDetail → answer), our
+ * runtime executes each `execute()` body against the in-memory tables,
+ * and the same LLM call composes the final Thai reply.
  *
- * Why tables instead of an aggregator catalog: any question the user can
- * imagine ("คนที่แพ้ยา", "คนน้ำหนักเกิน 90 + BMI > 30", "นัดเฉพาะคลินิกหัวใจ
- * สัปดาห์ที่แล้ว") can be answered without adding code — the LLM filters /
- * counts / groups directly from the rows.
+ * Everything is browser-side: we point the OpenAI provider at our
+ * existing vLLM endpoint (OpenAI-compatible).
  */
-import { chat, chatJSON } from "./ai/llm";
-import { buildTableSchemaDoc, fetchTable, tableNames } from "./dataTables";
+import { createOpenAI } from "@ai-sdk/openai";
+import { generateText } from "ai";
+import { AI_CONFIG } from "./ai/config";
+import { chatTools } from "./chatTools";
 import { buildCisKnowledge } from "./cisKnowledge";
 
 export interface ChatMessage {
@@ -23,168 +22,74 @@ export interface ChatMessage {
   content: string;
 }
 
-interface PlanReply {
-  kind: "reply";
-  text: string;
-}
-interface PlanFetch {
-  kind: "fetch";
-  tables: string[];
-  /** Why the assistant picked these tables — used in the answer step so the
-   *  synthesis knows what to look for in the rows. */
-  rationale?: string;
-}
-type Plan = PlanReply | PlanFetch;
+// vLLM exposes an OpenAI-compatible `/v1` API. The provider needs a
+// baseURL + a stub apiKey (to satisfy its required-string check). We
+// strip the `Authorization` header in a custom fetch because vLLM
+// runs without auth and the extra header trips CORS preflight on the
+// endpoint we use.
+const provider = createOpenAI({
+  baseURL: `${AI_CONFIG.llmBase}/v1`,
+  apiKey: "vllm-no-auth",
+  fetch: async (url, init) => {
+    const headers = new Headers(init?.headers);
+    headers.delete("Authorization");
+    return fetch(url, { ...init, headers });
+  },
+});
+
+// vLLM only implements the Chat Completions API (`/v1/chat/completions`).
+// In @ai-sdk/openai v3, calling the provider directly defaults to the
+// Responses API (`/v1/responses`) — which vLLM rejects with type errors
+// like `input_text` / `EasyInputMessageParam`. Use `.chat()` to force the
+// Chat Completions transport.
+const MODEL = provider.chat("default");
+
+const SYSTEM_PROMPT = `You are เมย์ (Mae), an AI clinical assistant for a Thai hospital CIS.
+You talk to the doctor in concise Thai. You have two sources of knowledge:
+
+1. The CIS application itself — every page, sidebar menu, and feature (see § APP KNOWLEDGE).
+2. A live clinical database accessed through TOOLS (search/list patients, fetch detail, visits, labs, vitals, appointments, no-show history). Call tools whenever the answer depends on database content. Never invent numbers, names, or fields.
+
+Workflow:
+- For navigation / help / small talk: answer directly, no tool calls. Cite paths from § APP KNOWLEDGE as markdown links \`[ชื่อ](/path)\`.
+- For a question about a specific patient: first call \`searchPatients\` with the name/HN fragment to find the right row, then call \`getPatientDetail\` (or one of the trend tools) on the matching id, then compose the answer.
+- For cohort/queue questions: call the matching list/history tool (\`listPatients\`, \`getAppointmentsToday\`, \`getNoShowHistory\`).
+- Chain tools when needed — the runtime supports multi-step calls in a single turn.
+
+Reply style:
+- Concise Thai (1-4 sentences usually). Bullets for lists.
+- Use clinical terms when appropriate.
+- When you mention a destination page, write \`[ชื่อหน้า](/path)\` so the chat surface can make it clickable.
+- Never output JSON, code blocks, or raw tool results — translate them into prose.
+
+# § APP KNOWLEDGE (the CIS application)
+${buildCisKnowledge()}`;
 
 export async function answerChatPrompt(
   userPrompt: string,
   history: ChatMessage[] = [],
 ): Promise<string> {
-  const plan = await planStep(userPrompt, history);
-  if (plan.kind === "reply") return plan.text.trim();
-
-  const fetched: Record<string, unknown[]> = {};
-  for (const name of plan.tables) {
-    const rows = fetchTable(name);
-    if (rows) fetched[name] = rows;
-  }
-  return answerStep(userPrompt, history, plan, fetched);
-}
-
-// ── Step 1: plan ──────────────────────────────────────────────────────────
-
-async function planStep(userPrompt: string, history: ChatMessage[]): Promise<Plan> {
-  const system = buildPlanPrompt();
-  const messages = [
-    { role: "system" as const, content: system },
-    ...history.map((h) => ({ role: h.role, content: h.content })),
-    { role: "user" as const, content: userPrompt },
-  ];
   try {
-    const plan = await chatJSON<Plan>(messages, {
-      responseFormat: "json_object",
-      temperature: 0.2,
-      maxTokens: 600,
-      fast: true,
+    const result = await generateText({
+      model: MODEL,
+      system: SYSTEM_PROMPT,
+      messages: [
+        ...history.map((m) => ({ role: m.role, content: m.content })),
+        { role: "user" as const, content: userPrompt },
+      ],
+      tools: chatTools,
+      // Allow up to 4 tool-call rounds before the model must answer in
+      // text. Enough for the common pattern "search → detail → reply".
+      stopWhen: ({ steps }) => steps.length >= 4,
+      temperature: 0.3,
     });
-    if (plan.kind === "fetch" && Array.isArray(plan.tables)) {
-      // Drop any table name that doesn't exist in the registry — we refuse
-      // to invent data; an LLM-typo'd table id is silently filtered.
-      const valid = new Set(tableNames());
-      const cleaned = plan.tables.filter((n) => typeof n === "string" && valid.has(n));
-      return { kind: "fetch", tables: cleaned, rationale: plan.rationale };
-    }
-    if (plan.kind === "reply" && typeof plan.text === "string") return plan;
+
+    const reply = result.text.trim();
+    if (reply) return reply;
+    return "ขออภัย ตอนนี้ยังตอบไม่ได้ ลองพิมพ์ใหม่อีกครั้ง";
   } catch (err) {
-    console.warn("[chat-assistant] plan step failed:", err);
-  }
-  return {
-    kind: "reply",
-    text: "ขออภัย ตอนนี้ระบบไม่สามารถประมวลผลคำถามนี้ได้ ลองพิมพ์ใหม่อีกครั้ง",
-  };
-}
-
-function buildPlanPrompt(): string {
-  const schema = buildTableSchemaDoc();
-  const list = tableNames().join(", ");
-
-  return `You are เมย์ (Mae), an AI clinical assistant for a Thai hospital CIS.
-You talk to the doctor in concise Thai. You know two things deeply:
-  (1) The CIS application itself — every page, sidebar menu, and feature (see § APP KNOWLEDGE).
-  (2) The clinical database — raw tables you can fetch and analyze (see § TABLES).
-
-For NAVIGATION/HELP questions ("จะเข้าหน้า X ยังไง", "shortcut", "ใช้ฟีเจอร์ Y ตรงไหน"): reply directly with a path/menu/shortcut from § APP KNOWLEDGE. NEVER invent a path.
-
-For CLINICAL/DATA questions: pick the raw TABLES you need, then in the next step you'll receive the rows and produce the answer. You DO NOT need a pre-built aggregator — you can count / filter / group / summarize the rows yourself in step 2.
-
-Output ONE JSON object in one of two shapes. NEVER both. NEVER prose.
-
-# Shape A — Reply directly (small talk, navigation, follow-up that needs no data)
-{
-  "kind": "reply",
-  "text": "<concise Thai message — markdown links [label](/path) for navigation>"
-}
-
-# Shape B — Fetch raw tables (use whenever the answer depends on database content)
-{
-  "kind": "fetch",
-  "rationale": "<one sentence — why these tables>",
-  "tables": ["<table1>", "<table2>", ...]
-}
-
-Allowed table names: ${list}
-
-# § APP KNOWLEDGE (the CIS application)
-${buildCisKnowledge()}
-
-# § TABLES (the raw clinical database — you'll receive these rows in step 2)
-${schema}
-
-# Rules
-- Only request tables that are likely to contain the answer. Don't request every table by default; pick the minimum set.
-- For per-patient questions, "patients" usually suffices (it already includes their dx, allergies, meds, latest labs, vitals, risk flags).
-- For trend questions across time, pair "patients" with "lab_history", "vital_history", "visits", or "no_show_history" as appropriate.
-- In Shape A "text", suggest a page using markdown link [ชื่อ](/path) — only paths from § APP KNOWLEDGE.
-- Output MUST be valid JSON. No markdown around the JSON envelope, no commentary.`;
-}
-
-// ── Step 2: answer ────────────────────────────────────────────────────────
-
-async function answerStep(
-  userPrompt: string,
-  history: ChatMessage[],
-  plan: PlanFetch,
-  rows: Record<string, unknown[]>,
-): Promise<string> {
-  // Truncate row dumps if any single table exceeds a soft cap, to keep the
-  // synthesis prompt under the token budget. The LLM is told about the cap
-  // so it knows the data may be partial.
-  const MAX_ROWS_PER_TABLE = 400;
-  const trimmed: Record<string, { rows: unknown[]; total: number; truncated: boolean }> = {};
-  for (const [name, all] of Object.entries(rows)) {
-    trimmed[name] = {
-      rows: all.slice(0, MAX_ROWS_PER_TABLE),
-      total: all.length,
-      truncated: all.length > MAX_ROWS_PER_TABLE,
-    };
-  }
-
-  const system = `You are เมย์ (Mae), an AI clinical assistant. Answer the doctor in concise Thai based ONLY on the data below.
-
-Plan rationale: ${plan.rationale ?? "(none)"}
-
-Fetched tables (you must compute the answer yourself by reading these rows):
-${Object.entries(trimmed)
-  .map(
-    ([name, t]) =>
-      `## ${name} (${t.total} rows${t.truncated ? `, first ${t.rows.length} shown` : ""})\n\`\`\`json\n${JSON.stringify(t.rows, null, 1)}\n\`\`\``,
-  )
-  .join("\n\n")}
-
-App knowledge (use ONLY paths that appear here):
-${buildCisKnowledge()}
-
-Rules:
-- Use values from the rows above — never invent.
-- Compute counts / filters / groupings yourself by reading the rows.
-- If a table was truncated, mention it in your answer.
-- If the answer requires data we don't have, say so honestly.
-- When suggesting a page, write it as a markdown link [ชื่อ](/path).
-- Reply in concise Thai (1-4 sentences unless the doctor asked for a list).
-- Use bullet (• item) for lists, compact rows for tables.
-- No JSON, no code blocks — plain conversational text + markdown links only.`;
-
-  const messages = [
-    { role: "system" as const, content: system },
-    ...history.map((h) => ({ role: h.role, content: h.content })),
-    { role: "user" as const, content: userPrompt },
-  ];
-
-  try {
-    const { text } = await chat(messages, { temperature: 0.3, maxTokens: 900, fast: true });
-    return text.trim() || "ไม่พบข้อมูลที่ตอบคำถามนี้";
-  } catch (err) {
-    console.warn("[chat-assistant] answer step failed:", err);
-    return "พบข้อมูลแล้วแต่สรุปไม่สำเร็จ — กรุณาลองใหม่อีกครั้ง";
+    console.warn("[chat-assistant] generation failed:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return `ขออภัย เกิดข้อผิดพลาด: ${msg}`;
   }
 }

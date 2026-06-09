@@ -74,7 +74,7 @@ const SECTIONS: Section[] = [
 
 export default function PatientOPD() {
   const params = useParams();
-  const { collapsed: sidebarCollapsed, railHidden } = useSidebar();
+  const { railHidden } = useSidebar();
   const { closeTab, activeId, openTab } = useTabs();
   const [activeTab, setActiveTab] = useState("general");
   const [activeSection, setActiveSection] = useState("general");
@@ -100,11 +100,7 @@ export default function PatientOPD() {
       <div
         className={[
           "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[24px] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
-          railHidden
-            ? "ml-4"
-            : sidebarCollapsed
-              ? "ml-[106px]"
-              : "ml-[370px]",
+          railHidden ? "ml-4" : "ml-[296px]",
         ].join(" ")}
       >
         <div className="flex h-full w-full flex-col overflow-hidden">

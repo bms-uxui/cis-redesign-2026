@@ -68,7 +68,7 @@ const DAYS = [
 ];
 
 export default function DoctorSchedule() {
-  const { collapsed: sidebarCollapsed, railHidden } = useSidebar();
+  const { railHidden } = useSidebar();
   const { user } = useUser();
   const [view, setView] = useState<"grid" | "list">("list");
 
@@ -78,11 +78,7 @@ export default function DoctorSchedule() {
       <div
         className={[
           "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
-          railHidden
-            ? "ml-4"
-            : sidebarCollapsed
-              ? "ml-[106px]"
-              : "ml-[370px]",
+          railHidden ? "ml-4" : "ml-[296px]",
         ].join(" ")}
       >
         {/* Main column */}

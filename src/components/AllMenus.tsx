@@ -73,7 +73,7 @@ const RECENT: RecentRow[] = [
 
 export default function AllMenus() {
   const navigate = useNavigate();
-  const { collapsed: sidebarCollapsed, railHidden, openMenu, pushRecent } =
+  const { railHidden, openMenu, pushRecent } =
     useSidebar();
   const [query, setQuery] = useState("");
   const isSearching = query.trim().length > 0;
@@ -99,11 +99,7 @@ export default function AllMenus() {
       <div
         className={[
           "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
-          railHidden
-            ? "ml-4"
-            : sidebarCollapsed
-              ? "ml-[106px]"
-              : "ml-[370px]",
+          railHidden ? "ml-4" : "ml-[296px]",
         ].join(" ")}
       >
         <div className="mx-auto flex h-full w-full max-w-[960px] flex-col gap-6 overflow-y-auto px-8 pb-8 pt-16 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">

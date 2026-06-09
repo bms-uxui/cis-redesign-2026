@@ -39,7 +39,7 @@ function avatarUrl(name: string, index: number): string {
 }
 
 export default function PatientRegister() {
-  const { collapsed: sidebarCollapsed, railHidden } = useSidebar();
+  const { railHidden } = useSidebar();
   const { openTab } = useTabs();
   const [rows, setRows] = useState<RegisteredPatient[]>(REGISTERED);
 
@@ -49,7 +49,7 @@ export default function PatientRegister() {
       <div
         className={[
           "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[24px] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
-          railHidden ? "ml-4" : sidebarCollapsed ? "ml-[106px]" : "ml-[370px]",
+          railHidden ? "ml-4" : "ml-[296px]",
         ].join(" ")}
       >
         <div className="flex h-full w-full flex-col overflow-hidden">

@@ -1,16 +1,52 @@
+/**
+ * Widget renderers — shadcn/ui primitives on top of Recharts.
+ *
+ * Each `WidgetKind` maps to a small component below. Frames use shadcn
+ * `Card`; charts use `ChartContainer` + Recharts series; table uses
+ * shadcn `Table`. Colors come from `var(--theme-*)` via `ChartConfig` —
+ * no parallel shadcn `--chart-N` variables.
+ */
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { IconArrowUp, IconArrowDown } from "@tabler/icons-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart as RechartsBarChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type { Widget } from "./types";
 import { queryDataSource } from "./catalog";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../ui/card";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "../ui/chart";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table";
 
 const EASE_TV: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-/**
- * Single entrypoint — picks the right widget component for a given Widget
- * spec. Each widget queries its data source via `queryDataSource` and
- * renders the result. All charts are inline SVG (no chart library).
- */
+const CHART_CONFIG: ChartConfig = {
+  value: { label: "ค่า", color: "var(--theme-primary)" },
+};
+
 export default function WidgetRenderer({ widget }: { widget: Widget }) {
   const data = useMemo(
     () =>
@@ -27,18 +63,25 @@ export default function WidgetRenderer({ widget }: { widget: Widget }) {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, ease: EASE_TV }}
-      className="flex h-full w-full flex-col gap-2 rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] p-4"
+      className="h-full w-full"
     >
-      <p className="text-[length:var(--theme-text-xs)] font-semibold uppercase tracking-[0.06em] text-[var(--theme-neutral)]/55">
-        {widget.title}
-      </p>
-      <div className="flex flex-1 flex-col">
-        {widget.kind === "kpi" && <Kpi data={data} />}
-        {widget.kind === "line-chart" && <LineChart data={data} />}
-        {widget.kind === "bar-chart" && <BarChart data={data} />}
-        {widget.kind === "table" && <Table data={data} />}
-        {widget.kind === "info" && <Info message={widget.message} />}
-      </div>
+      <Card className="flex h-full w-full flex-col overflow-hidden">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-[length:var(--theme-text-xs)] font-semibold uppercase tracking-[0.06em] text-[var(--theme-neutral)]/55">
+            {widget.title}
+          </CardTitle>
+        </CardHeader>
+        {/* `min-h-0` is critical — flex items default to min-height:auto which
+            lets them grow past the parent and breaks `overflow-auto` on
+            scrolling children like the table widget. */}
+        <CardContent className="flex min-h-0 flex-1 flex-col p-4 pt-0">
+          {widget.kind === "kpi" && <Kpi data={data} />}
+          {widget.kind === "line-chart" && <LineChartW data={data} />}
+          {widget.kind === "bar-chart" && <BarChartW data={data} />}
+          {widget.kind === "table" && <TableW data={data} />}
+          {widget.kind === "info" && <Info message={widget.message} />}
+        </CardContent>
+      </Card>
     </motion.div>
   );
 }
@@ -48,8 +91,7 @@ function Kpi({ data }: { data: ReturnType<typeof queryDataSource> }) {
   const k = data.kpi;
   if (!k) return <Empty />;
   const delta = k.previous !== undefined ? k.value - k.previous : null;
-  const pct =
-    k.previous && k.previous !== 0 ? (delta! / k.previous) * 100 : null;
+  const pct = k.previous && k.previous !== 0 ? (delta! / k.previous) * 100 : null;
   return (
     <div className="flex h-full flex-col justify-center gap-1">
       <p className="text-[length:var(--theme-text-2xl)] font-bold text-[var(--theme-neutral)]">
@@ -79,124 +121,98 @@ function Kpi({ data }: { data: ReturnType<typeof queryDataSource> }) {
   );
 }
 
-// ── Line chart ──────────────────────────────────────────────────────────────
-function LineChart({ data }: { data: ReturnType<typeof queryDataSource> }) {
+// ── Line chart (Recharts AreaChart) ──────────────────────────────────────
+function LineChartW({ data }: { data: ReturnType<typeof queryDataSource> }) {
   const pts = data.points ?? [];
   if (pts.length === 0) return <Empty />;
-  const values = pts.map((p) => p.value);
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const range = max - min || 1;
-  const W = 100;
-  const H = 50;
-  const stepX = pts.length > 1 ? W / (pts.length - 1) : 0;
-  const path = pts
-    .map((p, i) => {
-      const x = i * stepX;
-      const y = H - ((p.value - min) / range) * H;
-      return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
-  const area = path + ` L ${(pts.length - 1) * stepX} ${H} L 0 ${H} Z`;
+  const rows = pts.map((p) => ({ label: p.label, value: p.value }));
   return (
-    <div className="flex h-full flex-col gap-1">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="h-full w-full"
-        preserveAspectRatio="none"
-      >
+    <ChartContainer config={CHART_CONFIG} className="h-full w-full aspect-auto">
+      <AreaChart data={rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="lc-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--theme-primary)" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="var(--theme-primary)" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--color-value)" stopOpacity={0.3} />
+            <stop offset="100%" stopColor="var(--color-value)" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <path d={area} fill="url(#lc-fill)" />
-        <path
-          d={path}
-          stroke="var(--theme-primary)"
-          strokeWidth="1.2"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
+        <CartesianGrid vertical={false} strokeDasharray="3 3" />
+        <XAxis
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          tickMargin={6}
+          minTickGap={24}
         />
-      </svg>
-      <div className="flex justify-between text-[10px] text-[var(--theme-neutral)]/45">
-        <span>{pts[0]?.label}</span>
-        <span>{pts[pts.length - 1]?.label}</span>
-      </div>
-    </div>
+        <YAxis hide />
+        <ChartTooltip content={<ChartTooltipContent indicator="line" />} cursor={false} />
+        <Area
+          dataKey="value"
+          type="monotone"
+          stroke="var(--color-value)"
+          strokeWidth={2}
+          fill="url(#lc-fill)"
+          dot={false}
+        />
+      </AreaChart>
+    </ChartContainer>
   );
 }
 
-// ── Bar chart ───────────────────────────────────────────────────────────────
-function BarChart({ data }: { data: ReturnType<typeof queryDataSource> }) {
+// ── Bar chart (Recharts) ──────────────────────────────────────────────────
+function BarChartW({ data }: { data: ReturnType<typeof queryDataSource> }) {
   const pts = data.points ?? [];
   if (pts.length === 0) return <Empty />;
-  const max = Math.max(...pts.map((p) => p.value));
+  const rows = pts.map((p) => ({ label: p.label, value: p.value }));
   return (
-    <div className="flex h-full flex-col justify-end gap-1.5">
-      {pts.map((p, i) => {
-        const widthPct = (p.value / max) * 100;
-        return (
-          <div key={i} className="flex items-center gap-2">
-            <span className="w-20 shrink-0 truncate text-[length:var(--theme-text-xs)] text-[var(--theme-neutral)]/70">
-              {p.label}
-            </span>
-            <div className="relative h-4 flex-1 overflow-hidden rounded-full bg-[var(--theme-primary-soft)]/40">
-              <motion.span
-                initial={{ width: 0 }}
-                animate={{ width: `${widthPct}%` }}
-                transition={{ duration: 0.5, delay: i * 0.04, ease: EASE_TV }}
-                className="absolute left-0 top-0 h-full rounded-full bg-[var(--theme-primary)]"
-              />
-            </div>
-            <span className="w-10 shrink-0 text-right text-[length:var(--theme-text-xs)] font-medium tabular-nums text-[var(--theme-neutral)]">
-              {p.value}
-            </span>
-          </div>
-        );
-      })}
-    </div>
+    <ChartContainer config={CHART_CONFIG} className="h-full w-full aspect-auto">
+      <RechartsBarChart
+        data={rows}
+        layout="vertical"
+        margin={{ top: 4, right: 16, left: 8, bottom: 0 }}
+      >
+        <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+        <XAxis type="number" hide />
+        <YAxis
+          dataKey="label"
+          type="category"
+          tickLine={false}
+          axisLine={false}
+          width={88}
+        />
+        <ChartTooltip content={<ChartTooltipContent indicator="dot" />} cursor={false} />
+        <Bar dataKey="value" fill="var(--color-value)" radius={[0, 4, 4, 0]} />
+      </RechartsBarChart>
+    </ChartContainer>
   );
 }
 
-// ── Table ───────────────────────────────────────────────────────────────────
-function Table({ data }: { data: ReturnType<typeof queryDataSource> }) {
+// ── Table (shadcn Table) ─────────────────────────────────────────────────
+function TableW({ data }: { data: ReturnType<typeof queryDataSource> }) {
   const rows = data.rows ?? [];
   const cols = data.columns ?? [];
   if (rows.length === 0 || cols.length === 0) return <Empty />;
   return (
-    <div className="-mx-2 overflow-x-auto">
-      <table className="w-full text-left text-[length:var(--theme-text-sm)]">
-        <thead>
-          <tr className="border-b border-[var(--theme-neutral)]/10 text-[length:var(--theme-text-xs)] uppercase tracking-[0.05em] text-[var(--theme-neutral)]/55">
+    <div className="-mx-2 max-h-full overflow-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
             {cols.map((c) => (
-              <th key={c.key} className="px-2 py-2 font-medium">
-                {c.label}
-              </th>
+              <TableHead key={c.key}>{c.label}</TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((r, i) => (
-            <tr
-              key={i}
-              className="border-b border-[var(--theme-neutral)]/5 last:border-0 hover:bg-[var(--theme-primary-soft)]/40"
-            >
+            <TableRow key={i}>
               {cols.map((c) => (
-                <td
-                  key={c.key}
-                  className="px-2 py-2 text-[var(--theme-neutral)]/85"
-                >
+                <TableCell key={c.key} className="text-[var(--theme-neutral)]/85">
                   {r[c.key]}
-                </td>
+                </TableCell>
               ))}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

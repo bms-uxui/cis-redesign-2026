@@ -51,12 +51,19 @@ export interface Dashboard {
   updatedAt: string;
 }
 
+/** Output shapes a data source can produce — drives kind↔source compatibility. */
+export type WidgetOutput = "kpi" | "points" | "rows";
+
 /** What the data-source catalog exposes to the model. */
 export interface DataSourceDef {
   id: string;
   description: string;
   dimensions: string[];
   measures: string[];
+  /** Which widget output shapes this source can produce. Single source of
+   *  truth for kind↔source compatibility — the validator + system prompt
+   *  derive their rules from this field. */
+  outputs: WidgetOutput[];
   filterOptions?: Record<string, string[]>;
 }
 

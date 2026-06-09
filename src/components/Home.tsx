@@ -5,10 +5,7 @@ import {
   IconClipboardText,
   IconBuildingHospital,
   IconPlus,
-  IconLayoutDashboard,
-  IconChartLine,
-  IconScan,
-  IconMessage2,
+  IconArrowRight,
 } from "@tabler/icons-react";
 import TileCard from "./TileCard";
 import WidgetsSection from "./Home/Widgets/WidgetsSection";
@@ -17,8 +14,10 @@ import iconFileShield from "../assets/figma/sidebar-icons/file-shield-02.svg?raw
 
 import EHP_AI_BANNER from "../assets/figma/ehp-ai-banner.png";
 import HOME_BANNER_ELLIPSE from "../assets/figma/home-banner-ellipse.svg";
-import ICON_RECORDS_MAIN from "../assets/figma/card-records-main.svg";
-import ICON_TRACKING_MAIN from "../assets/figma/card-tracking-main.svg";
+import HOME_FEATURE_DOTS from "../assets/figma/home-feature-dots.png";
+import HOME_FEATURE_DOCTOR_PATIENT from "../assets/figma/home-feature-doctor-patient.png";
+import CARD_TRACKING_SPIKES from "../assets/figma/card-tracking-spikes.png";
+import CARD_TRACKING_OBJECT from "../assets/figma/card-tracking-object.png";
 
 interface MenuCard {
   label: string;
@@ -52,7 +51,6 @@ const FREQUENT_MENU: MenuCard[] = [
 export default function Home() {
   const { openTab } = useTabs();
   const {
-    collapsed: sidebarCollapsed,
     railHidden,
     openMenu,
     openPalette,
@@ -83,13 +81,9 @@ export default function Home() {
         <main
           className={[
             "flex min-w-0 flex-col gap-[var(--theme-space-md)] mr-[var(--theme-space-md)] pb-24 pt-[var(--theme-space-md)] transition-[margin] duration-300 ease-out",
-            // Match the 16px gutter the sidebar and topbar use on every
-            // edge: hidden = 16; collapsed = 16+74+16 = 106; expanded = 370.
-            railHidden
-              ? "ml-4"
-              : sidebarCollapsed
-                ? "ml-[106px]"
-                : "ml-[370px]",
+            // Match the global Notion-style sidebar width: 280px panel +
+            // 16px gutter on each side = 312px when visible, 16px hidden.
+            railHidden ? "ml-4" : "ml-[296px]",
           ].join(" ")}
         >
           {/* Hero banner */}
@@ -135,60 +129,177 @@ export default function Home() {
 
           {/* Feature cards row */}
           <div className="grid grid-cols-1 gap-[var(--theme-space-md)] md:grid-cols-2">
+            {/* Feature card — "บันทึกประวัติผู้ป่วยโดยไม่ต้องจด" per
+                Figma 1069:1315. Wide horizontal card with a diagonal
+                white-to-blue split; left half holds the AI badge + title
+                + subtitle, right half shows the doctor / patient photo
+                with a dotted circle decoration. */}
             <button
               type="button"
               onClick={() => openTab("/patient/new", { title: "ผู้ป่วยใหม่" })}
-              className="relative overflow-hidden rounded-[calc(var(--theme-radius-box)*1.5)] bg-[var(--theme-primary)] p-[var(--theme-space-md)] text-left transition"
+              className="group relative aspect-[626/203] rounded-3xl bg-[#0060eb] text-left transition duration-300 hover:brightness-[1.03]"
             >
-              <div className="relative z-10 flex w-[270px] flex-col gap-[var(--theme-space-md)] text-white">
-                <img
-                  src={ICON_RECORDS_MAIN}
-                  alt=""
-                  className="h-12 w-12"
-                  draggable={false}
-                />
-                <p className="text-[length:var(--theme-text-md)] font-bold leading-tight">
-                  บันทึกประวัติผู้ป่วยอัตโนมัติ
+              {/* AI aura — rotating conic-gradient ring + drop-shadow
+                  glow. Uses the shared `.magic-ring` class so the look
+                  matches the magic-search affordance elsewhere in the
+                  app. Fades in on hover. */}
+              <span
+                aria-hidden
+                className="magic-ring pointer-events-none absolute -inset-[3px] rounded-[28px] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+              />
+
+              {/* Card content — sits above the aura via stacking; the
+                  inner overflow-clip stops the artwork bleeding past the
+                  rounded corners while keeping the aura visible outside. */}
+              <span className="absolute inset-0 overflow-hidden rounded-3xl">
+              {/* White diagonal — triangle that covers the upper-left
+                  region (cut from top-right corner to bottom-left). */}
+              <svg
+                aria-hidden
+                viewBox="0 0 454 285"
+                preserveAspectRatio="none"
+                className="pointer-events-none absolute inset-y-0 left-0 h-full w-[86%]"
+              >
+                <path d="M0 0H454L0 285V0Z" fill="#ffffff" />
+              </svg>
+
+              {/* Dotted circle decoration — top-right area */}
+              <img
+                src={HOME_FEATURE_DOTS}
+                alt=""
+                aria-hidden
+                draggable={false}
+                className="pointer-events-none absolute -top-[24%] left-[47%] aspect-square w-[55%] object-cover"
+              />
+
+              {/* Doctor + patient photo — right half. Zooms in slightly
+                  on hover, anchored at the bottom-left so the people
+                  stay framed in view as the image grows. */}
+              <img
+                src={HOME_FEATURE_DOCTOR_PATIENT}
+                alt=""
+                aria-hidden
+                draggable={false}
+                className="pointer-events-none absolute right-0 top-[10%] h-full w-[60%] origin-bottom-left object-cover object-left transition-transform duration-500 ease-out group-hover:scale-110"
+              />
+
+              {/* Text content — absolutely positioned on the white area
+                  to match the Figma offsets (24, 24 / 24, 55 / 24, 135). */}
+              <div className="absolute inset-y-0 left-0 flex flex-col gap-2 p-6">
+                <span className="inline-flex w-fit items-center rounded-lg bg-[#1f1f1f]/10 px-3 py-1 text-[12px] font-bold text-[#1f1f1f]">
+                  AI
+                </span>
+                <p className="text-[20px] font-bold leading-[1.4] text-[#1f1f1f]">
+                  บันทึกประวัติผู้ป่วย
+                  <br />
+                  โดยไม่ต้องจด
                 </p>
-                <div className="flex flex-col gap-[var(--theme-space-md)]">
-                  <div className="flex items-start gap-2 text-[length:var(--theme-text-sm)]">
-                    <IconScan className="h-5 w-5 shrink-0" stroke={1.75} />
-                    <span>สแกนบัตรประจำตัวประชาชน</span>
-                  </div>
-                  <div className="flex items-start gap-2 text-[length:var(--theme-text-sm)]">
-                    <IconMessage2 className="h-5 w-5 shrink-0" stroke={1.75} />
-                    <span>ซักประวัติผู้ป่วย</span>
-                  </div>
-                </div>
+                <p className="text-[14px] leading-[1.6] text-[#1f1f1f]/60">
+                  ให้ Dr. Note จัดการแทนคุณ
+                </p>
               </div>
+
+              {/* Hover affordance — small "go to page" chip in the upper
+                  right, fades + slides in on hover. Sits inside the clip
+                  span so it stays inside the rounded card frame. */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute right-4 top-4 flex h-8 w-8 -translate-y-1 items-center justify-center rounded-full bg-white text-[#1f1f1f] opacity-0 shadow-sm transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"
+              >
+                <IconArrowRight className="h-4 w-4" stroke={2.25} />
+              </span>
+              </span>
             </button>
 
+            {/* Feature card — "สร้างการติดตามข้อมูลตามที่คุณสนใจ" per
+                Figma 1080:1365. Yellow card with AI badge, two-line title,
+                subtitle, and a rotated spike decoration anchored to the
+                right (overflowing the card). Links to /dashboards where
+                the user composes their own tracking dashboards. */}
             <button
               type="button"
-              onClick={() => openAiva()}
-              className="relative overflow-hidden rounded-[calc(var(--theme-radius-box)*1.5)] bg-[var(--theme-accent)] p-[var(--theme-space-md)] text-left transition"
+              onClick={() => openTab("/dashboards", { title: "แดชบอร์ดของฉัน" })}
+              className="group relative aspect-[626/203] rounded-3xl bg-[#f9b61a] text-left transition duration-300 hover:brightness-[1.03]"
             >
-              <div className="relative z-10 flex w-[270px] flex-col gap-[var(--theme-space-md)] text-white">
+              {/* AI aura — same `.magic-ring` conic-gradient ring used by
+                  the sibling blue card. Fades in on hover so both feature
+                  tiles get the same affordance. */}
+              <span
+                aria-hidden
+                className="magic-ring pointer-events-none absolute -inset-[3px] rounded-[28px] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+              />
+
+              {/* Clipped layers — yellow bg fill, white diagonal, and the
+                  background spike all sit inside this overflow-hidden span
+                  so they stay within the rounded card frame. */}
+              <span className="absolute inset-0 overflow-hidden rounded-3xl">
+                {/* White diagonal — upper-LEFT triangle, matches Figma
+                    1053:2213 exactly: vertices (0,0), (454,0), (0,285),
+                    SVG positioned left:0 w:454 (≈72% of 626 card width).
+                    Text + AI badge sit on this white region; the right
+                    portion stays yellow where the spike + doctor live. */}
+                <svg
+                  aria-hidden
+                  viewBox="0 0 454 285"
+                  preserveAspectRatio="none"
+                  className="pointer-events-none absolute inset-y-0 left-0 h-full w-[72%]"
+                >
+                  <path d="M0 0H454L0 285V0Z" fill="#ffffff" />
+                </svg>
+
+                {/* Orange spike — sits in the upper-right area at ~55%
+                    from left per Figma 1074:1355 (left:343 top:-31
+                    size:274 in a 626-wide card), rotated 165°. The PNG
+                    has a transparent alpha channel, so it renders cleanly
+                    on the yellow card without any blend-mode hack. */}
                 <img
-                  src={ICON_TRACKING_MAIN}
+                  src={CARD_TRACKING_SPIKES}
                   alt=""
-                  className="h-12 w-12"
+                  aria-hidden
                   draggable={false}
+                  className="pointer-events-none absolute -top-[15%] left-[55%] aspect-square w-[44%] rotate-[165deg] object-contain"
                 />
-                <p className="text-[length:var(--theme-text-md)] font-bold leading-tight">
-                  ติดตามผู้ป่วยอัจฉริยะ
-                </p>
-                <div className="flex flex-col gap-[var(--theme-space-md)]">
-                  <div className="flex items-start gap-2 text-[length:var(--theme-text-sm)]">
-                    <IconLayoutDashboard className="h-5 w-5 shrink-0" stroke={1.75} />
-                    <span>สร้างแดชบอร์ดตามข้อมูลที่คุณสนใจ</span>
-                  </div>
-                  <div className="flex items-start gap-2 text-[length:var(--theme-text-sm)]">
-                    <IconChartLine className="h-5 w-5 shrink-0" stroke={1.75} />
-                    <span>วิเคราะห์และสรุปข้อมูลสุขภาพ</span>
-                  </div>
+
+                {/* Doctor + robot + monitor — INSIDE this overflow-hidden
+                    span so anything past the rounded card frame is clipped.
+                    Wrapper aspect 285:200 + `object-cover object-top` also
+                    crops only the BOTTOM of the source asset (the desk/
+                    keyboard area), matching the Figma frame. */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute bottom-0 right-0 aspect-[285/200] h-[100%] overflow-hidden"
+                >
+                  <img
+                    src={CARD_TRACKING_OBJECT}
+                    alt=""
+                    draggable={false}
+                    className="h-full w-full origin-bottom object-cover object-top transition-transform duration-500 ease-out group-hover:scale-110"
+                  />
                 </div>
+              </span>
+
+              <div className="absolute inset-0 flex flex-col gap-2 p-6">
+                <span className="inline-flex w-fit items-center rounded-lg bg-[#1f1f1f]/10 px-3 py-1 text-[12px] font-bold text-[#1f1f1f]">
+                  AI
+                </span>
+                <p className="text-[20px] font-bold leading-[1.4] text-[#1f1f1f]">
+                  สร้างการติดตามข้อมูล
+                  <br />
+                  ตามที่คุณสนใจ
+                </p>
+                <p className="text-[14px] leading-[1.6] text-[#1f1f1f]/60">
+                  ให้ Dr. Note จัดการแทนคุณ
+                </p>
               </div>
+
+              {/* Hover affordance — same "go to page" chip as the blue
+                  card, tinted to read against the yellow surface. */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute right-4 top-4 flex h-8 w-8 -translate-y-1 items-center justify-center rounded-full bg-white text-[#1f1f1f] opacity-0 shadow-sm transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"
+              >
+                <IconArrowRight className="h-4 w-4" stroke={2.25} />
+              </span>
             </button>
           </div>
 

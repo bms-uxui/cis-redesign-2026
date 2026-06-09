@@ -80,7 +80,7 @@ export default function NewPatientByVoice() {
     if (!isRecording) clearDictation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const { collapsed: sidebarCollapsed, railHidden } = useSidebar();
+  const { railHidden } = useSidebar();
 
   const [phase, setPhase] = useState<Phase>("input");
   const [prompt, setPrompt] = useState("");
@@ -326,12 +326,9 @@ export default function NewPatientByVoice() {
       <main
         className={[
           "flex min-w-0 flex-col overflow-hidden h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 transition-[margin] duration-300 ease-out",
-          // Match the global sidebar width: hidden=16, collapsed=106, expanded=370.
-          railHidden
-            ? "ml-4"
-            : sidebarCollapsed
-              ? "ml-[106px]"
-              : "ml-[370px]",
+          // Match the global Notion-style sidebar width: 280px panel + 16px
+          // gutter on each side = 312px when visible, 16px when hidden.
+          railHidden ? "ml-4" : "ml-[296px]",
         ].join(" ")}
       >
         {/* Content area — fits within the viewport during the INPUT phase

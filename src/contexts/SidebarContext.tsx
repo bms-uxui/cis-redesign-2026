@@ -75,6 +75,8 @@ interface SidebarContextValue {
 const RAIL_WIDTH = 74;
 const PANEL_WIDTH = 264;
 const SIDE_GUTTER = 16;
+/** Notion-style flat sidebar width (single scrolling panel, no rail). */
+const SIDEBAR_WIDTH = 280;
 
 const RECENT_KEY = "ehp-cis.recent-menus.v1";
 const RECENT_MAX = 8;
@@ -292,9 +294,7 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   const closeCustomize = useCallback(() => setCustomizeOpen(false), []);
 
   const value = useMemo<SidebarContextValue>(() => {
-    const width = railHidden
-      ? 0
-      : SIDE_GUTTER + RAIL_WIDTH + (collapsed ? 0 : PANEL_WIDTH);
+    const width = railHidden ? 0 : SIDE_GUTTER + SIDEBAR_WIDTH;
     return {
       collapsed,
       toggleCollapsed,

@@ -38,13 +38,14 @@ import AVATAR from "../assets/figma/ellipse-avatar.png";
  */
 export default function TopBar() {
   const { tabs, activeId, openTab, closeTab, activateTab } = useTabs();
-  const { collapsed: sidebarCollapsed, railHidden, toggleRailHiddenSidebar } =
-    useSidebar();
+  const { railHidden, toggleRailHiddenSidebar } = useSidebar();
   const { config: themeConfig, applyPreset, commit: commitTheme } = useTheme();
   const navigate = useNavigate();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const leftPx = railHidden ? 16 : sidebarCollapsed ? 106 : 370;
+  // Sidebar is flush against the screen edge — 280px wide. Content sits
+  // 16px away from it; when hidden the topbar tucks against the 16px gutter.
+  const leftPx = railHidden ? 16 : 296;
 
   // ── Tab overflow ─────────────────────────────────────────────────────
   // The strip has a fixed amount of horizontal space; once tabs no longer
