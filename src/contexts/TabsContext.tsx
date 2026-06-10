@@ -22,7 +22,10 @@ interface TabsContextValue {
   tabs: Tab[];
   activeId: string;
   /** Open a path in a new tab and activate it. Returns the new tab id. */
-  openTab: (path: string, opts?: { title?: string; activate?: boolean }) => string;
+  openTab: (
+    path: string,
+    opts?: { title?: string; activate?: boolean; forceNew?: boolean },
+  ) => string;
   closeTab: (id: string) => void;
   activateTab: (id: string) => void;
 }
@@ -118,8 +121,12 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     (path, opts) => {
       // Dedup: if a tab with this exact path is already open, activate it
       // rather than creating a second instance. Keeps the strip tidy and
-      // avoids splitting per-tab state across duplicate mounts.
-      const existing = tabsRef.current.find((t) => t.path === path);
+      // avoids splitting per-tab state across duplicate mounts. `forceNew`
+      // opts out — always spawns a fresh tab (e.g. "ลงทะเบียนทั่วไป" should
+      // open its own header even if an OPD tab is already open).
+      const existing = opts?.forceNew
+        ? undefined
+        : tabsRef.current.find((t) => t.path === path);
       if (existing) {
         if (opts?.activate !== false && existing.id !== activeIdRef.current) {
           setActive(existing.id);

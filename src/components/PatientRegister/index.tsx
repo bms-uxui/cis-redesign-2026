@@ -1,18 +1,28 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import {
   IconPlus,
-  IconTrash,
+  IconDotsVertical,
   IconUser,
   IconArrowUp,
   IconMicrophone,
   IconPlayerStopFilled,
   IconLoader2,
+  IconPhoto,
+  IconFileText,
+  IconTrash,
+  IconGitMerge,
+  IconPrinter,
+  IconRefresh,
+  IconQrcode,
+  IconAmbulance,
 } from "@tabler/icons-react";
 import { useSidebar } from "../../contexts/SidebarContext";
 import { useTabs } from "../../contexts/TabsContext";
 import { useDictation } from "../../hooks/useDictation";
 import DateRangePicker from "../DateRangePicker";
+import RegisterRoleModal from "../RegisterRoleModal";
 
 const EASE_TV: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -54,6 +64,7 @@ export default function PatientRegister() {
   const { openTab } = useTabs();
   const [rows, setRows] = useState<RegisteredPatient[]>(REGISTERED);
   const [query, setQuery] = useState("");
+  const [roleModalOpen, setRoleModalOpen] = useState(false);
 
   // Voice search — records, transcribes (Thai), and drops the text into the
   // search box live. Isolated from the clinical-note dictation session.
@@ -98,7 +109,7 @@ export default function PatientRegister() {
             </div>
             <button
               type="button"
-              onClick={() => openTab("/patient/new", { title: "ลงทะเบียนผู้ป่วยใหม่" })}
+              onClick={() => setRoleModalOpen(true)}
               className="flex h-[42px] shrink-0 items-center gap-2 rounded-full bg-[var(--theme-primary)] px-5 text-[length:var(--theme-text-sm)] font-semibold text-white transition hover:brightness-105 active:scale-[0.98]"
             >
               <IconPlus className="h-4 w-4" stroke={2} />
@@ -224,20 +235,174 @@ export default function PatientRegister() {
                     {r.lastVisit} {r.time}
                   </span>
 
-                  <button
-                    type="button"
-                    aria-label={`ลบ ${r.name}`}
-                    onClick={() => setRows((prev) => prev.filter((p) => p.cid !== r.cid))}
-                    className="flex h-9 w-9 items-center justify-center rounded-[var(--theme-radius-selector)] text-[var(--theme-neutral)]/35 transition hover:bg-[var(--theme-error)]/10 hover:text-[var(--theme-error)]"
-                  >
-                    <IconTrash className="h-[18px] w-[18px]" stroke={1.75} />
-                  </button>
+                  <RowActionMenu
+                    name={r.name}
+                    onDelete={() =>
+                      setRows((prev) => prev.filter((p) => p.cid !== r.cid))
+                    }
+                  />
                 </motion.div>
               ))
             )}
           </div>
+
+          {/* Count footer (Figma 1107:2032) — synced to the live data */}
+          <div className="flex shrink-0 items-center gap-2 border-t border-[var(--theme-neutral)]/10 px-4 py-2.5 text-[length:var(--theme-text-sm)]">
+            <span className="font-medium text-[var(--theme-neutral)]/80">
+              แสดง {filtered.length.toLocaleString("en-US")} ราย
+            </span>
+            <span className="text-[var(--theme-neutral)]/50">
+              จากทั้งหมด {rows.length.toLocaleString("en-US")} ราย
+            </span>
+          </div>
         </div>
       </div>
+
+      <RegisterRoleModal
+        open={roleModalOpen}
+        onClose={() => setRoleModalOpen(false)}
+      />
     </div>
+  );
+}
+
+// ── Row action menu (kebab dropdown) ────────────────────────────────────────
+interface ActionItem {
+  key: string;
+  label: string;
+  Icon: typeof IconPhoto;
+  danger?: boolean;
+  run?: () => void;
+}
+
+function RowActionMenu({
+  name,
+  onDelete,
+}: {
+  name: string;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const MENU_W = 224;
+  const MENU_H = 360;
+
+  const place = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    // Flip upward when there isn't room below.
+    const top =
+      r.bottom + MENU_H > window.innerHeight ? r.top - MENU_H - 6 : r.bottom + 6;
+    const left = Math.max(8, r.right - MENU_W);
+    setCoords({ top, left });
+  };
+
+  const toggle = () => setOpen((v) => !v);
+
+  // Position before paint whenever the menu opens (no flicker, works even
+  // when opened programmatically).
+  useLayoutEffect(() => {
+    if (open) place();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (
+        !menuRef.current?.contains(e.target as Node) &&
+        !btnRef.current?.contains(e.target as Node)
+      )
+        setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onScroll = () => setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [open]);
+
+  const items: ActionItem[] = [
+    { key: "photo", label: "Photo", Icon: IconPhoto },
+    { key: "emr", label: "EMR", Icon: IconFileText },
+    { key: "merge", label: "รวมข้อมูล", Icon: IconGitMerge },
+    { key: "print", label: "พิมพ์", Icon: IconPrinter },
+    { key: "reset", label: "Reset", Icon: IconRefresh },
+    { key: "qr", label: "Mobile QR Code", Icon: IconQrcode },
+    { key: "accident", label: "ส่งตรวจอุบัติเหตุ", Icon: IconAmbulance },
+    { key: "delete", label: "ลบข้อมูล", Icon: IconTrash, danger: true, run: onDelete },
+  ];
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        aria-label={`ตัวเลือกสำหรับ ${name}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={toggle}
+        className={[
+          "flex h-9 w-9 items-center justify-center rounded-[var(--theme-radius-selector)] transition",
+          open
+            ? "bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]"
+            : "text-[var(--theme-neutral)]/40 hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-neutral)]",
+        ].join(" ")}
+      >
+        <IconDotsVertical className="h-[18px] w-[18px]" stroke={1.75} />
+      </button>
+
+      {open &&
+        createPortal(
+          <motion.div
+            ref={menuRef}
+            role="menu"
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.14, ease: EASE_TV }}
+            style={{ top: coords.top, left: coords.left, width: MENU_W }}
+            className="fixed z-[200] rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)] p-1.5 shadow-[var(--theme-shadow-md)]"
+          >
+            {items.map((it) => (
+              <button
+                key={it.key}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  it.run?.();
+                  setOpen(false);
+                }}
+                className={[
+                  "flex w-full items-center gap-2.5 rounded-[var(--theme-radius-field)] px-3 py-2 text-left text-[length:var(--theme-text-sm)] transition",
+                  it.danger
+                    ? "text-[var(--theme-error)] hover:bg-[var(--theme-error)]/10"
+                    : "text-[var(--theme-neutral)] hover:bg-[var(--theme-primary-soft)]",
+                ].join(" ")}
+              >
+                <it.Icon
+                  className={[
+                    "h-[18px] w-[18px] shrink-0",
+                    it.danger
+                      ? "text-[var(--theme-error)]"
+                      : "text-[var(--theme-neutral)]/55",
+                  ].join(" ")}
+                  stroke={1.75}
+                />
+                {it.label}
+              </button>
+            ))}
+          </motion.div>,
+          document.body,
+        )}
+    </>
   );
 }

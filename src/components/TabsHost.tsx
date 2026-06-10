@@ -49,6 +49,7 @@ export default function TabsHost() {
               <Route path="/opd/:hn" element={<PatientOPD />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/patient/new" element={<NewPatientByVoice />} />
+              <Route path="/patient/new/manual" element={<NewPatientByVoice />} />
               <Route path="/soap" element={<SOAPSummary />} />
             </Routes>
           </div>
