@@ -44,9 +44,9 @@ export default function MenuPaletteHint() {
               type="button"
               onClick={() => openAiva()}
               aria-label="ถามเมย์"
-              className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-[var(--theme-primary)] text-white shadow-[var(--theme-shadow-md)] transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-105 hover:shadow-[var(--theme-shadow-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--theme-base)]"
+              className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-[#5DB4F8] to-[#7556E2] text-white shadow-[0_8px_20px_-4px_rgba(117,86,226,0.55)] transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-110 hover:shadow-[0_10px_24px_-4px_rgba(117,86,226,0.7)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7556E2] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--theme-base)]"
             >
-              <IconSparkles className="h-5 w-5" stroke={1.75} />
+              <IconSparkles className="h-5 w-5 fill-white" stroke={1.5} />
             </button>
           </Tooltip>
         </motion.div>

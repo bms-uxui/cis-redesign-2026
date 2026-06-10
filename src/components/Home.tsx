@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useTabs } from "../contexts/TabsContext";
 import { useAiva } from "../contexts/AivaContext";
@@ -6,18 +7,67 @@ import {
   IconBuildingHospital,
   IconPlus,
   IconArrowRight,
+  IconMicrophone,
+  IconSparkles,
 } from "@tabler/icons-react";
 import TileCard from "./TileCard";
 import WidgetsSection from "./Home/Widgets/WidgetsSection";
 import iconHealthcareCall from "../assets/figma/sidebar-icons/healthcare-call.svg?raw";
 import iconFileShield from "../assets/figma/sidebar-icons/file-shield-02.svg?raw";
 
-import EHP_AI_BANNER from "../assets/figma/ehp-ai-banner.png";
-import HOME_BANNER_ELLIPSE from "../assets/figma/home-banner-ellipse.svg";
+import HERO_DOCTOR from "../assets/figma/hero-doctor.png";
+import BANNER_BG_CIRCLE from "../assets/figma/banner-bg-circle.png";
+import HERO_WAVE from "../assets/figma/hero-wave.svg";
 import HOME_FEATURE_DOTS from "../assets/figma/home-feature-dots.png";
 import HOME_FEATURE_DOCTOR_PATIENT from "../assets/figma/home-feature-doctor-patient.png";
 import CARD_TRACKING_SPIKES from "../assets/figma/card-tracking-spikes.png";
 import CARD_TRACKING_OBJECT from "../assets/figma/card-tracking-object.png";
+
+const SEARCH_EXAMPLES = [
+  "สรุปผู้ป่วยสมชาย ใจดี",
+  "สร้างแดชบอร์ดเบาหวาน HbA1c",
+  "คนไข้ขาดนัด 30 วันล่าสุด",
+  "ผลแลปผิดปกติวันนี้",
+  "ตารางคิว OPD บ่ายนี้",
+];
+
+/** Typewriter — cycles through `phrases`, typing each char-by-char,
+ *  holding for a beat, then erasing. Hook returns just the current text;
+ *  the caller renders it however it likes. */
+function useTypewriter(
+  phrases: string[],
+  typeMs = 60,
+  holdMs = 1600,
+  eraseMs = 30,
+): string {
+  const [text, setText] = useState("");
+  const [phraseIdx, setPhraseIdx] = useState(0);
+  const [phase, setPhase] = useState<"type" | "hold" | "erase">("type");
+
+  useEffect(() => {
+    const target = phrases[phraseIdx];
+    let timer: ReturnType<typeof setTimeout>;
+    if (phase === "type") {
+      if (text.length < target.length) {
+        timer = setTimeout(() => setText(target.slice(0, text.length + 1)), typeMs);
+      } else {
+        timer = setTimeout(() => setPhase("hold"), holdMs);
+      }
+    } else if (phase === "hold") {
+      timer = setTimeout(() => setPhase("erase"), 0);
+    } else if (phase === "erase") {
+      if (text.length > 0) {
+        timer = setTimeout(() => setText(text.slice(0, -1)), eraseMs);
+      } else {
+        setPhraseIdx((i) => (i + 1) % phrases.length);
+        setPhase("type");
+      }
+    }
+    return () => clearTimeout(timer);
+  }, [text, phase, phraseIdx, phrases, typeMs, holdMs, eraseMs]);
+
+  return text;
+}
 
 interface MenuCard {
   label: string;
@@ -50,6 +100,7 @@ const FREQUENT_MENU: MenuCard[] = [
 
 export default function Home() {
   const { openTab } = useTabs();
+  const typedExample = useTypewriter(SEARCH_EXAMPLES);
   const {
     railHidden,
     openMenu,
@@ -86,45 +137,109 @@ export default function Home() {
             railHidden ? "ml-4" : "ml-[296px]",
           ].join(" ")}
         >
-          {/* Hero banner */}
-          <div className="relative h-[224px] overflow-hidden rounded-[calc(var(--theme-radius-box)*1.5)] bg-gradient-to-r from-[#eff6ff] to-[#d1befe] ring-1 ring-inset ring-[var(--theme-neutral)]/15">
-            {/* Decorative offset circle outline — 500×500 circle anchored
-                vertically centered, sticking 337px past the right edge so
-                only the left arc sweeps across the banner. */}
+          {/* Hero banner — per Figma 941:13736. White card with a
+              subtle blue wave on the left, a doctor-with-laptop illustration
+              anchored to the right edge, and an AI prompt pill near the
+              bottom that opens Mae. */}
+          {/* The decorative wave (Figma 1080:1517) is applied as a CSS
+              background-image instead of an inline `<img>` — same asset,
+              but lives in the banner's background layer so we don't have
+              a stray image element to position. `background-size` of
+              ~103.5% × ~107.5% mirrors Figma's inset offsets so the
+              curve sweeps across the full width and the bottom edge
+              bleeds out of the rounded card. */}
+          <div
+            className="relative h-[212px] overflow-hidden rounded-[32px] bg-[var(--theme-surface)]"
+            // Background layers, bottom-up:
+            //   1. theme surface color (declared on the class).
+            //   2. abstract blue wave (Figma 1080:1517) — anchored left
+            //      so the curve starts at the left edge and sweeps right.
+            // `clip-path` also enforces the rounded corner mask so child
+            // images with their own z-index can't leak past the corners.
+            style={{
+              backgroundImage: `url(${HERO_WAVE})`,
+              backgroundRepeat: "no-repeat",
+              // Figma 1080:1517 positions the vector with `inset:
+              // 0 -3.24% -7.51% -0.22%`, so the artwork stretches across
+              // the full banner plus a slight overflow on the right and
+              // bottom. Mirror those exact offsets so the wave + the
+              // vertical-stroke tail on the right both line up.
+              backgroundPosition: "-0.22% 0",
+              backgroundSize: "103.46% 107.51%",
+              clipPath: "inset(0 round 32px)",
+            }}
+          >
+
+            {/* Greeting — top-left. */}
+            <div className="absolute left-8 top-[31px] z-20 flex flex-col gap-1">
+              <p className="text-[length:var(--theme-text-sm)] font-medium text-[var(--theme-neutral)]">
+                สวัสดี, นพ.ราอูล มันเมาะ
+              </p>
+              <p className="text-[24px] font-bold leading-tight text-[var(--theme-neutral)]">
+                โรงพยาบาลทดสอบ BMS
+              </p>
+              <p className="text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)]">
+                201 ประชาสัมพันธ์ สาขา BMS
+              </p>
+            </div>
+
+            {/* Blue speckled arc — single asset that fills the right
+                portion of the banner. Anchored to the right edge with
+                bottom flush so the speckle bleeds into the rounded
+                bottom-right corner. */}
             <img
-              src={HOME_BANNER_ELLIPSE}
+              src={BANNER_BG_CIRCLE}
               alt=""
               aria-hidden
-              className="pointer-events-none absolute top-1/2 hidden h-[500px] w-[500px] -translate-y-1/2 opacity-30 md:block"
+              className="pointer-events-none absolute bottom-0 right-0 hidden h-full w-auto md:block"
+            />
+
+            {/* Decorative outline circle — sits ABOVE the blue spikes so
+                the ring overlays them. Same dimensions as before. */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute top-1/2 z-10 hidden h-[500px] w-[500px] -translate-y-1/2 rounded-full border border-[#314DAD] md:block"
               style={{ right: "-337px" }}
             />
 
-            {/* Left content — greeting + AI Assistant CTA */}
-            <div className="absolute left-8 top-1/2 z-20 flex -translate-y-1/2 flex-col items-start gap-1">
-              <p className="text-[length:var(--theme-text-sm)] font-medium text-[#1f1f1f]">
-                สวัสดี, นพ.ราอูล มันเมาะ
-              </p>
-              <p className="text-[length:var(--theme-text-xl)] font-bold leading-tight text-[#1f1f1f]">
-                โรงพยาบาลทดสอบ BMS
-              </p>
-              <p className="text-[length:var(--theme-text-sm)] text-[#1f1f1f]">201 ประชาสัมพันธ์ สาขา BMS</p>
-              <button
-                type="button"
-                onClick={() => openAiva()}
-                className="mt-[var(--theme-space-md)] inline-flex cursor-pointer items-center rounded-[var(--theme-radius-field)] bg-[var(--theme-primary)] px-[var(--theme-space-lg)] py-[var(--theme-space-sm)] text-[length:var(--theme-text-md)] font-semibold text-white transition hover:bg-[var(--theme-primary)]/85"
-              >
-                พูดคุยกับหมอเมย์ • AI Assistant
-              </button>
-            </div>
-
-            {/* Illustration — single image with rounded shape + AI badge
-                baked in. Anchored to the right edge of the banner. */}
+            {/* Doctor with laptop — anchored to the right edge. The AI
+                bubble overlay is baked into the asset, so this is a single
+                image instead of separate layers. */}
             <img
-              src={EHP_AI_BANNER}
+              src={HERO_DOCTOR}
               alt=""
+              aria-hidden
               decoding="async"
-              className="pointer-events-none absolute right-0 top-1/2 hidden h-[85%] w-auto -translate-y-[55%] object-contain object-right md:block"
+              className="pointer-events-none absolute right-0 top-1/2 z-[15] hidden h-[80%] w-auto -translate-y-[58%] object-contain object-right md:block"
             />
+
+            {/* AI prompt pill — bottom-left. Click to open Mae with the
+                prompt prefilled. */}
+            <button
+              type="button"
+              onClick={() => openAiva(typedExample || undefined)}
+              className="group absolute left-8 bottom-6 z-20 flex w-[520px] max-w-[calc(100%-360px)] cursor-pointer items-center gap-6 rounded-full border border-[#9db6fb] bg-[var(--theme-surface)] py-2 pl-6 pr-3 text-left shadow-[0_2px_8px_-2px_rgba(15,82,251,0.08)] transition hover:border-[var(--theme-primary)]"
+            >
+              <span className="flex min-w-0 flex-1 items-baseline gap-2 truncate text-[length:var(--theme-text-md)]">
+                <span className="text-[var(--theme-neutral)]/45">ค้นหาอะไรก็ได้</span>
+                <span className="truncate text-[var(--theme-neutral)]/85">
+                  {typedExample}
+                  <span
+                    aria-hidden
+                    className="ml-0.5 inline-block h-[1em] w-[2px] -translate-y-[1px] align-middle bg-[var(--theme-neutral)]/55 animate-pulse"
+                  />
+                </span>
+              </span>
+              <span className="flex shrink-0 items-center gap-3">
+                <IconMicrophone
+                  className="h-5 w-5 text-[var(--theme-neutral)]/65"
+                  stroke={1.75}
+                />
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black transition group-hover:scale-105">
+                  <IconSparkles className="h-5 w-5 text-white" stroke={1.75} />
+                </span>
+              </span>
+            </button>
           </div>
 
           {/* Feature cards row */}
@@ -137,7 +252,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => openTab("/patient/new", { title: "ผู้ป่วยใหม่" })}
-              className="group relative aspect-[626/203] rounded-3xl bg-[#0060eb] text-left transition duration-300 hover:brightness-[1.03]"
+              className="group relative aspect-[626/203] rounded-3xl text-left transition duration-300 hover:brightness-[1.03]"
             >
               {/* AI aura — rotating conic-gradient ring + drop-shadow
                   glow. Uses the shared `.magic-ring` class so the look
@@ -145,23 +260,25 @@ export default function Home() {
                   app. Fades in on hover. */}
               <span
                 aria-hidden
-                className="magic-ring pointer-events-none absolute -inset-[3px] rounded-[28px] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                className="magic-ring pointer-events-none absolute -inset-[3px] hidden rounded-[28px] group-hover:block"
               />
 
-              {/* Card content — sits above the aura via stacking; the
-                  inner overflow-clip stops the artwork bleeding past the
-                  rounded corners while keeping the aura visible outside. */}
-              <span className="absolute inset-0 overflow-hidden rounded-3xl">
+              {/* Card content — sits above the aura via stacking. The
+                  blue base color lives on THIS span (not the button) so
+                  the rounded corner has a single source — no thin blue
+                  sliver showing where two rounded layers misalign. */}
+              <span className="absolute inset-0 overflow-hidden rounded-3xl bg-[#0060eb]">
               {/* White diagonal — triangle that covers the upper-left
-                  region (cut from top-right corner to bottom-left). */}
-              <svg
+                  region (cut from top-right corner to bottom-left). Done
+                  with `clip-path: polygon(...)` on a white div so no
+                  inline SVG is needed. Polygon vertices match the old
+                  SVG path `M0 0 H454 L0 285` mapped to this overlay's
+                  86%×100% box. */}
+              <span
                 aria-hidden
-                viewBox="0 0 454 285"
-                preserveAspectRatio="none"
-                className="pointer-events-none absolute inset-y-0 left-0 h-full w-[86%]"
-              >
-                <path d="M0 0H454L0 285V0Z" fill="#ffffff" />
-              </svg>
+                className="pointer-events-none absolute inset-0 bg-[var(--theme-surface)]"
+                style={{ clipPath: "polygon(0 0, 86% 0, 0 100%)" }}
+              />
 
               {/* Dotted circle decoration — top-right area */}
               <img
@@ -186,10 +303,10 @@ export default function Home() {
               {/* Text content — absolutely positioned on the white area
                   to match the Figma offsets (24, 24 / 24, 55 / 24, 135). */}
               <div className="absolute inset-y-0 left-0 flex flex-col gap-2 p-6">
-                <span className="inline-flex w-fit items-center rounded-lg bg-[#1f1f1f]/10 px-3 py-1 text-[12px] font-bold text-[#1f1f1f]">
+                <span className="inline-flex w-fit items-center rounded-lg bg-[var(--theme-neutral)]/10 px-3 py-1 text-[12px] font-bold text-[var(--theme-neutral)]">
                   AI
                 </span>
-                <p className="text-[20px] font-bold leading-[1.4] text-[#1f1f1f]">
+                <p className="text-[20px] font-bold leading-[1.4] text-[var(--theme-neutral)]">
                   บันทึกประวัติผู้ป่วย
                   <br />
                   โดยไม่ต้องจด
@@ -201,7 +318,7 @@ export default function Home() {
                   span so it stays inside the rounded card frame. */}
               <span
                 aria-hidden
-                className="pointer-events-none absolute right-4 top-4 flex h-8 w-8 -translate-y-1 items-center justify-center rounded-full bg-white text-[#1f1f1f] opacity-0 shadow-sm transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"
+                className="pointer-events-none absolute right-4 top-4 flex h-8 w-8 -translate-y-1 items-center justify-center rounded-full bg-[var(--theme-surface)] text-[var(--theme-neutral)] opacity-0 shadow-sm transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"
               >
                 <IconArrowRight className="h-4 w-4" stroke={2.25} />
               </span>
@@ -216,33 +333,31 @@ export default function Home() {
             <button
               type="button"
               onClick={() => openTab("/dashboards", { title: "แดชบอร์ดของฉัน" })}
-              className="group relative aspect-[626/203] rounded-3xl bg-[#f9b61a] text-left transition duration-300 hover:brightness-[1.03]"
+              className="group relative aspect-[626/203] rounded-3xl text-left transition duration-300 hover:brightness-[1.03]"
             >
               {/* AI aura — same `.magic-ring` conic-gradient ring used by
                   the sibling blue card. Fades in on hover so both feature
                   tiles get the same affordance. */}
               <span
                 aria-hidden
-                className="magic-ring pointer-events-none absolute -inset-[3px] rounded-[28px] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                className="magic-ring pointer-events-none absolute -inset-[3px] hidden rounded-[28px] group-hover:block"
               />
 
-              {/* Clipped layers — yellow bg fill, white diagonal, and the
-                  background spike all sit inside this overflow-hidden span
-                  so they stay within the rounded card frame. */}
-              <span className="absolute inset-0 overflow-hidden rounded-3xl">
-                {/* White diagonal — upper-LEFT triangle, matches Figma
-                    1053:2213 exactly: vertices (0,0), (454,0), (0,285),
-                    SVG positioned left:0 w:454 (≈72% of 626 card width).
-                    Text + AI badge sit on this white region; the right
-                    portion stays yellow where the spike + doctor live. */}
-                <svg
+              {/* Clipped layers — yellow base fill, white diagonal, and
+                  the background spike all sit inside this overflow-hidden
+                  span. The brand color lives on this span (not the
+                  button) so the rounded corner has a single source — no
+                  thin yellow sliver showing where two rounded layers
+                  misalign. */}
+              <span className="absolute inset-0 overflow-hidden rounded-3xl bg-[#f9b61a]">
+                {/* White diagonal — upper-left triangle (matches Figma
+                    1053:2213). Implemented with `clip-path: polygon(...)`
+                    on a white div instead of inline SVG. */}
+                <span
                   aria-hidden
-                  viewBox="0 0 454 285"
-                  preserveAspectRatio="none"
-                  className="pointer-events-none absolute inset-y-0 left-0 h-full w-[72%]"
-                >
-                  <path d="M0 0H454L0 285V0Z" fill="#ffffff" />
-                </svg>
+                  className="pointer-events-none absolute inset-0 bg-[var(--theme-surface)]"
+                  style={{ clipPath: "polygon(0 0, 72% 0, 0 100%)" }}
+                />
 
                 {/* Orange spike — sits in the upper-right area at ~55%
                     from left per Figma 1074:1355 (left:343 top:-31
@@ -276,10 +391,10 @@ export default function Home() {
               </span>
 
               <div className="absolute inset-0 flex flex-col gap-2 p-6">
-                <span className="inline-flex w-fit items-center rounded-lg bg-[#1f1f1f]/10 px-3 py-1 text-[12px] font-bold text-[#1f1f1f]">
+                <span className="inline-flex w-fit items-center rounded-lg bg-[var(--theme-neutral)]/10 px-3 py-1 text-[12px] font-bold text-[var(--theme-neutral)]">
                   AI
                 </span>
-                <p className="text-[20px] font-bold leading-[1.4] text-[#1f1f1f]">
+                <p className="text-[20px] font-bold leading-[1.4] text-[var(--theme-neutral)]">
                   สร้างการติดตามข้อมูล
                   <br />
                   ตามที่คุณสนใจ
@@ -290,7 +405,7 @@ export default function Home() {
                   card, tinted to read against the yellow surface. */}
               <span
                 aria-hidden
-                className="pointer-events-none absolute right-4 top-4 flex h-8 w-8 -translate-y-1 items-center justify-center rounded-full bg-white text-[#1f1f1f] opacity-0 shadow-sm transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"
+                className="pointer-events-none absolute right-4 top-4 flex h-8 w-8 -translate-y-1 items-center justify-center rounded-full bg-[var(--theme-surface)] text-[var(--theme-neutral)] opacity-0 shadow-sm transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"
               >
                 <IconArrowRight className="h-4 w-4" stroke={2.25} />
               </span>

@@ -64,7 +64,7 @@ button:disabled,
   cursor: not-allowed;
 }
 
-/* Force Google Sans on everything (overrides Radix Theme font) */
+/* Force IBM Plex Sans Thai Looped on everything (overrides Radix Theme font) */
 *,
 .radix-themes {
   font-family: "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif !important;

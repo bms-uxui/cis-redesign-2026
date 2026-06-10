@@ -1582,7 +1582,7 @@ function PatientIdCardSvg() {
         <text
           x="140"
           y="100"
-          fontFamily="Google Sans, sans-serif"
+          fontFamily="Google Sans, Noto Sans Thai Looped, sans-serif"
           fontSize="10"
           fontWeight="400"
           fill="#1f1f1f"
