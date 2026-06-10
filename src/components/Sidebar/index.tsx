@@ -53,6 +53,31 @@ export default function Sidebar() {
   const isRouteActive = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
 
+  // Keep the highlighted panel item in sync with the current route so landing
+  // on a page (via URL, tab switch, or AI link) lights up its menu item — not
+  // only direct clicks. Longest matching navigateTo wins, so /opd/register
+  // highlights "ทะเบียนผู้ป่วย" rather than "OPD Card" (/opd).
+  useEffect(() => {
+    let bestKey: string | null = null;
+    let bestLen = -1;
+    for (const rail of RAIL_LIST) {
+      if (!rail.panel) continue;
+      for (const group of rail.panel.groups) {
+        for (const item of group.items) {
+          const nav = item.navigateTo;
+          if (!nav) continue;
+          const matches =
+            location.pathname === nav || location.pathname.startsWith(nav + "/");
+          if (matches && nav.length > bestLen) {
+            bestKey = item.key;
+            bestLen = nav.length;
+          }
+        }
+      }
+    }
+    if (bestKey) setActiveChild(bestKey);
+  }, [location.pathname, setActiveChild]);
+
   // Edge-peek state — local, transient. Tracks whether the user is
   // hovering the left-edge trigger while railHidden is true.
   const [edgePeek, setEdgePeek] = useState(false);
