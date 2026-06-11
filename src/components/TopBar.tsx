@@ -1,5 +1,6 @@
 import {
   IconHome,
+  IconCalendarTime,
   IconPlus,
   IconX,
   IconSettings,
@@ -73,21 +74,22 @@ export default function TopBar() {
   const TAB_W = 150;
 
   const { visibleTabs, overflowTabs } = useMemo(() => {
-    const home = tabs.find((t) => t.iconKind === "home");
-    const others = tabs.filter((t) => t.iconKind !== "home");
+    // Pinned icon-only tabs (Home + Schedule) always lead the strip.
+    const pinned = tabs.filter((t) => t.iconKind === "home" || t.iconKind === "schedule");
+    const others = tabs.filter((t) => !t.iconKind);
     // Before measurement, show everything (avoids initial flash of overflow).
     if (stripWidth === 0) {
       return {
-        visibleTabs: [home, ...others].filter(Boolean) as Tab[],
+        visibleTabs: [...pinned, ...others],
         overflowTabs: [] as Tab[],
       };
     }
 
-    const reserve = (home ? HOME_W : 0) + PLUS_W;
+    const reserve = pinned.length * HOME_W + PLUS_W;
     const fitsAll = Math.floor((stripWidth - reserve) / TAB_W);
     if (others.length <= fitsAll) {
       return {
-        visibleTabs: [home, ...others].filter(Boolean) as Tab[],
+        visibleTabs: [...pinned, ...others],
         overflowTabs: [] as Tab[],
       };
     }
@@ -116,7 +118,7 @@ export default function TopBar() {
     }
 
     return {
-      visibleTabs: [home, ...visible].filter(Boolean) as Tab[],
+      visibleTabs: [...pinned, ...visible],
       overflowTabs: overflow,
     };
   }, [tabs, stripWidth, activeId]);
@@ -127,7 +129,7 @@ export default function TopBar() {
         // Floating card aligned with the sidebar's top edge — slides left
         // when the sidebar collapses, or all the way to the page edge when
         // the sidebar is fully hidden.
-        "fixed top-4 right-4 h-16 overflow-hidden rounded-[16px] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] transition-[left] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+        "fixed top-4 right-4 h-12 overflow-hidden rounded-[16px] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] transition-[left] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
       ].join(" ")}
       style={{ left: `${leftPx}px` }}
     >
@@ -414,21 +416,22 @@ interface TabChipProps {
 }
 
 function TabChip({ tab, active, onActivate, onClose }: TabChipProps) {
-  if (tab.iconKind === "home") {
-    // Square icon-only tab for Home.
+  if (tab.iconKind === "home" || tab.iconKind === "schedule") {
+    const label = tab.iconKind === "home" ? "หน้าหลัก" : "ตารางเวร";
+    const Icon = tab.iconKind === "home" ? IconHome : IconCalendarTime;
     return (
-      <Tooltip content="หน้าหลัก" placement="bottom" delay={200} closeDelay={0} classNames={TOOLTIP_CLASSES}>
+      <Tooltip content={label} placement="bottom" delay={200} closeDelay={0} classNames={TOOLTIP_CLASSES}>
         <button
           type="button"
           onClick={onActivate}
-          aria-label="หน้าหลัก"
+          aria-label={label}
           aria-current={active ? "page" : undefined}
           className={[
             "flex h-full w-16 cursor-pointer items-center justify-center border-r border-[var(--theme-neutral)]/15 transition",
             active ? "bg-[var(--theme-surface)] text-[var(--theme-primary)]" : "bg-black/[0.02] text-[var(--theme-neutral)] hover:bg-[var(--theme-primary-soft)]",
           ].join(" ")}
         >
-          <IconHome className="h-5 w-5" stroke={active ? 2 : 1.75} />
+          <Icon className="h-5 w-5" stroke={active ? 2 : 1.75} />
         </button>
       </Tooltip>
     );

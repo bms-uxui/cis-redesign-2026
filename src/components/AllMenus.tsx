@@ -94,11 +94,11 @@ export default function AllMenus() {
   return (
     <div className="min-h-screen w-full bg-[var(--theme-base)]">
       {/* Reserve space for the floating TopBar card (top-4 + h-16 = 80px) */}
-      <div className="h-20 shrink-0" aria-hidden />
+      <div className="h-16 shrink-0" aria-hidden />
 
       <div
         className={[
-          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
+          "flex h-[calc(100vh-6rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
           railHidden ? "ml-4" : "ml-[296px]",
         ].join(" ")}
       >

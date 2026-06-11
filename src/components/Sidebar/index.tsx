@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router";
-import { AnimatePresence, motion } from "framer-motion";
 import { Tooltip } from "@heroui/react";
 import {
   IconAdjustmentsHorizontal,
-  IconHome,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconSearch,
@@ -47,6 +45,7 @@ export default function Sidebar() {
     hiddenRails,
     panelOrders,
     hiddenPanelItems,
+    favoriteRails,
   } = useSidebar();
 
   // Match the active route prefix (e.g. /opd matches both /opd and /opd/123).
@@ -124,17 +123,23 @@ export default function Sidebar() {
     return ordered.filter((r) => !hiddenRails.has(r.key));
   }, [railOrder, hiddenRails]);
 
-  // Categorize: rails with panels become sections, rails with navigateTo
-  // become quick-action chips, the rest go in "อื่น ๆ".
-  const quickActions = visibleRails.filter((r) => r.navigateTo && !r.panel);
+  // Categorize: rails with panels become sections, the rest go in "อื่น ๆ".
   const sections = visibleRails.filter((r) => r.panel);
   const otherRails = visibleRails.filter((r) => !r.panel && !r.navigateTo);
 
-  const handleQuickClick = (entry: RailEntry) => {
-    if (entry.navigateTo) {
-      openTab(entry.navigateTo, { title: entry.label });
-      setPinnedRail("");
+  // Favorited rails — resolved in the user's favorite order and filtered
+  // to ones that exist + are not hidden.
+  const visibleByKey = new Map(visibleRails.map((r) => [r.key, r] as const));
+  const favorites = favoriteRails
+    .map((k) => visibleByKey.get(k))
+    .filter((r): r is RailEntry => !!r);
+
+  const handleFavoriteClick = (rail: RailEntry) => {
+    if (rail.navigateTo) {
+      openTab(rail.navigateTo, { title: rail.label });
+      return;
     }
+    setPinnedRail(rail.key);
   };
 
   const handleItemClick = (railKey: string, item: PanelItem) => {
@@ -207,39 +212,38 @@ export default function Sidebar() {
           </Tooltip>
         </header>
 
-        {/* ── Quick-action row ────────────────────────────────────── */}
-        {/* The button matching the current route gets a pill background +
-            inline label (Notion treatment); the rest stay as icon-only
-            chips with tooltips. */}
-        <nav className="flex flex-wrap items-center gap-1 px-3 pb-3" aria-label="ทางลัด">
-          <QuickButton
-            icon={<IconHome className="h-4 w-4" stroke={1.75} />}
-            label="หน้าหลัก"
-            active={isRouteActive("/")}
-            onClick={() => {
-              openTab("/", { title: "หน้าหลัก" });
-              setPinnedRail("");
-            }}
-          />
-          {quickActions.map((entry) => (
-            <QuickButton
-              key={entry.key}
-              icon={<RailIcon entry={entry} className="h-4 w-4" />}
-              label={entry.label}
-              active={!!entry.navigateTo && isRouteActive(entry.navigateTo)}
-              onClick={() => handleQuickClick(entry)}
-            />
-          ))}
-          <QuickButton
-            icon={<IconSearch className="h-4 w-4" stroke={1.75} />}
-            label="ค้นหา"
-            active={false}
+        {/* ── Search bar ─────────────────────────────────────────── */}
+        {/* Full-width affordance — looks like an input but is a button that
+            opens the command palette. Keeps the keyboard hint visible so
+            power users still know ⌘/ works. */}
+        <div className="px-3 pb-3">
+          <button
+            type="button"
             onClick={openPalette}
-          />
-        </nav>
+            className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-[var(--theme-radius-field)] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-3 text-left text-[12.5px] text-[var(--theme-neutral)]/55 transition hover:border-[var(--theme-primary)]/40 hover:bg-[var(--theme-primary-soft)]/40 hover:text-[var(--theme-neutral)]/75"
+          >
+            <IconSearch className="h-4 w-4 shrink-0" stroke={1.75} />
+            <span className="flex-1 truncate">ค้นหาเมนู, ผู้ป่วย…</span>
+            <kbd className="hidden shrink-0 items-center gap-0.5 rounded border border-[var(--theme-neutral)]/15 bg-[var(--theme-base)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--theme-neutral)]/55 md:inline-flex">
+              ⌘ /
+            </kbd>
+          </button>
+        </div>
 
         {/* ── Sections (scroll area) ─────────────────────────────── */}
         <div className="flex-1 overflow-y-auto px-2 pb-2">
+          {favorites.length > 0 && (
+            <Section title="เมนูโปรด">
+              {favorites.map((rail) => (
+                <RailRow
+                  key={`fav-${rail.key}`}
+                  entry={rail}
+                  onClick={() => handleFavoriteClick(rail)}
+                />
+              ))}
+            </Section>
+          )}
+
           {sections.map((rail) => {
             if (!rail.panel) return null;
             // Apply per-panel customization (order + hide).
@@ -322,7 +326,7 @@ function Section({
 }) {
   return (
     <section className="mb-3">
-      <p className="px-2 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-[var(--theme-neutral)]/45">
+      <p className="px-2 pb-1 pt-2 text-[11px] font-medium text-[var(--theme-neutral)]/45">
         {title}
       </p>
       <div className="flex flex-col gap-0.5">{children}</div>
@@ -377,88 +381,6 @@ function RailRow({
       </span>
       <span className="truncate">{entry.label}</span>
     </button>
-  );
-}
-
-const QUICK_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
-
-/** Cache `<canvas>` so we don't allocate one per measurement. */
-let measureCtx: CanvasRenderingContext2D | null = null;
-function measureLabelWidth(label: string): number {
-  if (typeof document === "undefined") return 0;
-  if (!measureCtx) {
-    const canvas = document.createElement("canvas");
-    measureCtx = canvas.getContext("2d");
-  }
-  if (!measureCtx) return 0;
-  measureCtx.font =
-    '500 14px "Google Sans", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif';
-  return Math.ceil(measureCtx.measureText(label).width);
-}
-
-/** Quick-action chip — animates between two pixel widths: 32px when
- *  inactive (icon square), grows to the label's measured width when
- *  selected. Width is measured via an offscreen canvas so there's no
- *  hidden DOM node that could leak through layout. */
-function QuickButton({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  // 32 (icon square) + 6 (gap) + measured label + 12 (pr-3)
-  const targetWidth = active ? 32 + 6 + measureLabelWidth(label) + 12 : 32;
-
-  const button = (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      aria-current={active ? "page" : undefined}
-      initial={false}
-      animate={{ width: targetWidth }}
-      transition={{ duration: 0.32, ease: QUICK_EASE }}
-      className={[
-        "flex h-8 shrink-0 items-center overflow-hidden rounded-full text-[length:var(--theme-text-sm)] font-medium",
-        active
-          ? "justify-start gap-1.5 bg-[var(--theme-neutral)]/10 pl-2 pr-3 text-[var(--theme-neutral)]"
-          : "justify-center text-[var(--theme-neutral)]/65 hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-neutral)]",
-      ].join(" ")}
-    >
-      <span className="flex shrink-0 items-center">{icon}</span>
-      <AnimatePresence initial={false}>
-        {active && (
-          <motion.span
-            key="label"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.22, ease: QUICK_EASE }}
-            className="whitespace-nowrap"
-          >
-            {label}
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </motion.button>
-  );
-
-  if (active) return button;
-  return (
-    <Tooltip
-      content={label}
-      placement="bottom"
-      delay={120}
-      closeDelay={0}
-      classNames={TOOLTIP_CLASSES}
-    >
-      {button}
-    </Tooltip>
   );
 }
 

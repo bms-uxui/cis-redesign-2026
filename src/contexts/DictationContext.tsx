@@ -29,6 +29,8 @@ export interface DictationContextValue {
   status: string;
   segments: DictationSegment[];
   isProcessing: boolean;
+  /** Number of ASR partial requests currently waiting on the server. */
+  asrInFlight: number;
   isRecording: boolean;
   source: "mic" | "tab";
   // modal lifecycle
@@ -48,6 +50,12 @@ export interface DictationContextValue {
   handleSuggestIcd: () => Promise<void>;
   handleSummaryAction: (event: A2UIActionEvent) => void;
   handleClose: () => void;
+  /** Persist a manually-typed/pasted transcript as the active session. */
+  saveManualTranscript: (text: string) => void;
+  /** Live audio RMS (0..1) — updated per audio buffer while recording.
+   *  Ref-based so the UI can sample it from `requestAnimationFrame`
+   *  without forcing React re-renders. Reads 0 when idle. */
+  levelRef: React.RefObject<number>;
 }
 
 const DictationCtx = createContext<DictationContextValue | null>(null);
@@ -217,7 +225,7 @@ export function DictationProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { status, segments, isProcessing, start, stop } = useDictation({
+  const { status, segments, isProcessing, asrInFlight, start, stop, levelRef } = useDictation({
     onResult: async (text) => {
       if (!text.trim()) {
         toast.info("ไม่พบเสียง", "ลองพูดอีกครั้ง");
@@ -421,10 +429,31 @@ export function DictationProvider({ children }: { children: ReactNode }) {
     clearPersistedSession();
   }, []);
 
+  // Save a manually-typed (or pasted) transcript as the frozen session.
+  // Wraps the text in a single `DictationSegment` so downstream consumers
+  // (summarize, normalize, persistence) behave identically to a real
+  // recording. Marks the session reviewing so the UI treats it as a
+  // finished capture instead of an empty pre-recording state.
+  const saveManualTranscript = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      setFrozenSegments([]);
+      setReviewing(false);
+      lastNormalizedKeyRef.current = "";
+      clearPersistedSession();
+      return;
+    }
+    setFrozenSegments([{ id: `manual-${Date.now()}`, speaker: 1, text: trimmed }]);
+    setReviewing(true);
+    // Force re-normalization on next pass by clearing the dedupe key.
+    lastNormalizedKeyRef.current = "";
+  }, []);
+
   const value: DictationContextValue = {
     status,
     segments: effectiveSegments,
     isProcessing,
+    asrInFlight,
     isRecording,
     source: sourceRef.current,
     minimized,
@@ -442,6 +471,8 @@ export function DictationProvider({ children }: { children: ReactNode }) {
     handleSuggestIcd,
     handleSummaryAction,
     handleClose,
+    saveManualTranscript,
+    levelRef,
   };
 
   return <DictationCtx.Provider value={value}>{children}</DictationCtx.Provider>;

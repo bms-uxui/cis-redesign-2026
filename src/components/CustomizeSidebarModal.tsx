@@ -5,6 +5,8 @@ import {
   IconGripVertical,
   IconX,
   IconRefresh,
+  IconStar,
+  IconStarFilled,
 } from "@tabler/icons-react";
 import { Button } from "@heroui/react";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -32,6 +34,9 @@ export default function CustomizeSidebarModal() {
     hiddenPanelItems,
     setPanelOrder,
     togglePanelItemHidden,
+    favoriteRails,
+    toggleFavoriteRail,
+    setFavoriteRails,
   } = useSidebar();
 
 
@@ -70,7 +75,52 @@ export default function CustomizeSidebarModal() {
   }, [customizeOpen, railOrder, hiddenRails]);
 
   const visibleCount = workingList.filter((r) => !hiddenRails.has(r.key)).length;
-  const workingKeys = useMemo(() => workingList.map((r) => r.key), [workingList]);
+
+  // Split into the same 3 buckets the sidebar uses, so this modal mirrors
+  // the layout the user sees on the left. Favorites bubble to the top (in
+  // their starring order); rails with a panel become "หมวดหมู่"; rails
+  // without a panel fall into "อื่น ๆ".
+  const { favorites, withPanel, withoutPanel } = useMemo(() => {
+    const fav: RailEntry[] = [];
+    const wp: RailEntry[] = [];
+    const wop: RailEntry[] = [];
+    for (const r of workingList) {
+      if (favoriteRails.includes(r.key)) fav.push(r);
+      else if (r.panel) wp.push(r);
+      else wop.push(r);
+    }
+    fav.sort(
+      (a, b) => favoriteRails.indexOf(a.key) - favoriteRails.indexOf(b.key),
+    );
+    return { favorites: fav, withPanel: wp, withoutPanel: wop };
+  }, [workingList, favoriteRails]);
+
+  // Reorder helpers — each group has its own Reorder.Group, but we still
+  // store a single combined railOrder so the sidebar reads it cleanly.
+  const reorderFavorites = (newOrder: string[]) => {
+    // Favorites group is rendered in favoriteRails order — update that
+    // list directly so the change is visible.
+    setFavoriteRails(newOrder);
+    setRailOrder([
+      ...newOrder,
+      ...withPanel.map((r) => r.key),
+      ...withoutPanel.map((r) => r.key),
+    ]);
+  };
+  const reorderWithPanel = (newOrder: string[]) => {
+    setRailOrder([
+      ...favorites.map((r) => r.key),
+      ...newOrder,
+      ...withoutPanel.map((r) => r.key),
+    ]);
+  };
+  const reorderWithoutPanel = (newOrder: string[]) => {
+    setRailOrder([
+      ...favorites.map((r) => r.key),
+      ...withPanel.map((r) => r.key),
+      ...newOrder,
+    ]);
+  };
 
   // Multi-expand: any number of rails can be open at once. Reset on close.
   const toast = useToast();
@@ -145,38 +195,112 @@ export default function CustomizeSidebarModal() {
               </button>
             </header>
 
-            {/* List */}
+            {/* List — grouped to mirror the live sidebar's structure:
+                "เมนูโปรด" first, then categories (rails with panels),
+                then "อื่น ๆ" for plain rail items. Each group has its own
+                Reorder.Group so drag stays scoped to a single category. */}
             <div className="flex-1 overflow-y-auto px-3 py-3">
-              <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--theme-neutral)]/45">
-                เมนูในแถบเครื่องมือ
-              </p>
-              <Reorder.Group
-                axis="y"
-                values={workingKeys}
-                onReorder={setRailOrder}
-                className="flex flex-col"
-              >
-                {workingList.map((entry) => (
-                  <RailRow
-                    key={entry.key}
-                    rail={entry}
-                    isHidden={hiddenRails.has(entry.key)}
-                    onToggleHidden={() => toggleRailHidden(entry.key)}
-                    expanded={expandedRails.has(entry.key)}
-                    onToggleExpand={() => toggleExpand(entry.key)}
-                    panelOrder={panelOrders[entry.key] ?? []}
-                    hiddenPanelSet={
-                      hiddenPanelItems[entry.key] ?? new Set<string>()
-                    }
-                    onPanelReorder={(newOrder) =>
-                      setPanelOrder(entry.key, newOrder)
-                    }
-                    onTogglePanelItemHidden={(itemKey) =>
-                      togglePanelItemHidden(entry.key, itemKey)
-                    }
-                  />
-                ))}
-              </Reorder.Group>
+              {favorites.length > 0 && (
+                <GroupBlock title="เมนูโปรด" hint="ปักหมุดบนสุด · แสดงบนหน้าหลัก">
+                  <Reorder.Group
+                    axis="y"
+                    values={favorites.map((r) => r.key)}
+                    onReorder={reorderFavorites}
+                    className="flex flex-col"
+                  >
+                    {favorites.map((entry) => (
+                      <RailRow
+                        key={entry.key}
+                        rail={entry}
+                        isHidden={hiddenRails.has(entry.key)}
+                        onToggleHidden={() => toggleRailHidden(entry.key)}
+                        expanded={expandedRails.has(entry.key)}
+                        onToggleExpand={() => toggleExpand(entry.key)}
+                        isFavorite
+                        onToggleFavorite={() => toggleFavoriteRail(entry.key)}
+                        panelOrder={panelOrders[entry.key] ?? []}
+                        hiddenPanelSet={
+                          hiddenPanelItems[entry.key] ?? new Set<string>()
+                        }
+                        onPanelReorder={(newOrder) =>
+                          setPanelOrder(entry.key, newOrder)
+                        }
+                        onTogglePanelItemHidden={(itemKey) =>
+                          togglePanelItemHidden(entry.key, itemKey)
+                        }
+                      />
+                    ))}
+                  </Reorder.Group>
+                </GroupBlock>
+              )}
+
+              {withPanel.length > 0 && (
+                <GroupBlock title="หมวดหมู่" hint="เมนูที่มีรายการย่อย">
+                  <Reorder.Group
+                    axis="y"
+                    values={withPanel.map((r) => r.key)}
+                    onReorder={reorderWithPanel}
+                    className="flex flex-col"
+                  >
+                    {withPanel.map((entry) => (
+                      <RailRow
+                        key={entry.key}
+                        rail={entry}
+                        isHidden={hiddenRails.has(entry.key)}
+                        onToggleHidden={() => toggleRailHidden(entry.key)}
+                        expanded={expandedRails.has(entry.key)}
+                        onToggleExpand={() => toggleExpand(entry.key)}
+                        isFavorite={favoriteRails.includes(entry.key)}
+                        onToggleFavorite={() => toggleFavoriteRail(entry.key)}
+                        panelOrder={panelOrders[entry.key] ?? []}
+                        hiddenPanelSet={
+                          hiddenPanelItems[entry.key] ?? new Set<string>()
+                        }
+                        onPanelReorder={(newOrder) =>
+                          setPanelOrder(entry.key, newOrder)
+                        }
+                        onTogglePanelItemHidden={(itemKey) =>
+                          togglePanelItemHidden(entry.key, itemKey)
+                        }
+                      />
+                    ))}
+                  </Reorder.Group>
+                </GroupBlock>
+              )}
+
+              {withoutPanel.length > 0 && (
+                <GroupBlock title="อื่น ๆ" hint="ทางลัด · ไม่มีเมนูย่อย">
+                  <Reorder.Group
+                    axis="y"
+                    values={withoutPanel.map((r) => r.key)}
+                    onReorder={reorderWithoutPanel}
+                    className="flex flex-col"
+                  >
+                    {withoutPanel.map((entry) => (
+                      <RailRow
+                        key={entry.key}
+                        rail={entry}
+                        isHidden={hiddenRails.has(entry.key)}
+                        onToggleHidden={() => toggleRailHidden(entry.key)}
+                        expanded={expandedRails.has(entry.key)}
+                        onToggleExpand={() => toggleExpand(entry.key)}
+                        isFavorite={favoriteRails.includes(entry.key)}
+                        onToggleFavorite={() => toggleFavoriteRail(entry.key)}
+                        panelOrder={panelOrders[entry.key] ?? []}
+                        hiddenPanelSet={
+                          hiddenPanelItems[entry.key] ?? new Set<string>()
+                        }
+                        onPanelReorder={(newOrder) =>
+                          setPanelOrder(entry.key, newOrder)
+                        }
+                        onTogglePanelItemHidden={(itemKey) =>
+                          togglePanelItemHidden(entry.key, itemKey)
+                        }
+                      />
+                    ))}
+                  </Reorder.Group>
+                </GroupBlock>
+              )}
             </div>
 
             {/* Footer */}
@@ -225,12 +349,40 @@ export default function CustomizeSidebarModal() {
   );
 }
 
+function GroupBlock({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-4 last:mb-0">
+      <div className="flex items-baseline justify-between px-3 pb-1.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--theme-neutral)]/55">
+          {title}
+        </p>
+        {hint && (
+          <span className="text-[10px] text-[var(--theme-neutral)]/40">
+            {hint}
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 interface RailRowProps {
   rail: RailEntry;
   isHidden: boolean;
   onToggleHidden: () => void;
   expanded: boolean;
   onToggleExpand: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
   panelOrder: string[];
   hiddenPanelSet: Set<string>;
   onPanelReorder: (newOrder: string[]) => void;
@@ -249,6 +401,8 @@ function RailRow({
   onToggleHidden,
   expanded,
   onToggleExpand,
+  isFavorite,
+  onToggleFavorite,
   panelOrder,
   hiddenPanelSet,
   onPanelReorder,
@@ -321,36 +475,61 @@ function RailRow({
             <rail.Icon className="h-5 w-5" stroke={1.6} />
           ) : null}
         </span>
-        <span
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span
+            className={[
+              "min-w-0 truncate text-[length:var(--theme-text-sm)] font-medium",
+              isHidden
+                ? "text-[var(--theme-neutral)]/40 line-through"
+                : "text-[var(--theme-neutral)]",
+            ].join(" ")}
+          >
+            {rail.label}
+          </span>
+          {hasPanel && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={expanded ? "ยุบเมนูย่อย" : "ขยายเมนูย่อย"}
+              aria-expanded={expanded}
+              className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-[var(--theme-neutral)]/40 transition-colors hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-neutral)]"
+            >
+              <motion.span
+                animate={{ rotate: expanded ? 0 : -90 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <IconChevronDown className="h-4 w-4" stroke={1.75} />
+              </motion.span>
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite();
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          aria-label={isFavorite ? "เอาออกจากเมนูโปรด" : "เพิ่มในเมนูโปรด"}
+          aria-pressed={isFavorite}
+          title="เมนูโปรด — ปักหมุดบนสุด sidebar + แสดงบนหน้าหลัก"
           className={[
-            "flex-1 truncate text-[length:var(--theme-text-sm)] font-medium",
-            isHidden
-              ? "text-[var(--theme-neutral)]/40 line-through"
-              : "text-[var(--theme-neutral)]",
+            "flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded transition-colors",
+            isFavorite
+              ? "text-amber-500 hover:bg-amber-500/10"
+              : "text-[var(--theme-neutral)]/30 hover:bg-[var(--theme-primary-soft)] hover:text-amber-500",
           ].join(" ")}
         >
-          {rail.label}
-        </span>
-        {hasPanel && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleExpand();
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            aria-label={expanded ? "ยุบเมนูย่อย" : "ขยายเมนูย่อย"}
-            aria-expanded={expanded}
-            className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-[var(--theme-neutral)]/40 transition-colors hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-neutral)]"
-          >
-            <motion.span
-              animate={{ rotate: expanded ? 0 : -90 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <IconChevronDown className="h-4 w-4" stroke={1.75} />
-            </motion.span>
-          </button>
-        )}
+          {isFavorite ? (
+            <IconStarFilled className="h-4 w-4" />
+          ) : (
+            <IconStar className="h-4 w-4" stroke={1.75} />
+          )}
+        </button>
       </div>
 
       {/* Accordion sub-items — only rendered (and only mounted) while the

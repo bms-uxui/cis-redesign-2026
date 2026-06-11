@@ -165,7 +165,13 @@ const PHARMACY_PANEL: PanelDef = {
 export const RAIL_GROUPS: RailGroup[] = [
   {
     items: [
-      { key: "schedule", Icon: IconCalendarTime, label: "ตารางออกตรวจ", navigateTo: "/schedule" },
+      {
+        key: "schedule",
+        Icon: IconCalendarTime,
+        label: "ตารางออกตรวจ",
+        navigateTo: "/schedule",
+        aliases: ["ออกตรวจ", "ตรวจ", "calendar", "schedule", "นัด", "ตารางตรวจ", "หมอ", "doctor"],
+      },
       { key: "automation", Icon: IconBolt, label: "Automation", navigateTo: "/automation" },
       { key: "opd", iconSrc: iconFileHeart, label: "ระเบียนผู้ป่วยนอก", panel: OPD_PANEL },
       { key: "ipd", Icon: IconBed, label: "ระเบียนผู้ป่วยใน", panel: IPD_PANEL },

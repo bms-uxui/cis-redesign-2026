@@ -70,6 +70,12 @@ interface SidebarContextValue {
   customizeOpen: boolean;
   openCustomize: () => void;
   closeCustomize: () => void;
+
+  /** Favorited rail keys — pinned to the top of the sidebar and shown on
+   *  the Home page as quick-access tiles. Order preserved (insertion order). */
+  favoriteRails: string[];
+  toggleFavoriteRail: (key: string) => void;
+  setFavoriteRails: (keys: string[]) => void;
 }
 
 const RAIL_WIDTH = 74;
@@ -80,7 +86,7 @@ const SIDEBAR_WIDTH = 280;
 
 const RECENT_KEY = "ehp-cis.recent-menus.v1";
 const RECENT_MAX = 8;
-const CUSTOMIZE_KEY = "ehp-cis.sidebar-customize.v1";
+const CUSTOMIZE_KEY = "ehp-cis.sidebar-customize.v2";
 const HIDDEN_KEY = "ehp-cis.sidebar-hidden.v1";
 
 /**
@@ -88,13 +94,14 @@ const HIDDEN_KEY = "ehp-cis.sidebar-hidden.v1";
  * them back on via "จัดการเมนู" / customize modal. Only applied when there
  * is no saved customization yet — existing users keep their preferences.
  */
-const DEFAULT_HIDDEN_RAILS = ["automation", "schedule"];
+const DEFAULT_HIDDEN_RAILS = ["automation"];
 
 interface PersistedCustomize {
   order: string[];
   hidden: string[];
   panelOrders?: Record<string, string[]>;
   hiddenPanelItems?: Record<string, string[]>;
+  favorites?: string[];
 }
 
 const SidebarCtx = createContext<SidebarContextValue | null>(null);
@@ -128,6 +135,7 @@ function loadCustomize(): PersistedCustomize | null {
         parsed.hiddenPanelItems && typeof parsed.hiddenPanelItems === "object"
           ? parsed.hiddenPanelItems
           : {},
+      favorites: Array.isArray(parsed.favorites) ? parsed.favorites : [],
     };
   } catch {
     return null;
@@ -173,6 +181,9 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
     for (const [k, v] of Object.entries(raw)) out[k] = new Set(v);
     return out;
   });
+  const [favoriteRails, setFavoriteRailsState] = useState<string[]>(
+    () => loadCustomize()?.favorites ?? [],
+  );
 
   const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);
 
@@ -245,12 +256,13 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
         hidden: Array.from(hiddenRails),
         panelOrders,
         hiddenPanelItems: hiddenPanelSerialized,
+        favorites: favoriteRails,
       };
       window.localStorage.setItem(CUSTOMIZE_KEY, JSON.stringify(payload));
     } catch {
       /* ignore */
     }
-  }, [railOrder, hiddenRails, panelOrders, hiddenPanelItems]);
+  }, [railOrder, hiddenRails, panelOrders, hiddenPanelItems, favoriteRails]);
 
   const setRailOrder = useCallback((order: string[]) => {
     setRailOrderState(order);
@@ -270,6 +282,16 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
     setHiddenRailsState(new Set());
     setPanelOrdersState({});
     setHiddenPanelItemsState({});
+    setFavoriteRailsState([]);
+  }, []);
+
+  const toggleFavoriteRail = useCallback((key: string) => {
+    setFavoriteRailsState((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  }, []);
+  const setFavoriteRails = useCallback((keys: string[]) => {
+    setFavoriteRailsState(keys);
   }, []);
 
   const setPanelOrder = useCallback((railKey: string, order: string[]) => {
@@ -324,6 +346,9 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
       customizeOpen,
       openCustomize,
       closeCustomize,
+      favoriteRails,
+      toggleFavoriteRail,
+      setFavoriteRails,
     };
   }, [
     collapsed,
@@ -352,6 +377,9 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
     customizeOpen,
     openCustomize,
     closeCustomize,
+    favoriteRails,
+    toggleFavoriteRail,
+    setFavoriteRails,
   ]);
 
   return <SidebarCtx.Provider value={value}>{children}</SidebarCtx.Provider>;

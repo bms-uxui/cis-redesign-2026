@@ -293,7 +293,7 @@ export default function PatientOPDCard() {
       saveProfile(hn, form.values, form.flags, { rights, drugAllergies, lists });
       toast.success("บันทึกสำเร็จ", `เพิ่มผู้ป่วย HN ${hn}`);
       setHn(hn);
-      navigate(`/patient/${hn}`, { replace: true });
+      navigate(`/opd/${hn}`, { replace: true });
     } else {
       updatePatient(hn, {
         prefix: v.prefix,

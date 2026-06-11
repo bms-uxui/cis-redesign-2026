@@ -15,7 +15,7 @@ export interface Tab {
   /** false for the pinned Home tab — it can't be closed. */
   closable: boolean;
   /** Optional icon hint for the tab strip; "home" gets a special render. */
-  iconKind?: "home";
+  iconKind?: "home" | "schedule";
 }
 
 interface TabsContextValue {
@@ -33,6 +33,7 @@ interface TabsContextValue {
 const TabsContext = createContext<TabsContextValue | null>(null);
 
 const HOME_TAB_ID = "home";
+const SCHEDULE_TAB_ID = "schedule";
 
 const HOME_TAB: Tab = {
   id: HOME_TAB_ID,
@@ -42,10 +43,20 @@ const HOME_TAB: Tab = {
   iconKind: "home",
 };
 
+// Doctor schedule is pinned alongside Home — always one click away.
+const SCHEDULE_TAB: Tab = {
+  id: SCHEDULE_TAB_ID,
+  title: "ตารางเวร",
+  path: "/schedule",
+  closable: false,
+  iconKind: "schedule",
+};
+
 /** Maps a path to a default tab title. Components can override via openTab. */
 function titleForPath(path: string): string {
   const p = path.split("?")[0];
   if (p === "/") return "หน้าหลัก";
+  if (p === "/schedule") return "ตารางเวร";
   if (p === "/soap") return "บันทึก SOAP";
   if (p === "/menus") return "เมนูทั้งหมด";
   if (p === "/settings") return "การตั้งค่า";
@@ -63,7 +74,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navType = useNavigationType();
 
-  const [tabs, setTabs] = useState<Tab[]>([HOME_TAB]);
+  const [tabs, setTabs] = useState<Tab[]>([HOME_TAB, SCHEDULE_TAB]);
   const [activeId, setActiveId] = useState<string>(HOME_TAB_ID);
 
   // Track the active tab in a ref so the URL-sync effect always sees the

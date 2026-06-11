@@ -18,6 +18,8 @@ export interface MenuEntry {
   /** Extra terms (synonyms, EN) — used by fuzzy match without polluting label. */
   aliases: string[];
   breadcrumb: string;
+  /** Route to navigate to when this entry has no nested panel. */
+  navigateTo?: string;
 }
 
 let cached: MenuEntry[] | null = null;
@@ -36,6 +38,7 @@ export function getMenuEntries(): MenuEntry[] {
       breadcrumb: "",
       aliases: railAliases,
       haystack: [rail.label, ...railAliases].join(" ").toLowerCase(),
+      navigateTo: rail.navigateTo,
     });
     if (!rail.panel) continue;
     for (const group of rail.panel.groups) {
@@ -58,6 +61,7 @@ export function getMenuEntries(): MenuEntry[] {
             .join(" → "),
           aliases: itemAliases,
           haystack: parts.join(" ").toLowerCase(),
+          navigateTo: item.navigateTo,
         });
         if (item.children) {
           for (const child of item.children) {

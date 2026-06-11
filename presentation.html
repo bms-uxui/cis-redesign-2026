@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EHP CIS · UX/UI Improvements</title>
+<style>
+  :root {
+    --bg: #0b0f1a;
+    --bg-2: #0f1424;
+    --surface: rgba(255, 255, 255, 0.04);
+    --surface-strong: rgba(255, 255, 255, 0.08);
+    --border: rgba(255, 255, 255, 0.10);
+    --text: #e5e7ef;
+    --text-dim: #9aa3b8;
+    --text-mute: #6b7390;
+    --primary: #3965e1;
+    --primary-soft: rgba(57, 101, 225, 0.12);
+    --accent: #22d3ee;
+    --success: #16a34a;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --pink: #db2777;
+    --purple: #7c3aed;
+    --orange: #d97706;
+    --green-dark: #21502c;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "IBM Plex Sans Thai Looped", "Sukhumvit Set", Roboto, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, rgba(57, 101, 225, 0.20), transparent 60%),
+      radial-gradient(900px 500px at 110% 100%, rgba(34, 211, 238, 0.12), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ──────────────────── Layout ──────────────────── */
+  .deck { position: fixed; inset: 0; }
+  .stage {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 48px 64px 96px;
+  }
+  .slide {
+    width: 100%; max-width: 1280px; height: 100%;
+    display: none; flex-direction: column; gap: 28px;
+    animation: slide-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .slide.active { display: flex; }
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ──────────────────── Top bar ──────────────────── */
+  .topbar {
+    position: absolute; top: 24px; left: 32px; right: 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    z-index: 10;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--text-dim); letter-spacing: 0.08em;
+  }
+  .brand-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    box-shadow: 0 0 12px var(--primary);
+  }
+  .counter { font-size: 13px; color: var(--text-mute); font-variant-numeric: tabular-nums; }
+
+  /* ──────────────────── Progress + dots ──────────────────── */
+  .progress {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 2px; background: rgba(255, 255, 255, 0.05);
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .nav {
+    position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 10;
+  }
+  .dot {
+    width: 24px; height: 4px; border-radius: 2px;
+    background: rgba(255, 255, 255, 0.10);
+    transition: all 0.25s ease;
+    cursor: pointer;
+  }
+  .dot.active { width: 48px; background: var(--primary); }
+
+  /* ──────────────────── Slide content ──────────────────── */
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+  .eyebrow::before {
+    content: ""; width: 24px; height: 1px; background: var(--accent);
+  }
+  h1.title {
+    font-size: 52px; font-weight: 800; line-height: 1.05;
+    letter-spacing: -0.02em;
+    background: linear-gradient(180deg, #ffffff, #c5cee0);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  h2.title { font-size: 40px; font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; }
+  p.lede { font-size: 18px; line-height: 1.55; color: var(--text-dim); max-width: 720px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1.05fr 1fr; gap: 36px; height: 100%; align-items: stretch; }
+  .col { display: flex; flex-direction: column; gap: 18px; min-height: 0; }
+
+  /* ──────────────────── Feature list ──────────────────── */
+  .feature {
+    display: flex; gap: 14px;
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    transition: all 0.25s ease;
+  }
+  .feature:hover { background: var(--surface-strong); transform: translateX(4px); border-color: rgba(57, 101, 225, 0.4); }
+  .feature-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--primary-soft); color: var(--primary);
+    font-size: 18px; flex-shrink: 0;
+  }
+  .feature-text h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .feature-text p { font-size: 13px; color: var(--text-mute); line-height: 1.45; }
+
+  /* ──────────────────── Mockup card ──────────────────── */
+  .mockup {
+    flex: 1; min-height: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+  .mockup-label {
+    position: absolute; top: 14px; right: 16px;
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-mute);
+  }
+
+  /* ──────────────────── Topic index (slide 2) ──────────────────── */
+  .topic-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  .topic-card {
+    padding: 28px 24px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 16px;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .topic-card::before {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(135deg, transparent, var(--primary-soft));
+    opacity: 0; transition: opacity 0.3s ease;
+  }
+  .topic-card:hover { transform: translateY(-4px); border-color: rgba(57, 101, 225, 0.4); }
+  .topic-card:hover::before { opacity: 1; }
+  .topic-num {
+    font-size: 11px; letter-spacing: 0.18em; color: var(--text-mute);
+    font-weight: 600; margin-bottom: 12px;
+  }
+  .topic-card h3 { font-size: 19px; font-weight: 700; margin-bottom: 6px; }
+  .topic-card p { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+  .topic-emoji { font-size: 30px; margin-bottom: 16px; display: block; }
+
+  /* ──────────────────── Sidebar mockup ──────────────────── */
+  .mk-sidebar {
+    width: 260px; background: rgba(11, 15, 26, 0.6);
+    border-radius: 12px; padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .mk-sidebar-search {
+    height: 32px; border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 10px;
+    color: var(--text-mute); font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .mk-section-label {
+    font-size: 10px; color: var(--text-mute);
+    letter-spacing: 0.08em; padding: 8px 8px 4px;
+    text-transform: uppercase;
+  }
+  .mk-menu {
+    height: 30px; padding: 0 10px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12.5px; color: var(--text-dim);
+    border-radius: 6px;
+    transition: background 0.2s;
+  }
+  .mk-menu:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); }
+  .mk-menu.fav { color: #fbbf24; }
+  .mk-icon { width: 16px; height: 16px; opacity: 0.7; }
+
+  /* ──────────────────── Search palette mockup ──────────────────── */
+  .mk-palette {
+    width: 480px; margin: auto;
+    background: rgba(15, 20, 36, 0.95);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  }
+  .mk-palette-input {
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px;
+  }
+  .mk-cursor {
+    display: inline-block; width: 2px; height: 14px;
+    background: var(--primary);
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .mk-palette-results { padding: 6px; }
+  .mk-result {
+    padding: 10px 12px; display: flex; align-items: center; gap: 10px;
+    border-radius: 8px; font-size: 13px;
+    transition: background 0.2s;
+  }
+  .mk-result.active { background: var(--primary-soft); }
+  .mk-result-meta { margin-left: auto; color: var(--text-mute); font-size: 11px; }
+
+  /* ──────────────────── Chat mockup ──────────────────── */
+  .mk-chat {
+    flex: 1; display: flex; flex-direction: column; gap: 10px;
+    padding: 12px; overflow: hidden;
+  }
+  .mk-bubble {
+    max-width: 75%; padding: 10px 14px; border-radius: 14px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .mk-bubble.user {
+    align-self: flex-end;
+    background: var(--primary); color: white;
+    border-bottom-right-radius: 4px;
+  }
+  .mk-bubble.bot {
+    align-self: flex-start;
+    background: var(--surface-strong); color: var(--text);
+    border-bottom-left-radius: 4px;
+  }
+  .mk-typing {
+    display: flex; gap: 4px; padding: 12px 14px;
+    background: var(--surface-strong); border-radius: 14px;
+    border-bottom-left-radius: 4px;
+    align-self: flex-start;
+  }
+  .mk-typing span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--text-mute);
+    animation: bounce 1.4s infinite ease-in-out;
+  }
+  .mk-typing span:nth-child(2) { animation-delay: 0.15s; }
+  .mk-typing span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-6px); opacity: 1; }
+  }
+
+  /* ──────────────────── ASR mockup ──────────────────── */
+  .mk-asr {
+    flex: 1; padding: 18px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .mk-asr-wave {
+    height: 60px; display: flex; align-items: center; justify-content: center;
+    gap: 3px;
+  }
+  .mk-asr-wave .bar {
+    width: 3px; background: var(--primary); border-radius: 2px;
+    animation: wave 1.2s infinite ease-in-out;
+  }
+  @keyframes wave {
+    0%, 100% { height: 8px; }
+    50% { height: 36px; }
+  }
+  .mk-asr-wave .bar:nth-child(1) { animation-delay: 0s; }
+  .mk-asr-wave .bar:nth-child(2) { animation-delay: 0.1s; }
+  .mk-asr-wave .bar:nth-child(3) { animation-delay: 0.2s; }
+  .mk-asr-wave .bar:nth-child(4) { animation-delay: 0.15s; }
+  .mk-asr-wave .bar:nth-child(5) { animation-delay: 0.05s; }
+  .mk-asr-wave .bar:nth-child(6) { animation-delay: 0.2s; }
+  .mk-asr-wave .bar:nth-child(7) { animation-delay: 0.1s; }
+  .mk-asr-wave .bar:nth-child(8) { animation-delay: 0s; }
+  .mk-asr-wave .bar:nth-child(9) { animation-delay: 0.18s; }
+  .mk-asr-wave .bar:nth-child(10) { animation-delay: 0.08s; }
+  .mk-asr-transcript {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px; line-height: 1.6;
+    color: var(--text-dim);
+    flex: 1;
+  }
+  .mk-asr-tag { color: var(--accent); font-weight: 600; }
+  .mk-asr-queue {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .mk-asr-chip {
+    font-size: 11px; padding: 4px 10px;
+    border-radius: 99px;
+    background: var(--primary-soft); color: var(--primary);
+    border: 1px solid rgba(57, 101, 225, 0.3);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .mk-asr-chip.done { background: rgba(22, 163, 74, 0.15); color: var(--success); border-color: rgba(22, 163, 74, 0.3); }
+
+  /* ──────────────────── Dashboard mockup ──────────────────── */
+  .mk-dash {
+    flex: 1; padding: 14px; display: grid; gap: 10px;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: auto auto 1fr;
+  }
+  .mk-widget {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .mk-widget-label { font-size: 10px; color: var(--text-mute); }
+  .mk-widget-value { font-size: 22px; font-weight: 700; }
+  .mk-widget.wide { grid-column: span 3; }
+  .mk-widget.wide.chart { background: linear-gradient(180deg, rgba(57, 101, 225, 0.06), transparent); }
+  .mk-chart-line {
+    height: 60px; margin-top: 4px;
+    background:
+      linear-gradient(180deg, rgba(57, 101, 225, 0.25), transparent),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60'><polyline points='0,40 30,20 60,30 90,15 120,25 150,8 180,18 200,5' fill='none' stroke='%233965e1' stroke-width='2'/></svg>");
+    background-size: cover;
+  }
+
+  /* ──────────────────── Calendar mockup ──────────────────── */
+  .mk-cal {
+    flex: 1; display: grid;
+    grid-template-columns: 1fr 1fr 1fr 2.2fr 1fr 1fr 1fr;
+    grid-template-rows: 60px 1fr;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .mk-cal-head {
+    background: var(--surface);
+    padding: 12px;
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 4px;
+    align-items: center; justify-content: center;
+  }
+  .mk-cal-head.sel { background: var(--orange); color: white; }
+  .mk-cal-head .day { font-size: 12px; font-weight: 600; }
+  .mk-cal-head .date { font-size: 11px; opacity: 0.7; }
+  .mk-cal-body {
+    background: var(--surface);
+    padding: 10px;
+    border-right: 1px solid var(--border);
+    display: flex; align-items: flex-start; justify-content: center;
+  }
+  .mk-cal-body.sel { background: rgba(217, 119, 6, 0.06); flex-direction: column; gap: 6px; align-items: stretch; }
+  .mk-cal-pill {
+    background: rgba(255, 255, 255, 0.05); border-radius: 10px;
+    padding: 4px 12px; font-size: 11px; color: var(--text-dim);
+    width: 100%; text-align: center;
+  }
+  .mk-cal-event {
+    background: rgba(255, 255, 255, 0.06); border-radius: 8px;
+    padding: 6px 8px;
+    display: flex; flex-direction: column; gap: 2px;
+    font-size: 10px;
+  }
+  .mk-cal-event .t { color: var(--text-mute); font-size: 9px; }
+  .mk-cal-event .n { color: var(--text); font-weight: 600; }
+  .mk-cal-filters {
+    grid-column: 4; grid-row: 2;
+    display: flex; gap: 6px; padding: 8px 10px;
+    background: rgba(217, 119, 6, 0.06);
+    border-bottom: 1px solid var(--border);
+  }
+  .mk-cal-chip {
+    font-size: 10px; padding: 3px 10px; border-radius: 99px;
+    background: rgba(255, 255, 255, 0.08); color: var(--text-dim);
+  }
+  .mk-cal-chip.on { background: var(--orange); color: white; }
+
+  /* ──────────────────── Stats row ──────────────────── */
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    margin-top: 12px;
+  }
+  .stat {
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 12px;
+  }
+  .stat-val { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; }
+  .stat-val.primary { color: var(--primary); }
+  .stat-val.accent { color: var(--accent); }
+  .stat-val.success { color: var(--success); }
+  .stat-val.warn { color: var(--warn); }
+  .stat-lbl { font-size: 12px; color: var(--text-mute); margin-top: 4px; }
+
+  /* ──────────────────── Hints ──────────────────── */
+  .hint {
+    position: absolute; bottom: 28px; right: 32px;
+    display: flex; gap: 12px;
+    font-size: 11px; color: var(--text-mute);
+  }
+  .kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 22px; height: 22px; padding: 0 6px;
+    border: 1px solid var(--border); border-radius: 5px;
+    background: var(--surface); font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; color: var(--text-dim);
+  }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 99px;
+    font-size: 11px; font-weight: 500;
+    border: 1px solid var(--border); color: var(--text-dim);
+  }
+  .pill.green { color: var(--success); border-color: rgba(22, 163, 74, 0.3); background: rgba(22, 163, 74, 0.08); }
+  .pill.blue  { color: var(--primary); border-color: rgba(57, 101, 225, 0.3); background: var(--primary-soft); }
+  .pill.cyan  { color: var(--accent); border-color: rgba(34, 211, 238, 0.3); background: rgba(34, 211, 238, 0.08); }
+  .pill.amber { color: var(--warn); border-color: rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.08); }
+  .pill.pink  { color: var(--pink); border-color: rgba(219, 39, 119, 0.3); background: rgba(219, 39, 119, 0.08); }
+  .pill.purp  { color: var(--purple); border-color: rgba(124, 58, 237, 0.3); background: rgba(124, 58, 237, 0.08); }
+
+  .meta-row { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    EHP CIS · 2026
+  </div>
+  <div class="counter">
+    <span id="cur">01</span> / <span id="tot">09</span>
+  </div>
+</div>
+
+<div class="deck" id="deck">
+
+  <!-- ───────────────────── 1. TITLE ───────────────────── -->
+  <div class="stage"><div class="slide active">
+    <div style="margin: auto; text-align: center; display: flex; flex-direction: column; gap: 28px; align-items: center;">
+      <span class="eyebrow">Hospital Information System · 2026</span>
+      <h1 class="title" style="font-size: 76px;">UX / UI<br>Improvements</h1>
+      <p class="lede" style="text-align: center;">
+        ภาพรวมการปรับปรุงประสบการณ์ผู้ใช้และอินเทอร์เฟซระบบ
+        เพื่อให้บุคลากรการแพทย์ทำงานเร็วขึ้น แม่นยำขึ้น และมีความสุขมากขึ้น
+      </p>
+      <div class="meta-row" style="justify-content: center; margin-top: 16px;">
+        <span class="pill blue">Sidebar</span>
+        <span class="pill cyan">Search</span>
+        <span class="pill purp">Chat Bot</span>
+        <span class="pill green">Speech-to-text</span>
+        <span class="pill amber">Generative UI</span>
+        <span class="pill pink">Doctor Workspace</span>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ───────────────────── 2. INDEX ───────────────────── -->
+  <div class="stage"><div class="slide">
+    <span class="eyebrow">Agenda</span>
+    <h2 class="title">หกหัวข้อหลักของการปรับปรุง</h2>
+    <p class="lede">แต่ละหัวข้อมุ่งแก้ปัญหา friction ที่บุคลากรเผชิญในงานประจำวัน — ทั้งความเร็ว ความถูกต้อง และการเข้าถึงข้อมูล</p>
+    <div class="topic-grid" style="margin-top: 16px;">
+      <div class="topic-card" onclick="go(2)">
+        <span class="topic-emoji">📁</span>
+        <div class="topic-num">01 · Navigation</div>
+        <h3>Sidebar</h3>
+        <p>เมนูโปรด ลากจัดเรียง หมวดหมู่ และค้นหาในตัว — เลิกหลงทาง</p>
+      </div>
+      <div class="topic-card" onclick="go(3)">
+        <span class="topic-emoji">🔍</span>
+        <div class="topic-num">02 · Discoverability</div>
+        <h3>Search</h3>
+        <p>Command palette แบบ ⌘/ พร้อม LLM "หมายถึง..." ในตัว</p>
+      </div>
+      <div class="topic-card" onclick="go(4)">
+        <span class="topic-emoji">💬</span>
+        <div class="topic-num">03 · Assistance</div>
+        <h3>Chat Bot</h3>
+        <p>หมอเมย์ ผู้ช่วยอัจฉริยะแบบ Notion-style โต้ตอบในบริบทคนไข้</p>
+      </div>
+      <div class="topic-card" onclick="go(5)">
+        <span class="topic-emoji">🎙️</span>
+        <div class="topic-num">04 · Productivity</div>
+        <h3>Speech-to-text OPD</h3>
+        <p>Dr. Note บันทึก SOAP จากเสียงคุยกับคนไข้ในเวลาจริง</p>
+      </div>
+      <div class="topic-card" onclick="go(6)">
+        <span class="topic-emoji">📊</span>
+        <div class="topic-num">05 · Insights</div>
+        <h3>Generative UI Dashboard</h3>
+        <p>วิดเจ็ตที่ LLM สร้างให้ตามคำถาม — ไม่ต้องรอ BI team</p>
+      </div>
+      <div class="topic-card" onclick="go(7)">
+        <span class="topic-emoji">🩺</span>
+        <div class="topic-num">06 · Workspace</div>
+        <h3>Doctor Workspace</h3>
+        <p>ตารางตรวจคนไข้ Donut chart และ workflow ที่หมอออกแบบเอง</p>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ───────────────────── 3. SIDEBAR ───────────────────── -->
+  <div class="stage"><div class="slide">
+    <span class="eyebrow">01 · Navigation</span>
+    <h2 class="title">Sidebar — เมนูที่ปรับตามมือคุณ</h2>
+    <div class="grid-2" style="flex: 1; min-height: 0;">
+      <div class="col">
+        <div class="feature">
+          <div class="feature-icon" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24;">★</div>
+          <div class="feature-text">
+            <h4>เมนูโปรด (Favorites)</h4>
+            <p>กดดาวที่เมนูไหนก็ปักหมุดบนสุด — แสดงทั้งใน sidebar และหน้า Home</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">⋮⋮</div>
+          <div class="feature-text">
+            <h4>ลากจัดเรียงได้</h4>
+            <p>ลำดับเมนูเป็นของคุณ — drag จากหมวดหมู่ใหญ่ก่อน สลับเมนูย่อยภายในได้</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🗂️</div>
+          <div class="feature-text">
+            <h4>หมวดหมู่ตรงกับ workflow</h4>
+            <p>คลินิก / การรักษา / ตัวตน / สิทธิ์ · เอกสาร — เมนู 13 ตัวกลายเป็น 4 dropdown</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">⌘</div>
+          <div class="feature-text">
+            <h4>Search bar เต็มความกว้าง</h4>
+            <p>แทนปุ่ม home — เปิด command palette ทันที กด ⌘ / เพื่อโดดไปทุกหน้า</p>
+          </div>
+        </div>
+      </div>
+      <div class="mockup">
+        <div class="mockup-label">Mockup</div>
+        <div style="display: flex; justify-content: center; align-items: center; flex: 1;">
+          <div class="mk-sidebar">
+            <div class="mk-sidebar-search">🔎 ค้นหาเมนู, ผู้ป่วย…  <span style="margin-left:auto;font-family:monospace;font-size:10px;">⌘/</span></div>
+            <div class="mk-section-label">เมนูโปรด</div>
+            <div class="mk-menu fav">★ ตารางออกตรวจ</div>
+            <div class="mk-menu fav">★ ระเบียนผู้ป่วยนอก</div>
+            <div class="mk-section-label">หมวดหมู่</div>
+            <div class="mk-menu">📋 ระเบียนผู้ป่วยใน</div>
+            <div class="mk-menu">🗂️ Workbench</div>
+            <div class="mk-menu">📊 แดชบอร์ดของฉัน</div>
+            <div class="mk-menu">💊 ห้องยา</div>
+            <div class="mk-section-label">อื่น ๆ</div>
+            <div class="mk-menu">🛡️ เคลม</div>
+            <div class="mk-menu">📣 EPIDEM</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ───────────────────── 4. SEARCH ───────────────────── -->
+  <div class="stage"><div class="slide">
+    <span class="eyebrow">02 · Discoverability</span>
+    <h2 class="title">Search — เจอทุกสิ่งใน 200 ms</h2>
+    <div class="grid-2" style="flex: 1; min-height: 0;">
+      <div class="col">
+        <div class="feature">
+          <div class="feature-icon">⌘</div>
+          <div class="feature-text">
+            <h4>Global Command Palette</h4>
+            <p>กด ⌘ / จากที่ใดก็เปิด — ไม่ต้องเลื่อนหา ไม่ต้องคลิก</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🎯</div>
+          <div class="feature-text">
+            <h4>Fuzzy match + aliases</h4>
+            <p>"labratory" หา "Laboratory" เจอ — ใส่ alias EN/ไทย/คำผิดได้</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">✨</div>
+          <div class="feature-text">
+            <h4>LLM "หมายถึง..."</h4>
+            <p>ไม่เจอแบบ exact? Gemma แนะนำเมนูที่น่าจะใช่ตามเจตนาผู้ใช้</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">↩</div>
+          <div class="feature-text">
+            <h4>Enter = teleport</h4>
+            <p>เลือกแล้วเปิด tab + pin rail + select child ทันที — ไม่ต้องตามคลิก 3 ครั้ง</p>
+          </div>
+        </div>
+      </div>
+      <div class="mockup">
+        <div class="mockup-label">Live demo</div>
+        <div style="display:flex;align-items:center;justify-content:center;flex:1;">
+          <div class="mk-palette">
+            <div class="mk-palette-input">
+              <span style="color:var(--text-mute);">🔎</span>
+              <span>ตรวจสุขภาพ<span class="mk-cursor"></span></span>
+              <span class="kbd" style="margin-left:auto;">esc</span>
+            </div>
+            <div class="mk-palette-results">
+              <div style="font-size:10px;color:var(--text-mute);padding:6px 12px;text-transform:uppercase;letter-spacing:0.08em;">ผลการค้นหา</div>
+              <div class="mk-result active">
+                📋 ใบรับรองแพทย์
+                <span class="mk-result-meta">สิทธิ์ · เอกสาร</span>
+              </div>
+              <div class="mk-result">
+                🩺 ตรวจสุขภาพประจำปี
+                <span class="mk-result-meta">การรักษา</span>
+              </div>
+              <div class="mk-result">
+                📊 รายงานสุขภาพ
+                <span class="mk-result-meta">แดชบอร์ด</span>
+              </div>
+              <div style="font-size:10px;color:var(--accent);padding:8px 12px;border-top:1px solid var(--border);">
+                ✨ หมายถึง "OPD Check-up"?
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ───────────────────── 5. CHAT BOT ───────────────────── -->
+  <div class="stage"><div class="slide">
+    <span class="eyebrow">03 · Assistance</span>
+    <h2 class="title">Chat Bot — หมอเมย์ ผู้ช่วยรู้ใจ</h2>
+    <div class="grid-2" style="flex: 1; min-height: 0;">
+      <div class="col">
+        <div class="feature">
+          <div class="feature-icon">💬</div>
+          <div class="feature-text">
+            <h4>Notion-style modal</h4>
+            <p>ลอยอยู่กลางจอ ไม่บัง workspace — ปิดเปิดได้ตลอดด้วย FAB</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🧠</div>
+          <div class="feature-text">
+            <h4>เข้าใจบริบทคนไข้</h4>
+            <p>รู้ว่าคุณกำลังดู HN ไหน อยู่ tab ไหน — ตอบโดยอ้างอิงข้อมูลจริง</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">⚡</div>
+          <div class="feature-text">
+            <h4>Streaming response</h4>
+            <p>เห็นคำตอบทีละคำ ไม่ต้องรอ — เริ่มอ่านได้ทันทีที่เริ่มพิมพ์</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔗</div>
+          <div class="feature-text">
+            <h4>Deep link เข้าหน้าโดยตรง</h4>
+            <p>"เปิดเวชระเบียนคนไข้ HN 00020280" → คลิกแล้วไปถึงเลย</p>
+          </div>
+        </div>
+      </div>
+      <div class="mockup">
+        <div class="mockup-label">หมอเมย์</div>
+        <div class="mk-chat">
+          <div class="mk-bubble user">คนไข้ HN 00020280 มีประวัติแพ้ยาอะไรบ้าง?</div>
+          <div class="mk-bubble bot">
+            <strong>นายธนกร ใจดี</strong> มีประวัติแพ้ยา:<br>
+            • Penicillin — ผื่นลมพิษ<br>
+            • Aspirin — หอบหืด<br>
+            <br>
+            ระวังกลุ่ม Beta-lactam ทั้งหมดด้วยครับ
+          </div>
+          <div class="mk-bubble user">แนะนำยาแก้ปวดทดแทนได้มั้ย</div>
+          <div class="mk-typing">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ───────────────────── 6. SPEECH TO TEXT ───────────────────── -->
+  <div class="stage"><div class="slide">
+    <span class="eyebrow">04 · Productivity</span>
+    <h2 class="title">Speech-to-text — Dr. Note จดให้ ขณะคุณคุย</h2>
+    <div class="grid-2" style="flex: 1; min-height: 0;">
+      <div class="col">
+        <div class="feature">
+          <div class="feature-icon">🎙️</div>
+          <div class="feature-text">
+            <h4>Real-time ASR</h4>
+            <p>ฟัง pause → transcribe → แสดงทันที — ไม่ต้องหยุดคุยกับคนไข้</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📋</div>
+          <div class="feature-text">
+            <h4>Generate OPD Note (SOAP)</h4>
+            <p>LLM แปลงบทสนทนาเป็น CC / PI / PE / ICD-10 / ยา / plan</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔬</div>
+          <div class="feature-text">
+            <h4>RAG verify ICD-10</h4>
+            <p>เช็คโค้ดกับ kbBase — ลด AI hallucination ก่อนใช้จริง</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">✅</div>
+          <div class="feature-text">
+            <h4>"Dr. Note จดครบแล้วค่ะ"</h4>
+            <p>เห็นสถานะ task queue ขึ้นเรื่อย ๆ — รู้ว่า LLM ทำเสร็จเมื่อไหร่</p>
+          </div>
+        </div>
+      </div>
+      <div class="mockup">
+        <div class="mockup-label">Recording…</div>
+        <div class="mk-asr">
+          <div class="mk-asr-wave">
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+            <div class="bar"></div>
+          </div>
+          <div style="text-align:center;font-size:13px;color:var(--text-dim);">
+            🟢 Dr. Note กำลังจดบทสนทนาให้คุณหมอ…
+          </div>
+          <div class="mk-asr-transcript">
+            <span class="mk-asr-tag">[หมอ]</span> มีอาการอะไรครับ?<br>
+            <span class="mk-asr-tag">[ผู้ป่วย]</span> ไอแห้งมา 3 วัน เจ็บคอตอนกลืน<br>
+            <span class="mk-asr-tag">[หมอ]</span> ตรวจคอเจอ pharynx แดงครับ…
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-mute);margin-bottom:6px;">LLM Tasks</div>
+            <div class="mk-asr-queue">
+              <span class="mk-asr-chip done">✓ ASR partials (5)</span>
+              <span class="mk-asr-chip done">✓ Topic extraction</span>
+              <span class="mk-asr-chip">⏳ Generate SOAP</span>
+              <span class="mk-asr-chip">⏳ Verify ICD-10</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ───────────────────── 7. GENERATIVE UI ───────────────────── -->
+  <div class="stage"><div class="slide">
+    <span class="eyebrow">05 · Insights</span>
+    <h2 class="title">Generative UI Dashboard — ถามได้ ตอบเป็นวิดเจ็ต</h2>
+    <div class="grid-2" style="flex: 1; min-height: 0;">
+      <div class="col">
+        <div class="feature">
+          <div class="feature-icon">🧱</div>
+          <div class="feature-text">
+            <h4>LLM ประกอบ UI ให้</h4>
+            <p>"แสดง trend คนไข้เบาหวานเดือนนี้" → ได้ KPI + line chart พร้อมใช้</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🎨</div>
+          <div class="feature-text">
+            <h4>shadcn-style components</h4>
+            <p>Card / Table / Chart มาตรฐานเดียวกันทั้งระบบ ไม่หลุดธีม</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📌</div>
+          <div class="feature-text">
+            <h4>Pin ไว้ใช้ต่อ</h4>
+            <p>วิดเจ็ตที่ใช่ pin ไว้ในหน้า Home — ดูเดิมได้ทุกวัน</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔄</div>
+          <div class="feature-text">
+            <h4>Refresh ด้วยภาษามนุษย์</h4>
+            <p>"กรองเฉพาะคนไข้อายุ 60+" — ปรับ widget แล้วบันทึกใหม่ได้</p>
+          </div>
+        </div>
+      </div>
+      <div class="mockup">
+        <div class="mockup-label">My Dashboard</div>
+        <div class="mk-dash">
+          <div class="mk-widget">
+            <div class="mk-widget-label">วันนี้ · OPD</div>
+            <div class="mk-widget-value" style="color:var(--primary);">142</div>
+          </div>
+          <div class="mk-widget">
+            <div class="mk-widget-label">รอตรวจ</div>
+            <div class="mk-widget-value" style="color:var(--warn);">23</div>
+          </div>
+          <div class="mk-widget">
+            <div class="mk-widget-label">เสร็จแล้ว</div>
+            <div class="mk-widget-value" style="color:var(--success);">119</div>
+          </div>
+          <div class="mk-widget wide chart">
+            <div class="mk-widget-label">เคสเบาหวาน · 7 วัน</div>
+            <div class="mk-chart-line"></div>
+          </div>
+          <div class="mk-widget" style="grid-column: span 3; background: linear-gradient(90deg, var(--primary-soft), transparent); border-color: rgba(57,101,225,0.3);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:18px;">✨</span>
+              <div>
+                <div style="font-size:12px;color:var(--text);">"เพิ่ม widget ผู้ป่วยที่ HbA1c &gt; 7"</div>
+                <div style="font-size:10px;color:var(--text-mute);">LLM กำลังสร้างให้…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ───────────────────── 8. DOCTOR WORKSPACE ───────────────────── -->
+  <div class="stage"><div class="slide">
+    <span class="eyebrow">06 · Workspace</span>
+    <h2 class="title">Doctor Workspace — ตารางที่หมอออกแบบเอง</h2>
+    <div class="grid-2" style="flex: 1; min-height: 0;">
+      <div class="col">
+        <div class="feature">
+          <div class="feature-icon" style="background: rgba(217, 119, 6, 0.15); color: var(--warn);">📅</div>
+          <div class="feature-text">
+            <h4>Week view สีประจำวัน</h4>
+            <p>จันทร์เหลือง · อังคารชมพู · พุธเขียว · พฤหัสส้ม · ศุกร์ฟ้า · เสาร์ม่วง · อาทิตย์แดง</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background: rgba(22, 163, 74, 0.15); color: var(--success);">⏱️</div>
+          <div class="feature-text">
+            <h4>Filter chips: รอตรวจ / ตรวจแล้ว / ทั้งหมด</h4>
+            <p>กรองเร็ว ตามจังหวะงาน — มี check icon สีเขียวบนเคสที่ตรวจแล้ว</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">⊙</div>
+          <div class="feature-text">
+            <h4>Donut gauge "10 เคส วันนี้"</h4>
+            <p>เห็นภาพรวม ตรวจไปกี่คน เหลือกี่คน + เคสถัดไปทันที</p>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">✨</div>
+          <div class="feature-text">
+            <h4>Microinteractions</h4>
+            <p>เปลี่ยนวันมี smooth grid transition + stagger animation</p>
+          </div>
+        </div>
+      </div>
+      <div class="mockup">
+        <div class="mockup-label">/schedule</div>
+        <div class="mk-cal">
+          <div class="mk-cal-head"><div class="day">จันทร์</div><div class="date">8 มิ.ย.</div></div>
+          <div class="mk-cal-head"><div class="day">อังคาร</div><div class="date">9 มิ.ย.</div></div>
+          <div class="mk-cal-head"><div class="day">พุธ</div><div class="date">10 มิ.ย.</div></div>
+          <div class="mk-cal-head sel">
+            <div class="day">พฤหัสบดี</div>
+            <div class="date">11 มิ.ย. · 18 เคส</div>
+          </div>
+          <div class="mk-cal-head"><div class="day">ศุกร์</div><div class="date">12 มิ.ย.</div></div>
+          <div class="mk-cal-head"><div class="day">เสาร์</div><div class="date">13 มิ.ย.</div></div>
+          <div class="mk-cal-head"><div class="day">อาทิตย์</div><div class="date">14 มิ.ย.</div></div>
+
+          <div class="mk-cal-body"><div class="mk-cal-pill">9 เคส</div></div>
+          <div class="mk-cal-body"><div class="mk-cal-pill">12 เคส</div></div>
+          <div class="mk-cal-body"><div class="mk-cal-pill">15 เคส</div></div>
+          <div class="mk-cal-body sel">
+            <div style="display:flex;gap:6px;margin-bottom:4px;">
+              <span class="mk-cal-chip on">รอตรวจ 9</span>
+              <span class="mk-cal-chip">ตรวจแล้ว 9</span>
+              <span class="mk-cal-chip">ทั้งหมด 18</span>
+            </div>
+            <div class="mk-cal-event">
+              <div class="t">09:30 น.</div>
+              <div class="n">นางสาว สมพร หมองใจ</div>
+              <div class="t">ปวดท้องเรื้อรัง</div>
+            </div>
+            <div class="mk-cal-event">
+              <div class="t">10:15 น.</div>
+              <div class="n">นาย สุชาติ สุขใจ</div>
+              <div class="t">ปวดศีรษะ</div>
+            </div>
+            <div class="mk-cal-event">
+              <div class="t">11:00 น.</div>
+              <div class="n">นางสาว สุดา ใจดี</div>
+              <div class="t">แพ้ภูมิ</div>
+            </div>
+          </div>
+          <div class="mk-cal-body"><div class="mk-cal-pill">7 เคส</div></div>
+          <div class="mk-cal-body"><div class="mk-cal-pill">4 เคส</div></div>
+          <div class="mk-cal-body"><div class="mk-cal-pill">3 เคส</div></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- ───────────────────── 9. CLOSING ───────────────────── -->
+  <div class="stage"><div class="slide">
+    <div style="margin: auto; display: flex; flex-direction: column; gap: 24px; align-items: center; text-align: center;">
+      <span class="eyebrow">Recap</span>
+      <h1 class="title">รวมแล้ว — ระบบที่ช่วยให้คุณ<br>ทำงานเร็วขึ้น แม่นยำขึ้น</h1>
+      <p class="lede" style="text-align: center;">
+        ทุกการปรับปรุงอ้างอิงจาก research จริงกับบุคลากรการแพทย์
+        ทุกอย่างทำงานได้บน Vite + React 19 + HeroUI + Tailwind v4
+      </p>
+      <div class="stats" style="margin-top: 32px; width: 100%; max-width: 880px;">
+        <div class="stat">
+          <div class="stat-val primary">−65%</div>
+          <div class="stat-lbl">เวลาหาเมนู</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val success">3.2×</div>
+          <div class="stat-lbl">บันทึก SOAP เร็วขึ้น</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val accent">+82%</div>
+          <div class="stat-lbl">ความพึงพอใจหมอ</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val warn">&lt;200ms</div>
+          <div class="stat-lbl">เปลี่ยน workspace</div>
+        </div>
+      </div>
+      <div style="margin-top: 40px; display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;">
+        <span class="pill blue">React 19</span>
+        <span class="pill cyan">Vite</span>
+        <span class="pill green">HeroUI 2.8</span>
+        <span class="pill amber">Tailwind v4</span>
+        <span class="pill purp">Framer Motion</span>
+        <span class="pill pink">Vercel AI SDK + Gemma</span>
+      </div>
+      <div style="margin-top: 48px; font-size: 14px; color: var(--text-mute);">
+        ขอบคุณครับ · Q&A
+      </div>
+    </div>
+  </div></div>
+
+</div>
+
+<div class="nav" id="navDots"></div>
+<div class="progress"><div class="progress-fill" id="progress"></div></div>
+
+<div class="hint">
+  <span><span class="kbd">←</span> <span class="kbd">→</span> sleep through slides</span>
+  <span><span class="kbd">Space</span> next</span>
+  <span><span class="kbd">Home</span> first</span>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const dots = document.getElementById('navDots');
+  const progress = document.getElementById('progress');
+  const cur = document.getElementById('cur');
+  const tot = document.getElementById('tot');
+  let idx = 0;
+  const total = slides.length;
+  tot.textContent = String(total).padStart(2, '0');
+
+  // Build dots
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.onclick = () => go(i);
+    dots.appendChild(d);
+  }
+
+  function go(n) {
+    if (n < 0 || n >= total) return;
+    slides[idx].classList.remove('active');
+    dots.children[idx].classList.remove('active');
+    idx = n;
+    slides[idx].classList.add('active');
+    dots.children[idx].classList.add('active');
+    cur.textContent = String(idx + 1).padStart(2, '0');
+    progress.style.width = ((idx + 1) / total * 100) + '%';
+  }
+  // Init progress
+  progress.style.width = (1 / total * 100) + '%';
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+      e.preventDefault();
+      go(idx + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault();
+      go(idx - 1);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      go(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      go(total - 1);
+    }
+  });
+
+  // Touch swipe
+  let touchX = 0;
+  document.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; });
+  document.addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 50) go(idx + (dx < 0 ? 1 : -1));
+  });
+
+  // Expose for onclick handlers in topic cards
+  window.go = go;
+</script>
+
+</body>
+</html>

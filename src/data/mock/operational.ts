@@ -82,31 +82,62 @@ function generateTodaysAppointments(): Appointment[] {
   const today = isoToday();
   const out: Appointment[] = [];
   let counter = 0;
-  for (const clinic of CLINICS) {
-    // Each clinic schedules ~70-90% of its capacity.
-    const slots = Math.round(clinic.capacity * (0.7 + rng() * 0.2));
-    for (let i = 0; i < slots; i++) {
-      const hour = 8 + Math.floor((i / slots) * 8);
-      const minute = (i * 7) % 60;
+
+  // Each doctor owns a personal slot grid for the day. We walk every doctor
+  // independently, drop a sensible lunch break (12:00-13:00), and assign
+  // each slot to one clinic so the day feels realistic instead of every
+  // doctor stacking inside every clinic.
+  const SLOT_MIN = 20; // 20-minute appointment grid
+  const DAY_START_MIN = 8 * 60; // 08:00
+  const DAY_END_MIN = 17 * 60; // 17:00
+  const LUNCH_START_MIN = 12 * 60;
+  const LUNCH_END_MIN = 13 * 60;
+
+  for (let docIdx = 0; docIdx < DOCTORS.length; docIdx++) {
+    const doctor = DOCTORS[docIdx];
+    // Each doctor sits in 1-2 clinics for the day, chosen deterministically
+    // from the seed.
+    const clinicCount = 1 + Math.floor(rng() * 2);
+    const clinicsForDoc: typeof CLINICS = [];
+    for (let i = 0; i < clinicCount; i++) {
+      const c = CLINICS[(docIdx + i + Math.floor(rng() * CLINICS.length)) % CLINICS.length];
+      if (!clinicsForDoc.includes(c)) clinicsForDoc.push(c);
+    }
+
+    let clinicCursor = 0;
+    for (let t = DAY_START_MIN; t + SLOT_MIN <= DAY_END_MIN; t += SLOT_MIN) {
+      if (t >= LUNCH_START_MIN && t < LUNCH_END_MIN) continue;
+      // ~80% chance a slot is filled, the rest left blank so the day has
+      // realistic gaps instead of every slot booked.
+      if (rng() > 0.8) continue;
+
+      const clinic = clinicsForDoc[clinicCursor % clinicsForDoc.length];
+      clinicCursor++;
+      const hour = Math.floor(t / 60);
+      const minute = t % 60;
       const p = PATIENTS[Math.floor(rng() * PATIENTS.length)];
       const r = rng();
-      let status: AppointmentStatus;
       const nowHour = new Date().getHours();
+      let status: AppointmentStatus;
       if (hour < nowHour - 1) status = r < clinic.noShowRate ? "no_show" : "done";
       else if (hour <= nowHour) status = r < 0.4 ? "in_progress" : r < 0.7 ? "checked_in" : "done";
       else status = r < 0.05 ? "cancelled" : "scheduled";
+
       out.push({
         id: `apt-${counter++}`,
         date: today,
         time: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
         clinic: clinic.name,
-        doctor: DOCTORS[Math.floor(rng() * DOCTORS.length)],
+        doctor,
         patientHN: p.hn,
         patientName: `${p.prefix}${p.firstName} ${p.lastName}`,
         type: r < 0.6 ? "Follow-up" : r < 0.8 ? "New" : r < 0.92 ? "Procedure" : "Vaccine",
         status,
-        waitMinutes: status === "done" || status === "in_progress" ? Math.round(10 + rng() * 40) : undefined,
-        durationMinutes: 10 + Math.floor(rng() * 20),
+        waitMinutes:
+          status === "done" || status === "in_progress"
+            ? Math.round(10 + rng() * 40)
+            : undefined,
+        durationMinutes: SLOT_MIN,
       });
     }
   }

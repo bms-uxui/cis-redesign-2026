@@ -1,434 +1,988 @@
+/**
+ * Doctor workspace — Figma 1138:1728.
+ *
+ * Layout (desktop):
+ *   ┌──────────────────────────────────────────┬──────────────────┐
+ *   │ HERO BANNER (dark green, greeting copy)  │ DONUT CHART      │
+ *   │                                          │ (10 เคส today,   │
+ *   │                                          │  next case row)  │
+ *   ├──────────────────────────────────────────┼──────────────────┤
+ *   │ Calendar header row                      │ WIDGETS card     │
+ *   │  [Mon][Tue][Wed][THU ●][Fri][Sat][Sun]   │ (skeleton +      │
+ *   │ Calendar body row                        │  เพิ่ม link)     │
+ *   │  [9 เคส][18 เคส][24 เคส][event list][…]  │                  │
+ *   └──────────────────────────────────────────┴──────────────────┘
+ *
+ * Selected day uses orange (#d97706); unselected days show a "X เคส"
+ * count pill in their body. First event in the selected list is the
+ * "active" one — it gets a white bg + a blue "ดูประวัติคนไข้" CTA.
+ */
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+import { useNavigate } from "react-router";
 import {
-  IconBell,
-  IconChevronLeft,
-  IconChevronRight,
-  IconChevronDown,
-  IconLayoutGrid,
-  IconList,
-  IconPhone,
-  IconMessageCircle,
-  IconVideo,
-  IconSearch,
-} from "@tabler/icons-react";
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  Button,
+} from "@heroui/react";
+import { IconCheck, IconMicrophone, IconPlayerPlay, IconPlus } from "@tabler/icons-react";
+import {
+  PolarAngleAxis,
+  RadialBar,
+  RadialBarChart,
+  ResponsiveContainer,
+} from "recharts";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useUser } from "../contexts/UserContext";
-import AVATAR from "./../assets/figma/ellipse-avatar.png";
+import { TODAY_APPOINTMENTS, type Appointment } from "../data/mock/operational";
+import { useNurseHandoffs, handoffToAppointment } from "../data/nurseHandoff";
+import BANNER_OBJECT from "../assets/figma/doctor-banner-object.png";
+import BANNER_ORB from "../assets/figma/doctor-banner-13.png";
+import BANNER_CURVE from "../assets/figma/doctor-banner-curve.svg";
+import BANNER_BG_TRIANGLE from "../assets/figma/doctor-banner-bg.svg";
 
-const EASE_TV: [number, number, number, number] = [0.16, 1, 0.3, 1];
+// ── Date helpers ──────────────────────────────────────────────────────────
 
-// ── Mock appointment data ───────────────────────────────────────────────────
-interface Appointment {
-  id: string;
-  patient: string;
-  role: string;
-  startHour: number; // e.g. 12.17 = 12:10
-  endHour: number;
-  type: "primary" | "secondary";
-  related?: string;
+const TH_MONTHS_SHORT = [
+  "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+  "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.",
+];
+const TH_DOW_LONG = [
+  "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์",
+];
+
+/**
+ * Thai day-of-week colors (สีประจำวัน), tuned to the same tonal weight as
+ * the Figma's Thursday amber so the selected-day banner reads with the
+ * same visual heft regardless of which day is in focus. `bg` is the
+ * solid header tint; `tint` is the very-soft body background; `soft` is
+ * the wash on hover/secondary surfaces.
+ */
+const DAY_COLORS: { bg: string; tint: string; soft: string }[] = [
+  { bg: "#ca8a04", tint: "rgba(202,138,4,0.04)", soft: "rgba(202,138,4,0.10)" }, // จันทร์ — เหลือง
+  { bg: "#db2777", tint: "rgba(219,39,119,0.04)", soft: "rgba(219,39,119,0.10)" }, // อังคาร — ชมพู
+  { bg: "#16a34a", tint: "rgba(22,163,74,0.04)", soft: "rgba(22,163,74,0.10)" }, // พุธ — เขียว
+  { bg: "#d97706", tint: "rgba(217,119,6,0.04)", soft: "rgba(217,119,6,0.10)" }, // พฤหัสบดี — ส้ม
+  { bg: "#0284c7", tint: "rgba(2,132,199,0.04)", soft: "rgba(2,132,199,0.10)" }, // ศุกร์ — ฟ้า
+  { bg: "#7c3aed", tint: "rgba(124,58,237,0.04)", soft: "rgba(124,58,237,0.10)" }, // เสาร์ — ม่วง
+  { bg: "#dc2626", tint: "rgba(220,38,38,0.04)", soft: "rgba(220,38,38,0.10)" }, // อาทิตย์ — แดง
+];
+
+function weekOf(ref: Date): Date[] {
+  const d = new Date(ref);
+  const dow = (d.getDay() + 6) % 7; // Mon=0
+  d.setDate(d.getDate() - dow);
+  return Array.from({ length: 7 }, (_, i) => {
+    const x = new Date(d);
+    x.setDate(d.getDate() + i);
+    return x;
+  });
 }
 
-const APPOINTMENTS: Appointment[] = [
-  { id: "a1", patient: "คุณสมหญิง ใจดี", role: "OPD — ตรวจรักษา", startHour: 12.17, endHour: 13.17, type: "primary" },
-  { id: "a2", patient: "คุณวิชัย วัฒนสุข", role: "ติดตามผลเบาหวาน", startHour: 13.75, endHour: 14.58, type: "secondary", related: "a1" },
-  { id: "a3", patient: "คุณปริชาติ พิทักษ์", role: "ตรวจสุขภาพประจำปี", startHour: 13.25, endHour: 14.25, type: "secondary" },
-];
+function fmtDateKey(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
 
-const HOURS = [12, 12.5, 13, 13.5, 14, 14.5];
+function fmtThaiShort(d: Date) {
+  return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]}`;
+}
 
-const SCHEDULE = [
-  { date: "20", day: "ส", label: "ตรวจ OPD ทั่วไป", with: "ดูแลโดย นพ.โจ" },
-  { date: "24", day: "พ", label: "ปรึกษาผู้ป่วยเบาหวาน", with: "ทีม Endo" },
-  { date: "29", day: "จ", label: "ประชุมประจำสัปดาห์", with: "หัวหน้าแผนก" },
-];
+/** Single source of truth for "done" — used by EventRow's corner flag
+ *  and the calendar's pending/done filter chips. */
+function isAppointmentDone(a: Appointment): boolean {
+  return a.status === "done" || (a.time >= "08:00" && a.time <= "08:40");
+}
 
-const MONTHS = [
-  { label: "August", active: false, faded: true },
-  { label: "September", active: false },
-  { label: "October", active: false },
-  { label: "November", active: true },
-  { label: "December", active: false },
-  { label: "January", active: false },
-  { label: "February", active: false, faded: true },
-];
+type CaseFilter = "pending" | "done" | "all";
 
-const DAYS = [
-  { date: 16, day: "Mon", active: false, faded: true },
-  { date: 17, day: "Tue", active: false },
-  { date: 18, day: "Wed", active: false },
-  { date: 19, day: "Thu", active: false, soft: true },
-  { date: 20, day: "Fri", active: false },
-  { date: 21, day: "Sat", active: true },
-  { date: 22, day: "Sun", active: false },
-  { date: 23, day: "Mon", active: false, soft: true },
-  { date: 24, day: "Tue", active: false },
-  { date: 25, day: "Wed", active: false },
-  { date: 26, day: "Thu", active: false, faded: true },
-];
+// ── Component ─────────────────────────────────────────────────────────────
 
 export default function DoctorSchedule() {
   const { railHidden } = useSidebar();
   const { user } = useUser();
-  const [view, setView] = useState<"grid" | "list">("list");
+  const navigate = useNavigate();
+  const handoffs = useNurseHandoffs();
+
+  const myAppointments = useMemo(
+    () =>
+      [...handoffs.map(handoffToAppointment), ...TODAY_APPOINTMENTS].filter(
+        (a) => a.doctor === user.name,
+      ),
+    [handoffs, user.name],
+  );
+
+  const today = new Date();
+  const week = useMemo(() => weekOf(today), []);
+  const [selectedIdx, setSelectedIdx] = useState(((today.getDay() + 6) % 7));
+  const selectedDate = week[selectedIdx];
+
+  const byDate = useMemo(() => {
+    const m = new Map<string, Appointment[]>();
+    for (const a of myAppointments) {
+      const list = m.get(a.date) ?? [];
+      list.push(a);
+      m.set(a.date, list);
+    }
+    for (const list of m.values()) list.sort((a, b) => a.time.localeCompare(b.time));
+    return m;
+  }, [myAppointments]);
+
+  const dayEvents = byDate.get(fmtDateKey(selectedDate)) ?? [];
+
+  const [selectedApt, setSelectedApt] = useState<string | null>(null);
+  const selectedAppointment = useMemo(
+    () => myAppointments.find((a) => a.id === selectedApt) ?? null,
+    [selectedApt, myAppointments],
+  );
+
+  // Top-of-list is treated as the "active" event by default; clicking
+  // another row promotes it.
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const effectiveHighlight = highlightedId ?? dayEvents[0]?.id ?? null;
+
+  // Aggregate "today" counters for the donut chart.
+  const todayKey = fmtDateKey(today);
+  const todayList = byDate.get(todayKey) ?? [];
+  const doneCount = todayList.filter((a) => a.status === "done").length;
+  const pendingCount = todayList.length - doneCount;
+  const totalToday = todayList.length;
+
+  // Next case = first non-finished appointment today.
+  const nextCase = useMemo(
+    () =>
+      todayList
+        .filter((a) => a.status !== "done" && a.status !== "cancelled")
+        .sort((a, b) => a.time.localeCompare(b.time))[0],
+    [todayList],
+  );
 
   return (
-    <div className="min-h-screen w-full bg-[var(--theme-base)]">
-      <div className="h-20 shrink-0" aria-hidden />
+    <div className="h-screen w-full overflow-hidden bg-[#f4f4f4]">
+      <div className="h-16 shrink-0" aria-hidden />
       <div
         className={[
-          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
+          "flex h-[calc(100vh-6rem)] mr-4 mt-4 mb-4 gap-4 overflow-hidden transition-[margin] duration-300 ease-out",
           railHidden ? "ml-4" : "ml-[296px]",
         ].join(" ")}
       >
-        {/* Main column */}
-        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-10 py-10 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-          {/* Header */}
-          <header className="mb-8 flex items-start justify-between gap-6">
-            <div className="flex flex-col gap-2">
-              <h1 className="text-[length:var(--theme-text-2xl)] font-bold text-[var(--theme-neutral)]">
-                ผู้ป่วยของวันนี้ <span className="font-normal text-[var(--theme-neutral)]/55">ตามคิวเวลานัด</span>
-              </h1>
-              <p className="text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)]/55">
-                ดูรายชื่อผู้ป่วยและช่วงเวลานัดของวันนี้แบบไทม์ไลน์
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <IconButton aria={"ค้นหา"}>
-                <IconSearch className="h-5 w-5" stroke={1.75} />
-              </IconButton>
-              <IconButton aria={"การแจ้งเตือน"}>
-                <IconBell className="h-5 w-5" stroke={1.75} />
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[var(--theme-error)]" />
-              </IconButton>
-            </div>
-          </header>
+        {/* ── Main column ──────────────────────────────────────────── */}
+        <main className="flex min-w-0 min-h-0 flex-1 flex-col gap-4">
+          <HeroBanner doctorName={user.name} />
 
-          {/* Filter row: month picker + period + view toggle */}
-          <div className="mb-6 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)]/70">
-              <button type="button" className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-[var(--theme-radius-selector)] hover:bg-[var(--theme-primary-soft)]">
-                <IconChevronLeft className="h-4 w-4" stroke={1.75} />
-              </button>
-              <span className="font-medium text-[var(--theme-neutral)]">November 2025</span>
-              <button type="button" className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-[var(--theme-radius-selector)] hover:bg-[var(--theme-primary-soft)]">
-                <IconChevronRight className="h-4 w-4" stroke={1.75} />
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" className="flex h-9 items-center gap-2 rounded-[var(--theme-radius-field)] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-3 text-[length:var(--theme-text-sm)] text-[var(--theme-neutral)]">
-                สัปดาห์นี้
-                <IconChevronDown className="h-3.5 w-3.5 text-[var(--theme-neutral)]/55" stroke={1.75} />
-              </button>
-              <div className="flex h-9 items-center rounded-[var(--theme-radius-field)] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setView("grid")}
-                  className={[
-                    "flex h-8 w-8 cursor-pointer items-center justify-center rounded-[var(--theme-radius-selector)] transition",
-                    view === "grid" ? "bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]" : "text-[var(--theme-neutral)]/55",
-                  ].join(" ")}
-                >
-                  <IconLayoutGrid className="h-4 w-4" stroke={1.75} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView("list")}
-                  className={[
-                    "flex h-8 w-8 cursor-pointer items-center justify-center rounded-[var(--theme-radius-selector)] transition",
-                    view === "list" ? "bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]" : "text-[var(--theme-neutral)]/55",
-                  ].join(" ")}
-                >
-                  <IconList className="h-4 w-4" stroke={1.75} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Month strip */}
-          <div className="mb-3 flex items-end justify-between text-[length:var(--theme-text-xs)] uppercase tracking-[0.05em]">
-            {MONTHS.map((m) => (
-              <span
-                key={m.label}
-                className={[
-                  m.faded ? "text-[var(--theme-neutral)]/25" : m.active ? "font-semibold text-[var(--theme-neutral)]" : "text-[var(--theme-neutral)]/55",
-                ].join(" ")}
-              >
-                {m.label}
-              </span>
-            ))}
-          </div>
-
-          {/* Day strip */}
-          <div className="mb-10 flex items-center justify-between gap-2">
-            {DAYS.map((d) => (
-              <button
-                key={`${d.date}-${d.day}`}
-                type="button"
-                className={[
-                  "group flex h-[64px] w-[52px] flex-col items-center justify-center gap-0.5 rounded-full transition",
-                  d.active
-                    ? "bg-[var(--theme-surface)] ring-1 ring-[var(--theme-neutral)]/10 shadow-[var(--theme-shadow-sm)]"
-                    : d.soft
-                      ? "bg-[var(--theme-primary-soft)]"
-                      : d.faded
-                        ? "opacity-30"
-                        : "hover:bg-[var(--theme-primary-soft)]",
-                ].join(" ")}
-              >
-                <span className={[
-                  "text-[length:var(--theme-text-lg)] font-semibold",
-                  d.active ? "text-[var(--theme-neutral)]" : "text-[var(--theme-neutral)]/70",
-                ].join(" ")}>
-                  {d.date}
-                </span>
-                <span className={[
-                  "text-[10px] uppercase tracking-[0.05em]",
-                  d.active ? "font-semibold text-[var(--theme-primary)]" : "text-[var(--theme-neutral)]/45",
-                ].join(" ")}>
-                  {d.day}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* Timeline */}
-          <Timeline />
+          {/* Combined calendar — header row sits flush above the body row
+              so the selected column reads as one continuous tall tile.
+              `flex-1 min-h-0` lets the body row absorb the remaining
+              viewport height; only its event list scrolls. */}
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px]">
+            <CalendarHeaderRow
+              week={week}
+              selectedIdx={selectedIdx}
+              byDate={byDate}
+              onSelectDay={(i) => {
+                setSelectedIdx(i);
+                setHighlightedId(null);
+              }}
+            />
+            <CalendarBodyRow
+              week={week}
+              selectedIdx={selectedIdx}
+              byDate={byDate}
+              dayEvents={dayEvents}
+              effectiveHighlight={effectiveHighlight}
+              onSelectDay={(i) => {
+                setSelectedIdx(i);
+                setHighlightedId(null);
+              }}
+              onSelectEvent={(id) => setHighlightedId(id)}
+              onOpenDetail={(hn) => navigate(`/opd/${hn}`)}
+            />
+          </section>
         </main>
 
-        {/* Right sidebar */}
-        <aside className="hidden w-[320px] shrink-0 flex-col gap-6 border-l border-[var(--theme-neutral)]/10 bg-[var(--theme-base)]/40 px-6 py-10 lg:flex">
-          {/* Doctor card */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="relative">
-              <img
-                src={user.avatarUrl ?? AVATAR}
-                alt=""
-                className="h-24 w-24 rounded-full object-cover ring-4 ring-[var(--theme-surface)]"
-              />
-              <span className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--theme-primary)] text-[10px] font-bold text-white ring-2 ring-[var(--theme-surface)]">
-                {user.name.slice(0, 1)}
-              </span>
-            </div>
-            <div className="text-center">
-              <p className="text-[length:var(--theme-text-md)] font-semibold text-[var(--theme-neutral)]">
-                {user.name}
-              </p>
-              <p className="text-[length:var(--theme-text-xs)] text-[var(--theme-neutral)]/55">
-                {user.title}
-              </p>
-            </div>
-          </div>
+        {/* ── Right rail ───────────────────────────────────────────── */}
+        <aside className="hidden w-[280px] min-h-0 shrink-0 flex-col gap-4 overflow-hidden lg:flex">
+          <DonutCaseCard
+            doneCount={doneCount}
+            pendingCount={pendingCount}
+            total={totalToday}
+            nextCase={nextCase}
+            onOpenPatient={(hn) => navigate(`/opd/${hn}`)}
+          />
 
-          {/* Monthly schedule */}
-          <section className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[length:var(--theme-text-sm)] font-semibold text-[var(--theme-neutral)]">
-                ตารางประจำเดือน
-              </p>
-              <button type="button" className="text-[var(--theme-neutral)]/45" aria-label="ตัวเลือก">⋯</button>
-            </div>
-            <div className="flex flex-col gap-2">
-              {SCHEDULE.map((s) => (
-                <div key={s.date} className="flex items-start gap-3 rounded-[var(--theme-radius-field)] bg-[var(--theme-surface)] px-3 py-2.5">
-                  <div className="flex w-10 shrink-0 flex-col items-center rounded-[var(--theme-radius-selector)] bg-[var(--theme-primary-soft)] py-1.5">
-                    <span className="text-[length:var(--theme-text-md)] font-bold text-[var(--theme-neutral)]">{s.date}</span>
-                    <span className="text-[10px] uppercase text-[var(--theme-primary)]">{s.day}</span>
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <p className="truncate text-[length:var(--theme-text-sm)] font-medium text-[var(--theme-neutral)]">{s.label}</p>
-                    <p className="truncate text-[length:var(--theme-text-xs)] text-[var(--theme-neutral)]/55">{s.with}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Active patients */}
-          <section className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <p className="text-[length:var(--theme-text-sm)] font-semibold text-[var(--theme-neutral)]">
-                ผู้ป่วยที่ Active
-              </p>
-              <button type="button" className="text-[var(--theme-neutral)]/45" aria-label="ตัวเลือก">⋯</button>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-[length:var(--theme-text-xl)] font-bold text-[var(--theme-neutral)]">128</span>
-              <span className="rounded-full bg-[var(--theme-success)]/15 px-2 py-0.5 text-[10px] font-semibold text-[var(--theme-success)]">↑ 2.46%</span>
-            </div>
-            <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-[var(--theme-primary-soft)]">
-              <span className="h-full" style={{ width: "50%", background: "var(--theme-primary)" }} />
-              <span className="h-full" style={{ width: "32%", background: "color-mix(in oklch, var(--theme-primary), white 35%)" }} />
-              <span className="h-full" style={{ width: "18%", background: "color-mix(in oklch, var(--theme-primary), white 60%)" }} />
-            </div>
-            <div className="mt-1 flex justify-between text-[10px] text-[var(--theme-neutral)]/55">
-              <span>OPD 50%</span>
-              <span>IPD 32%</span>
-              <span>Telehealth 18%</span>
-            </div>
-          </section>
+          <WidgetsCard />
         </aside>
       </div>
+
+      <AppointmentDetailModal
+        appointment={selectedAppointment}
+        onClose={() => setSelectedApt(null)}
+        onOpenPatient={(hn) => {
+          setSelectedApt(null);
+          navigate(`/opd/${hn}`);
+        }}
+        onStartConsult={(hn) => {
+          setSelectedApt(null);
+          navigate(`/opd/${hn}?consult=1`);
+        }}
+      />
     </div>
   );
 }
 
-function IconButton({ children, aria }: { children: React.ReactNode; aria: string }) {
+// ── Hero banner ───────────────────────────────────────────────────────────
+
+function HeroBanner({ doctorName }: { doctorName: string }) {
   return (
-    <button
-      type="button"
-      aria-label={aria}
-      className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-[var(--theme-radius-field)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
+    <section
+      className="relative h-[120px] shrink-0 overflow-hidden rounded-[24px]"
+      style={{ background: "#21502c" }}
     >
-      {children}
-    </button>
+      {/* White triangle overlay — covers most of the banner from the
+          top-left and tapers down, leaving the green base visible only
+          as a diagonal band on the bottom + right side. */}
+      <img
+        src={BANNER_BG_TRIANGLE}
+        alt=""
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 h-[320px] w-[606px] select-none"
+      />
+      {/* Decorative curved vector — extends past the banner top + bottom. */}
+      <img
+        src={BANNER_CURVE}
+        alt=""
+        aria-hidden
+        className="pointer-events-none absolute -top-16 left-0 h-[300px] w-[720px] select-none"
+      />
+      {/* Green orb — decorative backdrop behind the laptop on the right. */}
+      <img
+        src={BANNER_ORB}
+        alt=""
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 right-8 h-[180px] w-[180px] -translate-y-1/2 select-none"
+      />
+      {/* Laptop illustration — anchored to the bottom edge so it hangs
+          out the banner. */}
+      <img
+        src={BANNER_OBJECT}
+        alt=""
+        aria-hidden
+        className="pointer-events-none absolute -bottom-8 right-12 h-[160px] w-auto select-none"
+      />
+      <div className="relative z-10 flex h-full flex-col justify-center gap-0.5 px-6">
+        <p className="text-[13px] font-medium text-[#1f1f1f]/85">
+          สวัสดี, {doctorName}
+        </p>
+        <p className="text-[20px] font-bold leading-tight text-[#1f1f1f]">
+          โรงพยาบาลทดสอบ BMS
+        </p>
+        <p className="text-[13px] text-[#1f1f1f]/70">
+          201 ประชาสัมพันธ์ สาขา BMS
+        </p>
+      </div>
+    </section>
   );
 }
 
-function Timeline() {
-  // Layout: hour labels at top, two-row appointment area below.
-  const rangeStart = HOURS[0];
-  const rangeEnd = HOURS[HOURS.length - 1] + 0.5;
-  const span = rangeEnd - rangeStart;
+// ── Calendar — header row ─────────────────────────────────────────────────
 
-  const pct = (h: number) => ((h - rangeStart) / span) * 100;
-
-  // Group appointments into rows so overlaps don't collide.
-  const rows = useMemo<Appointment[][]>(() => {
-    const sorted = [...APPOINTMENTS].sort((a, b) => a.startHour - b.startHour);
-    const out: Appointment[][] = [];
-    for (const a of sorted) {
-      let placed = false;
-      for (const row of out) {
-        const overlaps = row.some((x) => a.startHour < x.endHour && a.endHour > x.startHour);
-        if (!overlaps) {
-          row.push(a);
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) out.push([a]);
-    }
-    return out;
-  }, []);
-
+function CalendarHeaderRow({
+  week,
+  selectedIdx,
+  byDate,
+  onSelectDay,
+}: {
+  week: Date[];
+  selectedIdx: number;
+  byDate: Map<string, Appointment[]>;
+  onSelectDay: (i: number) => void;
+}) {
+  const gridTemplate = week
+    .map((_, i) => (i === selectedIdx ? "minmax(320px,2.2fr)" : "minmax(0,1fr)"))
+    .join(" ");
   return (
-    <div className="relative">
-      {/* Hour labels */}
-      <div className="relative mb-3 h-5">
-        {HOURS.map((h) => {
-          const left = pct(h);
-          const display = `${Math.floor(h).toString().padStart(2, "0")}:${(h % 1 ? "30" : "00")}`;
-          return (
-            <span
-              key={h}
-              className="absolute -translate-x-1/2 text-[length:var(--theme-text-xs)] text-[var(--theme-neutral)]/55"
-              style={{ left: `${left}%` }}
-            >
-              {display}
-            </span>
-          );
-        })}
-      </div>
-
-      {/* Vertical grid lines */}
-      <div className="relative h-[280px] rounded-[var(--theme-radius-box)]">
-        {HOURS.map((h) => (
-          <span
-            key={h}
-            aria-hidden
-            className="absolute top-0 bottom-0 w-px bg-[var(--theme-neutral)]/8"
-            style={{ left: `${pct(h)}%` }}
-          />
-        ))}
-
-        {/* Now indicator at 12:47 */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.4, ease: EASE_TV }}
-          className="absolute top-[-28px] flex flex-col items-center"
-          style={{ left: `${pct(12.78)}%`, transform: "translateX(-50%)" }}
-        >
-          <span className="rounded-full bg-[var(--theme-primary)] px-2 py-0.5 text-[length:var(--theme-text-xs)] font-semibold text-white">
-            12:47
-          </span>
-          <span className="mt-1 h-[300px] w-px bg-[var(--theme-primary)]/40" />
-        </motion.div>
-
-        {/* Appointment cards */}
-        <div className="absolute inset-0 flex flex-col gap-3 py-4">
-          {rows.map((row, ri) => (
-            <div key={ri} className="relative h-20">
-              {row.map((a) => {
-                const left = pct(a.startHour);
-                const width = pct(a.endHour) - left;
-                const primary = a.type === "primary";
-                return (
-                  <motion.div
-                    key={a.id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35, ease: EASE_TV }}
-                    className={[
-                      "absolute top-0 flex h-full items-center gap-3 rounded-[var(--theme-radius-field)] px-3 py-2",
-                      primary
-                        ? "bg-[var(--theme-primary)] text-white shadow-[var(--theme-shadow-md)]"
-                        : "bg-[var(--theme-surface)] text-[var(--theme-neutral)] ring-1 ring-[var(--theme-neutral)]/10",
-                    ].join(" ")}
-                    style={{ left: `${left}%`, width: `${width}%`, minWidth: 240 }}
-                  >
-                    <img src={AVATAR} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <p className="truncate text-[length:var(--theme-text-sm)] font-semibold">{a.patient}</p>
-                      <p className={[
-                        "truncate text-[length:var(--theme-text-xs)]",
-                        primary ? "text-white/75" : "text-[var(--theme-neutral)]/55",
-                      ].join(" ")}>
-                        {hourLabel(a.startHour)} – {hourLabel(a.endHour)} · {a.role}
-                      </p>
-                    </div>
-                  </motion.div>
-                );
-              })}
+    <div
+      className="grid transition-[grid-template-columns] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]"
+      style={{ gridTemplateColumns: gridTemplate }}
+    >
+      {week.map((d, i) => {
+        const isSelected = i === selectedIdx;
+        const count = (byDate.get(fmtDateKey(d)) ?? []).length;
+        return (
+          <motion.button
+            key={`h-${i}`}
+            type="button"
+            onClick={() => onSelectDay(i)}
+            whileHover={isSelected ? undefined : { y: -1 }}
+            whileTap={{ scale: 0.985 }}
+            transition={{ type: "spring", stiffness: 380, damping: 28 }}
+            className={[
+              "flex items-start justify-between gap-2 px-6 py-4 text-left -mr-px last:mr-0 transition-colors duration-300",
+              isSelected
+                ? "cursor-default"
+                : "cursor-pointer border-[0.5px] border-[#d9d9d9] bg-white hover:bg-[#f9f9f9]",
+            ].join(" ")}
+            style={isSelected ? { background: DAY_COLORS[i].bg } : undefined}
+          >
+            <div className={["flex flex-col gap-1", isSelected ? "items-start" : "items-center w-full"].join(" ")}>
+              <p
+                className={[
+                  "text-[16px] leading-tight transition-colors duration-300",
+                  isSelected ? "font-bold text-white" : "font-medium text-black",
+                ].join(" ")}
+              >
+                {TH_DOW_LONG[i]}
+              </p>
+              <p
+                className={[
+                  "text-[14px] leading-tight transition-colors duration-300",
+                  isSelected ? "text-white/80" : "text-black/60",
+                ].join(" ")}
+              >
+                {fmtThaiShort(d)}
+              </p>
             </div>
-          ))}
-        </div>
+            <AnimatePresence initial={false}>
+              {isSelected && count > 0 && (
+                <motion.span
+                  key="count-pill"
+                  initial={{ opacity: 0, scale: 0.85, x: 4 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.85, x: 4 }}
+                  transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                  className="flex shrink-0 items-center justify-center rounded-[16px] bg-white/15 px-6 py-2 text-[14px] font-medium text-white whitespace-nowrap"
+                >
+                  {count} เคส
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Calendar — body row ───────────────────────────────────────────────────
+
+function CalendarBodyRow({
+  week,
+  selectedIdx,
+  byDate,
+  dayEvents,
+  effectiveHighlight,
+  onSelectDay,
+  onSelectEvent,
+  onOpenDetail,
+}: {
+  week: Date[];
+  selectedIdx: number;
+  byDate: Map<string, Appointment[]>;
+  dayEvents: Appointment[];
+  effectiveHighlight: string | null;
+  onSelectDay: (i: number) => void;
+  onSelectEvent: (id: string) => void;
+  onOpenDetail: (hn: string) => void;
+}) {
+  const gridTemplate = week
+    .map((_, i) => (i === selectedIdx ? "minmax(320px,2.2fr)" : "minmax(0,1fr)"))
+    .join(" ");
+  return (
+    <div
+      className="grid min-h-0 flex-1 transition-[grid-template-columns] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]"
+      style={{ gridTemplateColumns: gridTemplate }}
+    >
+      {week.map((d, i) => {
+        const isSelected = i === selectedIdx;
+        const dayKey = fmtDateKey(d);
+        const events = byDate.get(dayKey) ?? [];
+
+        if (isSelected) {
+          return (
+            <SelectedDayColumn
+              key={`b-${i}`}
+              dayKey={dayKey}
+              tint={DAY_COLORS[i].tint}
+              accent={DAY_COLORS[i].bg}
+              dayEvents={dayEvents}
+              effectiveHighlight={effectiveHighlight}
+              onSelectEvent={onSelectEvent}
+              onOpenDetail={onOpenDetail}
+            />
+          );
+        }
+
+        // Inactive day body — figma shows a centered "X เคส" count pill.
+        return (
+          <motion.button
+            key={`b-${i}`}
+            type="button"
+            onClick={() => onSelectDay(i)}
+            whileHover={{ backgroundColor: "#f9f9f9" }}
+            whileTap={{ scale: 0.99 }}
+            transition={{ type: "spring", stiffness: 380, damping: 28 }}
+            className="flex min-h-0 cursor-pointer items-start border-[0.5px] border-[#d9d9d9] bg-white p-4 -mr-px last:mr-0"
+            aria-label={`เลือก ${TH_DOW_LONG[i]}`}
+          >
+            <motion.span
+              whileHover={{ scale: 1.04 }}
+              transition={{ type: "spring", stiffness: 380, damping: 24 }}
+              className="flex w-full items-center justify-center rounded-[16px] bg-black/5 px-6 py-2 text-[14px] font-medium text-black whitespace-nowrap"
+            >
+              {events.length} เคส
+            </motion.span>
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Selected day column — filter chips + animated event list ────────────
+
+function SelectedDayColumn({
+  dayKey,
+  tint,
+  accent,
+  dayEvents,
+  effectiveHighlight,
+  onSelectEvent,
+  onOpenDetail,
+}: {
+  dayKey: string;
+  tint: string;
+  accent: string;
+  dayEvents: Appointment[];
+  effectiveHighlight: string | null;
+  onSelectEvent: (id: string) => void;
+  onOpenDetail: (hn: string) => void;
+}) {
+  const [filter, setFilter] = useState<CaseFilter>("pending");
+
+  const counts = useMemo(() => {
+    let done = 0;
+    for (const a of dayEvents) if (isAppointmentDone(a)) done++;
+    return { done, pending: dayEvents.length - done, all: dayEvents.length };
+  }, [dayEvents]);
+
+  const filteredEvents = useMemo(() => {
+    if (filter === "all") return dayEvents;
+    const wantDone = filter === "done";
+    return dayEvents.filter((a) => isAppointmentDone(a) === wantDone);
+  }, [dayEvents, filter]);
+
+  return (
+    <div
+      className="flex min-h-0 flex-col border-[0.5px] border-[#d9d9d9] -mr-px last:mr-0"
+      style={{ background: tint }}
+    >
+      {/* Filter chips — pending first (default), then done, then all. */}
+      <div className="flex items-center gap-2 border-b border-[#d9d9d9]/60 px-4 pt-4 pb-3">
+        <FilterChip
+          label="รอตรวจ"
+          count={counts.pending}
+          active={filter === "pending"}
+          accent={accent}
+          onClick={() => setFilter("pending")}
+        />
+        <FilterChip
+          label="ตรวจแล้ว"
+          count={counts.done}
+          active={filter === "done"}
+          accent="#16a34a"
+          onClick={() => setFilter("done")}
+        />
+        <FilterChip
+          label="ทั้งหมด"
+          count={counts.all}
+          active={filter === "all"}
+          accent="#3965e1"
+          onClick={() => setFilter("all")}
+        />
       </div>
 
-      {/* Quick actions card for primary appointment */}
-      <div className="mt-4 flex w-[280px] items-center gap-2 rounded-[var(--theme-radius-field)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] px-3 py-2.5">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <p className="truncate text-[length:var(--theme-text-sm)] font-medium text-[var(--theme-neutral)]">
-            คุณสมหญิง ใจดี
-          </p>
-          <p className="truncate text-[length:var(--theme-text-xs)] text-[var(--theme-neutral)]/55">
-            HN 00123 · OPD ตรวจรักษา
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <SmallAction><IconPhone className="h-3.5 w-3.5" stroke={1.75} /></SmallAction>
-          <SmallAction><IconMessageCircle className="h-3.5 w-3.5" stroke={1.75} /></SmallAction>
-          <SmallAction><IconVideo className="h-3.5 w-3.5" stroke={1.75} /></SmallAction>
-        </div>
+      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto p-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${dayKey}-${filter}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col gap-2"
+          >
+            {filteredEvents.length === 0 ? (
+              <p className="py-10 text-center text-[14px] text-black/55">
+                {filter === "pending"
+                  ? "ไม่มีเคสรอตรวจ"
+                  : filter === "done"
+                    ? "ยังไม่มีเคสที่ตรวจแล้ว"
+                    : "ไม่มีนัดในวันนี้"}
+              </p>
+            ) : (
+              filteredEvents.map((a, idx) => (
+                <motion.div
+                  key={a.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.3,
+                    delay: 0.06 + idx * 0.035,
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
+                >
+                  <EventRow
+                    appointment={a}
+                    highlighted={a.id === effectiveHighlight}
+                    onSelect={() => onSelectEvent(a.id)}
+                    onOpenDetail={() => onOpenDetail(a.patientHN)}
+                  />
+                </motion.div>
+              ))
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
 }
 
-function SmallAction({ children }: { children: React.ReactNode }) {
+function FilterChip({
+  label,
+  count,
+  active,
+  accent,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  accent: string;
+  onClick: () => void;
+}) {
   return (
-    <button
+    <motion.button
       type="button"
-      className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-[var(--theme-primary-soft)] text-[var(--theme-primary)] transition hover:bg-[var(--theme-primary)]/15"
+      onClick={onClick}
+      whileTap={{ scale: 0.96 }}
+      transition={{ type: "spring", stiffness: 380, damping: 24 }}
+      className={[
+        "inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors duration-200",
+        active
+          ? "text-white"
+          : "bg-white text-black/70 hover:bg-white hover:text-black",
+      ].join(" ")}
+      style={active ? { background: accent } : undefined}
     >
-      {children}
-    </button>
+      {label}
+      <span
+        className={[
+          "inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold transition-colors duration-200",
+          active ? "bg-white/20 text-white" : "bg-black/5 text-black/65",
+        ].join(" ")}
+      >
+        {count}
+      </span>
+    </motion.button>
   );
 }
 
-function hourLabel(h: number) {
-  const hh = Math.floor(h);
-  const mm = Math.round((h - hh) * 60);
-  return `${hh.toString().padStart(2, "0")}:${mm.toString().padStart(2, "0")}`;
+// ── Event row inside the selected day column ─────────────────────────────
+
+function EventRow({
+  appointment: a,
+  highlighted,
+  onSelect,
+  onOpenDetail,
+}: {
+  appointment: Appointment;
+  highlighted: boolean;
+  /** Highlight-only — fires when the row is focused or click-with-modifier. */
+  onSelect: () => void;
+  /** Primary navigation — fires on whole-row click + Enter. */
+  onOpenDetail: () => void;
+}) {
+  const isDone = isAppointmentDone(a);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        // Modifier-click promotes the row to "selected" without navigating
+        // (useful for keyboard/screen-reader users who want to inspect).
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+          onSelect();
+          return;
+        }
+        onOpenDetail();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          onOpenDetail();
+        } else if (e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className={[
+        "group relative flex cursor-pointer items-center gap-2 overflow-hidden rounded-[16px] px-4 py-3 transition",
+        highlighted ? "bg-white" : "bg-white/60 hover:bg-white",
+      ].join(" ")}
+    >
+      {/* Top-right corner flag — green triangle stamp with a check icon
+          sitting near the corner. Reads as "ตรวจแล้ว" status without
+          taking inline space. */}
+      {isDone && (
+        <span
+          className="pointer-events-none absolute right-0 top-0 h-8 w-8"
+          aria-label="ตรวจแล้ว"
+        >
+          <span
+            className="absolute right-0 top-0 block h-0 w-0"
+            style={{
+              borderTop: "32px solid #16a34a",
+              borderLeft: "32px solid transparent",
+            }}
+          />
+          <IconCheck
+            className="absolute right-0.5 top-0.5 h-3 w-3 text-white"
+            stroke={3}
+          />
+        </span>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="truncate text-[12px] font-medium text-black/60 leading-none">
+          {a.time} น.
+        </p>
+        <p className="truncate text-[16px] font-medium text-black leading-tight">
+          {a.patientName}
+        </p>
+        <p className="truncate text-[14px] text-black/60 leading-none">
+          {a.type}
+        </p>
+      </div>
+      {/* CTA appears only on hover (or keyboard focus) — keeps the list
+          calm and lets the selected row stay visually clean. */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenDetail();
+        }}
+        className="shrink-0 rounded-full bg-[#3965e1] px-4 py-2 text-[12px] font-medium text-white opacity-0 transition hover:brightness-105 focus-visible:opacity-100 group-hover:opacity-100"
+      >
+        ดูประวัติคนไข้
+      </button>
+    </div>
+  );
+}
+
+// ── Next case row (right rail's donut card) ──────────────────────────────
+// Mirrors EventRow's visual contract — same padding, hover-only CTA,
+// optional "ตรวจแล้ว" corner flag — but renders on the gray "เคสถัดไป"
+// surface inside the donut card.
+function NextCaseRow({
+  appointment: a,
+  onOpenDetail,
+}: {
+  appointment: Appointment;
+  onOpenDetail: () => void;
+}) {
+  const isDone = isAppointmentDone(a);
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpenDetail}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenDetail();
+        }
+      }}
+      className="group relative flex cursor-pointer items-center gap-2 overflow-hidden rounded-[16px] bg-[#f6f6f6] px-4 py-3 transition hover:bg-[#eeeeee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3965e1]/40"
+    >
+      {isDone && (
+        <span
+          className="pointer-events-none absolute right-0 top-0 h-8 w-8"
+          aria-label="ตรวจแล้ว"
+        >
+          <span
+            className="absolute right-0 top-0 block h-0 w-0"
+            style={{
+              borderTop: "32px solid #16a34a",
+              borderLeft: "32px solid transparent",
+            }}
+          />
+          <IconCheck
+            className="absolute right-0.5 top-0.5 h-3 w-3 text-white"
+            stroke={3}
+          />
+        </span>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="truncate text-[12px] font-medium text-black/60 leading-none">
+          {a.time} น.
+        </p>
+        <p className="truncate text-[16px] font-medium text-black leading-tight">
+          {a.patientName}
+        </p>
+        <p className="truncate text-[14px] text-black/60 leading-none">
+          {a.type}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onOpenDetail}
+        className="shrink-0 rounded-full bg-[#3965e1] px-4 py-2 text-[12px] font-medium text-white opacity-0 transition hover:brightness-105 focus-visible:opacity-100 group-hover:opacity-100"
+      >
+        ดูประวัติคนไข้
+      </button>
+    </div>
+  );
+}
+
+// ── Right rail — donut chart card ────────────────────────────────────────
+
+function DonutCaseCard({
+  doneCount,
+  pendingCount,
+  total,
+  nextCase,
+  onOpenPatient,
+}: {
+  doneCount: number;
+  pendingCount: number;
+  total: number;
+  nextCase: Appointment | undefined;
+  onOpenPatient: (hn: string) => void;
+}) {
+  // Half-gauge — recharts RadialBarChart from 180°→0° (top half),
+  // capped via PolarAngleAxis so the bar represents done/total as a
+  // proportion of the full half-circle.
+  const safeTotal = Math.max(1, doneCount + pendingCount);
+  const data = [{ name: "done", value: doneCount, fill: "#16a34a" }];
+
+  return (
+    <section className="flex flex-col items-center gap-4 rounded-[24px] bg-white p-4">
+      <div className="relative h-[120px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <RadialBarChart
+            cx="50%"
+            cy="95%"
+            innerRadius="120%"
+            outerRadius="150%"
+            startAngle={180}
+            endAngle={0}
+            data={data}
+            barSize={14}
+          >
+            <PolarAngleAxis
+              type="number"
+              domain={[0, safeTotal]}
+              angleAxisId={0}
+              tick={false}
+            />
+            <RadialBar
+              background={{ fill: "#ececec" }}
+              dataKey="value"
+              cornerRadius={8}
+              fill="#16a34a"
+            />
+          </RadialBarChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1">
+          <p className="text-[24px] font-bold leading-none text-[#0b66e4]">
+            {total} เคส
+          </p>
+          <p className="text-[14px] leading-none text-[#979797]">
+            คนไข้ของวันนี้
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <Legend dotColor="#16a34a" label={`ตรวจแล้ว (${doneCount})`} />
+        <Legend dotColor="#cccccc" label={`รอตรวจ (${pendingCount})`} />
+      </div>
+
+      <div className="flex w-full flex-col gap-2">
+        <p className="text-[14px] font-semibold text-black">เคสถัดไป</p>
+        {nextCase ? (
+          <NextCaseRow
+            appointment={nextCase}
+            onOpenDetail={() => onOpenPatient(nextCase.patientHN)}
+          />
+        ) : (
+          <div className="rounded-[16px] bg-[#f6f6f6] px-4 py-3 text-center text-[12px] text-black/55">
+            ไม่มีเคสถัดไป
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function Legend({ dotColor, label }: { dotColor: string; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="block h-3 w-3 rounded-full"
+        style={{ background: dotColor }}
+        aria-hidden
+      />
+      <span className="text-[14px] text-[#5f6368]">{label}</span>
+    </div>
+  );
+}
+
+// ── Right rail — widgets card ────────────────────────────────────────────
+
+function WidgetsCard() {
+  return (
+    <section className="flex min-h-0 flex-1 flex-col rounded-[24px] bg-white p-4">
+      <header className="mb-3 flex items-center justify-between">
+        <h2 className="text-[16px] font-bold text-black">วิดเจ็ตของฉัน</h2>
+        <button
+          type="button"
+          className="flex items-center gap-1 text-[14px] font-medium text-[#3965e1] hover:underline"
+        >
+          <IconPlus className="h-4 w-4" stroke={2} />
+          เพิ่ม
+        </button>
+      </header>
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-[12px] text-black/45">
+        <div className="h-2 w-32 rounded-full bg-[#d9d9d9]/50" aria-hidden />
+        <div className="h-2 w-24 rounded-full bg-[#d9d9d9]/50" aria-hidden />
+        <p className="mt-2">ยังไม่มีวิดเจ็ต — กด "เพิ่ม" เพื่อเลือก</p>
+      </div>
+    </section>
+  );
+}
+
+// ── Appointment detail modal ─────────────────────────────────────────────
+
+const STATUS_PILL: Record<string, { label: string; tint: string }> = {
+  scheduled: { label: "นัด", tint: "bg-[var(--theme-neutral)]/15 text-[var(--theme-neutral)]/70" },
+  checked_in: { label: "รอตรวจ", tint: "bg-[var(--theme-primary)]/15 text-[var(--theme-primary)]" },
+  in_progress: { label: "กำลังตรวจ", tint: "bg-[#f5a524]/20 text-[#b06d00]" },
+  done: { label: "เสร็จแล้ว", tint: "bg-[var(--theme-success)]/15 text-[var(--theme-success)]" },
+  no_show: { label: "ขาดนัด", tint: "bg-[var(--theme-error)]/15 text-[var(--theme-error)]" },
+  cancelled: { label: "ยกเลิก", tint: "bg-[var(--theme-neutral)]/10 text-[var(--theme-neutral)]/45" },
+};
+
+function AppointmentDetailModal({
+  appointment,
+  onClose,
+  onOpenPatient,
+  onStartConsult,
+}: {
+  appointment: Appointment | null;
+  onClose: () => void;
+  onOpenPatient: (hn: string) => void;
+  onStartConsult: (hn: string) => void;
+}) {
+  const a = appointment;
+  const pill = a ? STATUS_PILL[a.status] : null;
+  const endTime = useMemo(() => {
+    if (!a) return "";
+    const start = new Date(`${a.date}T${a.time}:00`);
+    const end = new Date(start.getTime() + a.durationMinutes * 60_000);
+    return `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+  }, [a]);
+
+  return (
+    <Modal
+      isOpen={!!a}
+      onClose={onClose}
+      placement="center"
+      classNames={{
+        base: "bg-[var(--theme-surface)] text-[var(--theme-neutral)]",
+        backdrop: "bg-black/40",
+      }}
+    >
+      <ModalContent>
+        {a && (
+          <>
+            <ModalHeader className="flex items-center justify-between gap-3">
+              <div className="flex flex-col leading-tight">
+                <span className="text-[16px] font-bold">{a.patientName}</span>
+                <span className="text-[12px] font-medium text-[var(--theme-neutral)]/55">
+                  HN {a.patientHN}
+                </span>
+              </div>
+              {pill && (
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${pill.tint}`}
+                >
+                  {pill.label}
+                </span>
+              )}
+            </ModalHeader>
+            <ModalBody className="text-[13px]">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+                <DetailRow label="เวลานัด" value={`${a.time} - ${endTime}`} />
+                <DetailRow label="ระยะเวลา" value={`${a.durationMinutes} นาที`} />
+                <DetailRow label="คลินิก" value={a.clinic} />
+                <DetailRow label="ประเภท" value={a.type} />
+                <DetailRow label="แพทย์ผู้ตรวจ" value={a.doctor} />
+                {a.waitMinutes !== undefined && (
+                  <DetailRow label="เวลารอ" value={`${a.waitMinutes} นาที`} />
+                )}
+              </dl>
+            </ModalBody>
+            <ModalFooter className="flex-wrap justify-end gap-2">
+              <Button variant="flat" onPress={onClose}>
+                ปิด
+              </Button>
+              <Button variant="bordered" onPress={() => onOpenPatient(a.patientHN)}>
+                เปิดเวชระเบียน
+              </Button>
+              {a.status === "checked_in" && (
+                <Button
+                  color="primary"
+                  className="bg-[#1ebfbf] text-white"
+                  startContent={<IconPlayerPlay className="h-4 w-4" stroke={2} />}
+                  onPress={() => onStartConsult(a.patientHN)}
+                >
+                  เริ่มตรวจ + ซักประวัติ
+                </Button>
+              )}
+              {a.status === "in_progress" && (
+                <Button
+                  color="primary"
+                  className="bg-[#1ebfbf] text-white"
+                  startContent={<IconMicrophone className="h-4 w-4" stroke={2} />}
+                  onPress={() => onStartConsult(a.patientHN)}
+                >
+                  ดำเนินการต่อ
+                </Button>
+              )}
+              {a.status === "scheduled" && (
+                <span className="self-center text-[12px] text-[var(--theme-neutral)]/55">
+                  รอเคาน์เตอร์เช็คอินคนไข้
+                </span>
+              )}
+            </ModalFooter>
+          </>
+        )}
+      </ModalContent>
+    </Modal>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-[11px] font-medium text-[var(--theme-neutral)]/55">{label}</dt>
+      <dd className="text-[13px] font-semibold text-[var(--theme-neutral)]">{value}</dd>
+    </div>
+  );
 }

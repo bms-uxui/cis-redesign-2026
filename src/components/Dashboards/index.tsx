@@ -99,10 +99,10 @@ export default function Dashboards() {
 
   return (
     <div className="min-h-screen w-full bg-[var(--theme-base)]">
-      <div className="h-20 shrink-0" aria-hidden />
+      <div className="h-16 shrink-0" aria-hidden />
       <div
         className={[
-          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[24px] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
+          "flex h-[calc(100vh-6rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[24px] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
           railHidden ? "ml-4" : "ml-[296px]",
         ].join(" ")}
       >

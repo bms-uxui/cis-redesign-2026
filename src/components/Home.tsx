@@ -12,6 +12,8 @@ import {
 } from "@tabler/icons-react";
 import TileCard from "./TileCard";
 import WidgetsSection from "./Home/Widgets/WidgetsSection";
+import { RAIL_LIST } from "./Sidebar/config";
+import type { RailEntry } from "./Sidebar/types";
 import iconHealthcareCall from "../assets/figma/sidebar-icons/healthcare-call.svg?raw";
 import iconFileShield from "../assets/figma/sidebar-icons/file-shield-02.svg?raw";
 
@@ -107,8 +109,24 @@ export default function Home() {
     openPalette,
     openCustomize,
     pushRecent,
+    favoriteRails,
   } = useSidebar();
   const { openAiva } = useAiva();
+
+  // Resolve favorite rail keys to their RailEntry definitions, preserving
+  // the user's favorite order.
+  const favoriteEntries: RailEntry[] = favoriteRails
+    .map((k) => RAIL_LIST.find((r) => r.key === k))
+    .filter((r): r is RailEntry => !!r);
+
+  const handleFavoriteClick = (rail: RailEntry) => {
+    if (rail.navigateTo) {
+      openTab(rail.navigateTo, { title: rail.label });
+    } else {
+      openMenu(rail.key);
+    }
+    pushRecent(rail.key);
+  };
 
   const handleFrequentClick = (m: MenuCard) => {
     if (m.navigateTo) {
@@ -123,7 +141,7 @@ export default function Home() {
   return (
     <div className="min-h-screen w-full bg-[var(--theme-base)]">
       {/* Reserve space for the floating TopBar card (top-4 + h-16 = 80px) */}
-      <div className="h-20 shrink-0" aria-hidden />
+      <div className="h-16 shrink-0" aria-hidden />
 
       <div className="w-full">
         {/* Main — left margin tracks the global Sidebar's collapsed/expanded
@@ -412,36 +430,33 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Frequent menu */}
-          <section className="flex flex-col gap-[var(--theme-space-md)]">
-            <div className="flex items-center justify-between text-[length:var(--theme-text-sm)] font-medium">
-              <p className="text-[var(--theme-neutral)]/60">เมนูที่ใช้บ่อย</p>
-              <button
-                type="button"
-                onClick={openCustomize}
-                className="text-[var(--theme-primary)] hover:underline"
-              >
-                จัดการเมนู
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-[var(--theme-space-md)] sm:grid-cols-3 lg:grid-cols-5">
-              {FREQUENT_MENU.slice(0, 4).map((m) => (
-                <TileCard
-                  key={m.label}
-                  title={m.label}
-                  Icon={m.Icon}
-                  iconSrc={m.iconSrc}
-                  onClick={() => handleFrequentClick(m)}
-                />
-              ))}
-              <TileCard
-                title="เพิ่มเมนู"
-                Icon={IconPlus}
-                variant="dashed"
-                onClick={openPalette}
-              />
-            </div>
-          </section>
+          {/* Favorite menus — user-picked tiles, shown above the frequent
+              menu so they're the first thing the doctor sees. */}
+          {favoriteEntries.length > 0 && (
+            <section className="flex flex-col gap-[var(--theme-space-md)]">
+              <div className="flex items-center justify-between text-[length:var(--theme-text-sm)] font-medium">
+                <p className="text-[var(--theme-neutral)]/60">เมนูโปรด</p>
+                <button
+                  type="button"
+                  onClick={openCustomize}
+                  className="text-[var(--theme-primary)] hover:underline"
+                >
+                  จัดการ
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-[var(--theme-space-md)] sm:grid-cols-3 lg:grid-cols-5">
+                {favoriteEntries.map((rail) => (
+                  <TileCard
+                    key={rail.key}
+                    title={rail.label}
+                    Icon={rail.Icon}
+                    iconSrc={rail.iconSrc}
+                    onClick={() => handleFavoriteClick(rail)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           <WidgetsSection />
 

@@ -29,6 +29,10 @@ export interface PcmRecorderOptions {
   minUtteranceMs?: number;
   // Pre-roll prepended before the first frame above threshold.
   preRollMs?: number;
+  // Optional: fired on every audio buffer (~every 43 ms at 48 kHz with the
+  // 2048-sample script processor) with the RMS amplitude in 0..1 range so
+  // consumers can drive a live volume meter / soundwave UI.
+  onLevel?: (rms: number) => void;
 }
 
 export interface PcmRecorder {
@@ -115,6 +119,7 @@ export async function startPcmRecorder(
     totalSamples += copy.length;
 
     const rms = computeRms(copy);
+    opts.onLevel?.(rms);
 
     if (!inSpeech) {
       // keep filling pre-roll ring

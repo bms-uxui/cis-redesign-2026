@@ -26,7 +26,7 @@ export default function DashboardView() {
   if (!dashboard) {
     return (
       <div className="min-h-screen w-full bg-[var(--theme-base)]">
-        <div className="h-20" aria-hidden />
+        <div className="h-16" aria-hidden />
         <div className="mx-auto max-w-[600px] px-8 py-12 text-center">
           <p className="text-[length:var(--theme-text-md)] text-[var(--theme-neutral)]/55">
             ไม่พบ dashboard นี้
@@ -45,10 +45,10 @@ export default function DashboardView() {
 
   return (
     <div className="min-h-screen w-full bg-[var(--theme-base)]">
-      <div className="h-20 shrink-0" aria-hidden />
+      <div className="h-16 shrink-0" aria-hidden />
       <div
         className={[
-          "flex h-[calc(100vh-7rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
+          "flex h-[calc(100vh-6rem)] mr-4 mt-4 mb-4 overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[margin] duration-300 ease-out",
           railHidden ? "ml-4" : "ml-[296px]",
         ].join(" ")}
       >

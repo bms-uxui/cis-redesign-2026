@@ -233,9 +233,9 @@ const TOKENS: Record<
     },
     fieldClassNames: {
       inputWrapper:
-        "bg-white border border-black/[0.06] shadow-[0_2px_4px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] data-[hover=true]:bg-white data-[focus=true]:border-[#3485ff]/40",
-      label: "text-gray-600 text-[12px] font-medium",
-      input: "text-gray-900",
+        "min-h-[34px] bg-white border border-black/15 data-[hover=true]:border-black/30 data-[focus=true]:border-[#3485ff] data-[focus=true]:bg-white shadow-none",
+      label: "text-gray-600 text-[11px] font-medium pb-0.5",
+      input: "text-[13px] text-gray-900",
     },
     citation:
       "group inline-flex max-w-full items-start gap-2 rounded-lg border border-[#3485ff]/15 bg-[#3485ff]/[0.04] px-2 py-1 text-left text-[11px] text-gray-600 transition hover:bg-[#3485ff]/[0.08]",
@@ -322,8 +322,7 @@ function renderNode(
             </div>
           )}
           <div
-            className="gap-3"
-            style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }}
+            className="grid gap-x-3 gap-y-3 grid-cols-2 xl:grid-cols-3"
           >
             {node.children.map((cid) => {
               const child = byId.get(cid);
@@ -352,8 +351,7 @@ function renderNode(
       return (
         <div
           key={id}
-          className="gap-3"
-          style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }}
+          className="grid gap-x-3 gap-y-3 grid-cols-2 xl:grid-cols-3"
         >
           {node.children.map((cid) => {
             const child = byId.get(cid);
@@ -406,9 +404,10 @@ function renderNode(
         onValueChange: (v: string) => onField(node.binding, v),
         placeholder: node.placeholder,
         isRequired: node.required,
-        size: "md" as const,
-        variant: "flat" as const,
-        radius: "lg" as const,
+        size: "sm" as const,
+        variant: "bordered" as const,
+        radius: "md" as const,
+        labelPlacement: "outside" as const,
         classNames: t.fieldClassNames,
       };
       return node.multiline ? (

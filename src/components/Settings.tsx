@@ -115,7 +115,7 @@ export default function Settings() {
   return (
     <div className="min-h-screen w-full bg-[var(--theme-base)]">
       {/* Reserve space for the floating TopBar card (top-4 + h-16 = 80px) */}
-      <div className="h-20 shrink-0" aria-hidden />
+      <div className="h-16 shrink-0" aria-hidden />
 
       <div
         className={[
@@ -126,7 +126,7 @@ export default function Settings() {
         {/* Two-column sheet — same rounded-3xl + soft shadow as Home cards.
             Fixed to the remaining viewport height so the sidebar stays put
             while only <main> scrolls. */}
-        <div className="grid h-[calc(100vh-7rem)] grid-cols-[240px_1fr] overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] shadow-sm">
+        <div className="grid h-[calc(100vh-6rem)] grid-cols-[240px_1fr] overflow-hidden rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] shadow-sm">
           {/* Sidebar — mirrors Home's left nav. Independent overflow so it
               never grows the page; in practice the nav is short enough not
               to need to scroll. */}

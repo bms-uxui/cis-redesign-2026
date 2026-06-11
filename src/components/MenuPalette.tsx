@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useNavigate } from "react-router";
 import { IconSearch, IconCornerDownLeft, IconSparkles } from "@tabler/icons-react";
 import { useSidebar } from "../contexts/SidebarContext";
+import { useTabs } from "../contexts/TabsContext";
 import {
   getMenuEntries,
   searchMenuEntries,
@@ -108,10 +110,20 @@ export default function MenuPalette() {
     if (highlight >= combined.length) setHighlight(Math.max(0, combined.length - 1));
   }, [combined.length, highlight]);
 
+  const navigate = useNavigate();
+  const { openTab } = useTabs();
   const handleSelect = (entry: MenuEntry) => {
-    openMenu(entry.railKey, entry.childKey);
     pushRecent(entry.id);
     closePalette();
+    if (entry.navigateTo) {
+      // Rail/panel item with a direct route — open in tab and navigate.
+      openTab(entry.navigateTo, { title: entry.label });
+      navigate(entry.navigateTo);
+      // Also reflect the active rail so the sidebar visual state matches.
+      openMenu(entry.railKey, entry.childKey);
+      return;
+    }
+    openMenu(entry.railKey, entry.childKey);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {

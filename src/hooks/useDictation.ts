@@ -95,6 +95,11 @@ class TwoSpeakerClusterer {
 }
 
 export function useDictation(opts: UseDictationOptions = {}) {
+  // Live RMS amplitude (0..1) updated on every audio buffer while the
+  // recorder is running. Exposed as a ref (not state) so the UI can sample
+  // it at the screen's refresh rate without forcing React re-renders at
+  // ~23 fps.
+  const levelRef = useRef(0);
   const [status, setStatus] = useState<DictationStatus>("idle");
   const [segments, setSegments] = useState<DictationSegment[]>([]);
   const [inFlight, setInFlight] = useState(0);
@@ -249,6 +254,9 @@ export function useDictation(opts: UseDictationOptions = {}) {
           onUtteranceStart: handleUtteranceStart,
           onChunk: handleFinal,
           onPartial: handlePartial,
+          onLevel: (rms) => {
+            levelRef.current = rms;
+          },
           partialIntervalMs: 800,
           partialMinMs: 500,
           // Slightly longer silence window so natural pauses don't end the
@@ -322,5 +330,8 @@ export function useDictation(opts: UseDictationOptions = {}) {
     toggle,
     isActive: status === "recording",
     isProcessing,
+    /** Number of ASR partials currently in flight against the server. */
+    asrInFlight: inFlight,
+    levelRef,
   };
 }
