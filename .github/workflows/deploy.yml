@@ -25,6 +25,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # SPA fallback for GitHub Pages: any unknown route resolves to
+      # 404.html, which is just the React app shell so the router takes
+      # over and renders the right view on hard refresh / deep link.
+      - run: cp dist/index.html dist/404.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
