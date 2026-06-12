@@ -22,6 +22,8 @@ export interface DemoAccount {
   email: string;
   /** 2-letter avatar fallback. */
   initials: string;
+  /** Provider ID — professional license / system provider number. */
+  providerId: string;
 }
 
 /** Order matches the picker grid in the design (Admin spans the last row). */
@@ -41,6 +43,7 @@ export const DEMO_ACCOUNTS: Record<UserRole, DemoAccount> = {
     username: "sirin.p",
     email: "sirin.p@ehp.co.th",
     initials: "SP",
+    providerId: "ว.32741",
   },
   nurse: {
     role: "nurse",
@@ -49,6 +52,7 @@ export const DEMO_ACCOUNTS: Record<UserRole, DemoAccount> = {
     username: "kanya.s",
     email: "kanya.s@ehp.co.th",
     initials: "KS",
+    providerId: "พย.45110238",
   },
   pharmacist: {
     role: "pharmacist",
@@ -57,6 +61,7 @@ export const DEMO_ACCOUNTS: Record<UserRole, DemoAccount> = {
     username: "thanawat.p",
     email: "thanawat.p@ehp.co.th",
     initials: "TP",
+    providerId: "ภ.21845",
   },
   reception: {
     role: "reception",
@@ -65,6 +70,7 @@ export const DEMO_ACCOUNTS: Record<UserRole, DemoAccount> = {
     username: "pimchanok.j",
     email: "pimchanok.j@ehp.co.th",
     initials: "PJ",
+    providerId: "EHP-REG-1042",
   },
   admin: {
     role: "admin",
@@ -73,6 +79,7 @@ export const DEMO_ACCOUNTS: Record<UserRole, DemoAccount> = {
     username: "woradej.i",
     email: "woradej.i@ehp.co.th",
     initials: "WI",
+    providerId: "EHP-ADM-001",
   },
 };
 
@@ -100,3 +107,86 @@ export const HOSPITALS: Hospital[] = [
     area: "เขตวัฒนา · กรุงเทพมหานคร",
   },
 ];
+
+/** Alias — login step 2 reads สาขา from the same list. */
+export const BRANCHES = HOSPITALS;
+
+export interface Department {
+  code: string;
+  name: string;
+}
+
+/** หน่วยงาน — selectable work units. */
+export const DEPARTMENTS: Department[] = [
+  { code: "OPD", name: "แผนกผู้ป่วยนอก (OPD)" },
+  { code: "IPD", name: "แผนกผู้ป่วยใน (IPD)" },
+  { code: "ER", name: "แผนกฉุกเฉิน (ER)" },
+  { code: "MED", name: "อายุรกรรม" },
+  { code: "SURG", name: "ศัลยกรรม" },
+  { code: "PHAR", name: "ห้องจ่ายยา" },
+  { code: "REG", name: "งานเวชระเบียน" },
+  { code: "ADMIN", name: "ฝ่ายบริหารระบบ" },
+];
+
+export interface Room {
+  code: string;
+  name: string;
+}
+
+/** ห้องทำงาน — keyed by department code, with a generic fallback. */
+export const ROOMS_BY_DEPT: Record<string, Room[]> = {
+  OPD: [
+    { code: "OPD-1", name: "ห้องตรวจ 1" },
+    { code: "OPD-2", name: "ห้องตรวจ 2" },
+    { code: "OPD-3", name: "ห้องตรวจ 3" },
+    { code: "OPD-S", name: "เคาน์เตอร์ซักประวัติ" },
+  ],
+  IPD: [
+    { code: "WARD-A", name: "หอผู้ป่วยใน A" },
+    { code: "WARD-B", name: "หอผู้ป่วยใน B" },
+    { code: "NURSE", name: "เคาน์เตอร์พยาบาล" },
+  ],
+  ER: [
+    { code: "ER-1", name: "ห้องฉุกเฉิน 1" },
+    { code: "ER-OBS", name: "ห้องสังเกตอาการ" },
+  ],
+  MED: [
+    { code: "MED-1", name: "ห้องตรวจอายุรกรรม 1" },
+    { code: "MED-2", name: "ห้องตรวจอายุรกรรม 2" },
+  ],
+  SURG: [
+    { code: "SUR-1", name: "ห้องตรวจศัลยกรรม 1" },
+    { code: "OR-1", name: "ห้องผ่าตัด 1" },
+  ],
+  PHAR: [
+    { code: "PH-1", name: "เคาน์เตอร์จ่ายยา 1" },
+    { code: "PH-2", name: "เคาน์เตอร์จ่ายยา 2" },
+    { code: "PH-IPD", name: "ห้องยาผู้ป่วยใน" },
+  ],
+  REG: [
+    { code: "RG-1", name: "เคาน์เตอร์เวชระเบียน 1" },
+    { code: "RG-2", name: "เคาน์เตอร์เวชระเบียน 2" },
+  ],
+  ADMIN: [
+    { code: "ADM-1", name: "ห้องผู้ดูแลระบบ" },
+    { code: "ADM-IT", name: "ฝ่าย IT" },
+  ],
+};
+
+const FALLBACK_ROOMS: Room[] = [
+  { code: "GEN-1", name: "ห้องทำงาน 1" },
+  { code: "GEN-2", name: "ห้องทำงาน 2" },
+];
+
+export function roomsForDept(deptCode: string): Room[] {
+  return ROOMS_BY_DEPT[deptCode] ?? FALLBACK_ROOMS;
+}
+
+/** Default หน่วยงาน per role — pre-selects the most likely unit. */
+export const DEFAULT_DEPT: Record<UserRole, string> = {
+  doctor: "OPD",
+  nurse: "OPD",
+  pharmacist: "PHAR",
+  reception: "REG",
+  admin: "ADMIN",
+};

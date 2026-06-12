@@ -16,8 +16,12 @@ export interface User {
   avatarUrl?: string;
   /** 2-letter avatar fallback. */
   initials?: string;
-  /** Hospital the user signed into (set on the login screen). */
-  hospital?: string;
+  /** Provider ID — professional license / system provider number. */
+  providerId?: string;
+  /** Work context chosen on the login screen (step 2). */
+  branch?: string;
+  department?: string;
+  room?: string;
 }
 
 interface UserContextValue {

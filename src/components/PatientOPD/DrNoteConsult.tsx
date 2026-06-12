@@ -7,17 +7,14 @@ import {
   IconCheck,
   IconNotes,
   IconChevronLeft,
+  IconCalendarPlus,
+  IconPill,
+  IconFlask,
 } from "@tabler/icons-react";
 import { useDictationContext } from "../../contexts/DictationContext";
 import { useToast } from "../../contexts/ToastContext";
+import { useUser } from "../../contexts/UserContext";
 import { chat } from "../../services/ai/llm";
-import { A2UI_CATALOG_SYSTEM } from "../../services/a2ui/catalog";
-import {
-  validateA2UIResponse,
-  type A2UIResponse,
-  type A2UIActionEvent,
-} from "../../services/a2ui/types";
-import A2UIRenderer from "../a2ui/A2UIRenderer";
 import { saveProfile } from "../../data/patientStore";
 import type { Patient } from "../../data/mock/patients";
 import {
@@ -38,21 +35,27 @@ const NOTE_SYSTEM =
   'Output ONLY JSON: {"cc":"...","hpi":"...","impression":"...","plan":"..."}. ' +
   "cc = อาการสำคัญสั้น ๆ, hpi = ประวัติปัจจุบันเป็นย่อหน้าเดียว, impression = การวินิจฉัยเบื้องต้น, plan = แนวทางการดูแลเบื้องต้น.";
 
-// A2UI task — turns the note into an interactive "proposed actions" panel.
-const PROPOSED_TASK =
-  "Generate a compact 'proposed clinical actions' UI for the doctor, based on the consultation note provided. " +
-  "Use the `action-card` block for each recommended action — 2 to 4 cards covering, where clinically appropriate: " +
-  "(1) นัดติดตามอาการ — caption ระบุช่วงเวลานัดที่แนะนำ; (2) สั่งยา — caption ระบุชื่อยา + ขนาด; " +
-  "(3) ส่งตรวจแลป — caption ระบุรายการตรวจ. " +
-  "Each action-card MUST be triggerable: include a button whose `action` is exactly one of " +
-  "'order_followup', 'order_meds', or 'order_lab'. Title + caption in Thai with concrete details. " +
-  "Use a leading section heading 'แผนการดูแลที่เสนอ'. Output ONLY the A2UIResponse JSON.";
+// Proposed clinical actions distilled from the note (rendered as a button
+// list, not freeform UI). Each action is a short, concrete order the doctor
+// taps to execute.
+const PROPOSED_SYSTEM =
+  "คุณคือ AI ผู้ช่วยแพทย์ในระบบ CIS เสนอ 'การดำเนินการ' ที่แพทย์ควรทำต่อจากการตรวจ 2-4 อย่าง ตามความเหมาะสมทางคลินิก จากบันทึกที่ให้. " +
+  "ครอบคลุมเมื่อเหมาะสม: นัดติดตาม (followup), สั่งยา (meds), ส่งตรวจแลป (lab). " +
+  "เรียงให้การดำเนินการที่สำคัญที่สุดอยู่บนสุด. " +
+  'Output ONLY JSON: {"actions":[{"label":"...","type":"followup|meds|lab"}]}. ' +
+  "label = ข้อความสั้นกระชับเป็นคำสั่งพร้อมรายละเอียดจริง เช่น 'นัดติดตาม 7 วัน', 'สั่งยา Metformin 500 mg', 'ส่งตรวจ HbA1c' — ห้ามแต่งข้อมูลที่ไม่มีในบันทึก.";
 
 interface NoteDraft {
   cc: string;
   hpi: string;
   impression: string;
   plan: string;
+}
+
+type ActionType = "followup" | "meds" | "lab";
+interface ProposedAction {
+  label: string;
+  type: ActionType;
 }
 
 function parseJson<T>(text: string): T {
@@ -92,6 +95,7 @@ export default function DrNoteConsult({
   onClose: () => void;
 }) {
   const toast = useToast();
+  const { user } = useUser();
   const { isRecording, startSession, stopSession, segments, asrInFlight } = useDictationContext();
   const { topics, inFlight: topicInFlight } = useSymptomTopicsFromLLM(segments, isRecording);
   const { hpi } = useHpiNarrativeFromLLM(segments, isRecording);
@@ -101,7 +105,7 @@ export default function DrNoteConsult({
   const [phase, setPhase] = useState<Phase>("consult");
   const [tab, setTab] = useState<CenterTab>("summary");
   const [note, setNote] = useState<NoteDraft | null>(null);
-  const [proposed, setProposed] = useState<A2UIResponse | null>(null);
+  const [proposed, setProposed] = useState<ProposedAction[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,17 +142,21 @@ export default function DrNoteConsult({
       const draft = parseJson<NoteDraft>(noteRes.text);
       setNote(draft);
 
-      const uiRes = await chat(
+      const actRes = await chat(
         [
-          { role: "system", content: `${A2UI_CATALOG_SYSTEM}\n\n${PROPOSED_TASK}` },
+          { role: "system", content: PROPOSED_SYSTEM },
           {
             role: "user",
             content: `บันทึกการตรวจ:\n${JSON.stringify(draft)}\n\nบทสนทนา:\n${text}`,
           },
         ],
-        { temperature: 0.2, maxTokens: 2500, responseFormat: "json_object" },
+        { temperature: 0.2, maxTokens: 600, responseFormat: "json_object" },
       );
-      setProposed(validateA2UIResponse(parseJson(uiRes.text)));
+      const parsed = parseJson<{ actions?: ProposedAction[] }>(actRes.text);
+      const actions = Array.isArray(parsed?.actions)
+        ? parsed.actions.filter((a) => a && typeof a.label === "string" && a.label.trim())
+        : [];
+      setProposed(actions);
       setPhase("result");
     } catch (e) {
       toast.error("สรุปไม่สำเร็จ", e instanceof Error ? e.message : String(e));
@@ -156,13 +164,13 @@ export default function DrNoteConsult({
     }
   };
 
-  const handleProposedAction = (event: A2UIActionEvent) => {
-    const labels: Record<string, string> = {
-      order_followup: "เพิ่มนัดติดตามแล้ว",
-      order_meds: "ส่งคำสั่งยาแล้ว",
-      order_lab: "ส่งตรวจแลปแล้ว",
+  const handleProposedAction = (action: ProposedAction) => {
+    const labels: Record<ActionType, string> = {
+      followup: "เพิ่มนัดติดตามแล้ว",
+      meds: "ส่งคำสั่งยาแล้ว",
+      lab: "ส่งตรวจแลปแล้ว",
     };
-    toast.success(labels[event.action] ?? "ดำเนินการแล้ว", "เพิ่มเข้าคำสั่งแพทย์");
+    toast.success(labels[action.type] ?? "ดำเนินการแล้ว", action.label);
   };
 
   const handleSaveNote = () => {
@@ -273,7 +281,13 @@ export default function DrNoteConsult({
 
             {phase === "result" && note && (
               <div className="mx-auto w-full max-w-[860px] flex-1 overflow-y-auto">
-                <ResultView note={note} proposed={proposed} onAction={handleProposedAction} />
+                <ResultView
+                  note={note}
+                  proposed={proposed}
+                  doctorName={user.name}
+                  doctorAvatar={user.avatarUrl}
+                  onAction={handleProposedAction}
+                />
               </div>
             )}
           </div>
@@ -288,11 +302,15 @@ export default function DrNoteConsult({
 function ResultView({
   note,
   proposed,
+  doctorName,
+  doctorAvatar,
   onAction,
 }: {
   note: NoteDraft;
-  proposed: A2UIResponse | null;
-  onAction: (e: A2UIActionEvent) => void;
+  proposed: ProposedAction[] | null;
+  doctorName: string;
+  doctorAvatar?: string;
+  onAction: (a: ProposedAction) => void;
 }) {
   const rows: { label: string; value: string }[] = [
     { label: "อาการสำคัญ (CC)", value: note.cc },
@@ -314,13 +332,86 @@ function ResultView({
         ))}
       </section>
 
-      {proposed ? (
-        <section className="rounded-2xl bg-white p-6">
-          <A2UIRenderer response={proposed} onAction={onAction} theme="light" />
-        </section>
-      ) : (
-        <p className="text-[13px] text-[var(--theme-neutral)]/45">ไม่มีแผนการดูแลที่เสนอ</p>
-      )}
+      <ProposedActions
+        actions={proposed ?? []}
+        doctorName={doctorName}
+        doctorAvatar={doctorAvatar}
+        onAction={onAction}
+      />
     </div>
+  );
+}
+
+const ACTION_ICON: Record<ActionType, typeof IconCalendarPlus> = {
+  followup: IconCalendarPlus,
+  meds: IconPill,
+  lab: IconFlask,
+};
+
+function ProposedActions({
+  actions,
+  doctorName,
+  doctorAvatar,
+  onAction,
+}: {
+  actions: ProposedAction[];
+  doctorName: string;
+  doctorAvatar?: string;
+  onAction: (a: ProposedAction) => void;
+}) {
+  if (actions.length === 0) {
+    return (
+      <section className="rounded-2xl bg-white p-6">
+        <p className="text-[13px] text-[var(--theme-neutral)]/45">ไม่มีแผนการดูแลที่เสนอ</p>
+      </section>
+    );
+  }
+  return (
+    <section className="rounded-2xl bg-white p-6">
+      <h3 className="text-[19px] font-bold leading-snug text-[var(--theme-neutral)]">
+        แผนการดูแลที่เสนอ
+      </h3>
+
+      {/* Signed-by row */}
+      <div className="mt-3 flex items-center gap-2.5">
+        {doctorAvatar ? (
+          <img src={doctorAvatar} alt="" className="h-8 w-8 rounded-full object-cover" />
+        ) : (
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--theme-primary-soft)] text-[12px] font-semibold text-[var(--theme-primary)]">
+            {doctorName.replace(/^(นพ\.|พญ\.|พว\.)\s*/, "").slice(0, 2)}
+          </span>
+        )}
+        <span className="text-[14px] text-[var(--theme-neutral)]/65">
+          บันทึกโดย {doctorName}
+        </span>
+      </div>
+
+      {/* Action buttons — first is primary/filled, the rest outlined. */}
+      <div className="mt-5 flex flex-col gap-3">
+        {actions.map((a, i) => {
+          const Icon = ACTION_ICON[a.type] ?? IconCalendarPlus;
+          const primary = i === 0;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onAction(a)}
+              className={[
+                "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-[15px] font-medium transition",
+                primary
+                  ? "bg-[var(--theme-primary)] text-white hover:brightness-110"
+                  : "border border-[var(--theme-primary)]/30 bg-white text-[var(--theme-neutral)] hover:bg-[var(--theme-primary-soft)]",
+              ].join(" ")}
+            >
+              <Icon
+                className={`h-4 w-4 ${primary ? "text-white/85" : "text-[var(--theme-primary)]"}`}
+                stroke={1.75}
+              />
+              {a.label}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }

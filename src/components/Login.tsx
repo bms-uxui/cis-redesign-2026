@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Input, Button } from "@heroui/react";
+import { Input, Button, Select, SelectItem } from "@heroui/react";
 import {
   IconStethoscope,
   IconHeartFilled,
@@ -11,6 +11,11 @@ import {
   IconEyeOff,
   IconCircleCheckFilled,
   IconArrowRight,
+  IconArrowLeft,
+  IconBuildingHospital,
+  IconBuilding,
+  IconDoor,
+  IconId,
   IconX,
   IconMapPin,
   IconMail,
@@ -19,11 +24,20 @@ import {
 } from "@tabler/icons-react";
 import { useUser } from "../contexts/UserContext";
 import type { UserRole } from "../contexts/UserContext";
-import { ROLES, DEMO_ACCOUNTS, type RoleMeta } from "../data/mock/auth";
+import {
+  ROLES,
+  DEMO_ACCOUNTS,
+  BRANCHES,
+  DEPARTMENTS,
+  roomsForDept,
+  DEFAULT_DEPT,
+  type RoleMeta,
+} from "../data/mock/auth";
 import LOGO from "../assets/figma/login/ehp-logo-dark.png";
 import HERO from "../assets/figma/login/image15.png";
 import FEATURE_BG from "../assets/figma/login/feature-card.png";
 import PROMO from "../assets/figma/login/promo.png";
+import PROVIDER_ID from "../assets/figma/login/provider-id.png";
 
 /**
  * Login landing — Figma 1177:2133 ("เข้าสู่ระบบ EHP CIS").
@@ -84,8 +98,12 @@ export default function Login() {
   const { login } = useUser();
   const [role, setRole] = useState<UserRole>("doctor");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [loginMode, setLoginMode] = useState<"password" | "provider">(
+    "password"
+  );
   const [username, setUsername] = useState(DEMO_ACCOUNTS.doctor.username);
   const [password, setPassword] = useState("demo-password");
+  const [providerId, setProviderId] = useState(DEMO_ACCOUNTS.doctor.providerId);
   const [showPw, setShowPw] = useState(false);
 
   const account = DEMO_ACCOUNTS[role];
@@ -94,15 +112,20 @@ export default function Login() {
     setRole(r.role);
     setUsername(DEMO_ACCOUNTS[r.role].username);
     setPassword("demo-password");
+    setProviderId(DEMO_ACCOUNTS[r.role].providerId);
   };
 
-  const signIn = () =>
+  const enter = (ctx: { branch: string; department: string; room: string }) =>
     login({
       name: account.name,
       title: account.title,
       email: account.email,
       role: account.role,
       initials: account.initials,
+      providerId: providerId.trim() || account.providerId,
+      branch: ctx.branch,
+      department: ctx.department,
+      room: ctx.room,
     });
 
   return (
@@ -151,7 +174,7 @@ export default function Login() {
         <img
           src={HERO}
           alt="ทีมแพทย์ดูแลผู้ป่วย"
-          className="pointer-events-none absolute bottom-0 right-[-12%] hidden w-[84%] max-w-none object-contain object-bottom-right lg:block xl:right-[-8%] xl:w-[78%]"
+          className="pointer-events-none absolute bottom-0 right-[-24%] hidden w-[84%] max-w-none object-contain object-bottom-right lg:block xl:right-[-18%] xl:w-[78%]"
         />
 
         <div className="relative px-6 py-12 sm:px-16 lg:py-16">
@@ -171,53 +194,82 @@ export default function Login() {
               ระบบบริหารจัดการคลินิก
             </p>
 
-            {/* Credentials — labels rendered above each field (not via
-                HeroUI labelPlacement, which absolutely-positions and overlaps
-                the subtitle). */}
+            {/* Credentials — username+password, or a single Provider ID
+                field when the user switches to Provider-ID login. Labels are
+                rendered above each field (HeroUI labelPlacement absolutely-
+                positions and would overlap the subtitle). */}
             <div className="mt-7 space-y-4">
-              <div className="space-y-2">
-                <FieldLabel text="บัญชีผู้ใช้งาน" htmlFor="login-username" />
-                <Input
-                  id="login-username"
-                  aria-label="บัญชีผู้ใช้งาน"
-                  placeholder="Username"
-                  value={username}
-                  onValueChange={setUsername}
-                  variant="bordered"
-                  radius="lg"
-                  classNames={{
-                    inputWrapper:
-                      "h-12 min-h-12 px-3 border-black/[0.08] bg-white shadow-[0px_2px_2px_rgba(0,0,0,0.04),0px_1px_1px_rgba(0,0,0,0.06)] data-[hover=true]:border-black/20 group-data-[focus=true]:!border-[#1f9d4d]",
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <FieldLabel text="รหัสผ่าน" htmlFor="login-password" />
-                <Input
-                  id="login-password"
-                  aria-label="รหัสผ่าน"
-                  placeholder="Password"
-                  value={password}
-                  onValueChange={setPassword}
-                  type={showPw ? "text" : "password"}
-                  variant="bordered"
-                  radius="lg"
-                  endContent={
-                    <button
-                      type="button"
-                      onClick={() => setShowPw((v) => !v)}
-                      aria-label={showPw ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
-                      className="text-black/40 hover:text-black/70"
-                    >
-                      {showPw ? <IconEyeOff size={18} /> : <IconEye size={18} />}
-                    </button>
-                  }
-                  classNames={{
-                    inputWrapper:
-                      "h-12 min-h-12 px-3 border-black/[0.08] bg-white shadow-[0px_2px_2px_rgba(0,0,0,0.04),0px_1px_1px_rgba(0,0,0,0.06)] data-[hover=true]:border-black/20 group-data-[focus=true]:!border-[#1f9d4d]",
-                  }}
-                />
-              </div>
+              {loginMode === "password" ? (
+                <>
+                  <div className="space-y-2">
+                    <FieldLabel text="บัญชีผู้ใช้งาน" htmlFor="login-username" />
+                    <Input
+                      id="login-username"
+                      aria-label="บัญชีผู้ใช้งาน"
+                      placeholder="Username"
+                      value={username}
+                      onValueChange={setUsername}
+                      variant="bordered"
+                      radius="lg"
+                      classNames={{
+                        inputWrapper:
+                          "h-12 min-h-12 px-3 border-black/[0.08] bg-white shadow-[0px_2px_2px_rgba(0,0,0,0.04),0px_1px_1px_rgba(0,0,0,0.06)] data-[hover=true]:border-black/20 group-data-[focus=true]:!border-[#1f9d4d]",
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <FieldLabel text="รหัสผ่าน" htmlFor="login-password" />
+                    <Input
+                      id="login-password"
+                      aria-label="รหัสผ่าน"
+                      placeholder="Password"
+                      value={password}
+                      onValueChange={setPassword}
+                      type={showPw ? "text" : "password"}
+                      variant="bordered"
+                      radius="lg"
+                      endContent={
+                        <button
+                          type="button"
+                          onClick={() => setShowPw((v) => !v)}
+                          aria-label={showPw ? "ซ่อนรหัสผ่าน" : "แสดงรหัสผ่าน"}
+                          className="text-black/40 hover:text-black/70"
+                        >
+                          {showPw ? (
+                            <IconEyeOff size={18} />
+                          ) : (
+                            <IconEye size={18} />
+                          )}
+                        </button>
+                      }
+                      classNames={{
+                        inputWrapper:
+                          "h-12 min-h-12 px-3 border-black/[0.08] bg-white shadow-[0px_2px_2px_rgba(0,0,0,0.04),0px_1px_1px_rgba(0,0,0,0.06)] data-[hover=true]:border-black/20 group-data-[focus=true]:!border-[#1f9d4d]",
+                      }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <FieldLabel text="Provider ID" htmlFor="login-provider" />
+                  <Input
+                    id="login-provider"
+                    aria-label="Provider ID"
+                    placeholder="เลขที่ผู้ให้บริการ / ใบประกอบวิชาชีพ"
+                    value={providerId}
+                    onValueChange={setProviderId}
+                    variant="bordered"
+                    radius="lg"
+                    startContent={
+                      <IconId size={18} className="text-black/40" />
+                    }
+                    classNames={{
+                      inputWrapper:
+                        "h-12 min-h-12 px-3 border-black/[0.08] bg-white shadow-[0px_2px_2px_rgba(0,0,0,0.04),0px_1px_1px_rgba(0,0,0,0.06)] data-[hover=true]:border-black/20 group-data-[focus=true]:!border-[#1f9d4d]",
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             <Button
@@ -227,13 +279,30 @@ export default function Login() {
             >
               เข้าสู่ระบบ
             </Button>
-            <Button
-              radius="full"
-              variant="flat"
-              className="mt-2.5 h-12 w-full bg-black/5 text-[16px] font-medium text-black"
+            {/* Divider */}
+            <div className="mt-5 flex items-center gap-3">
+              <span className="h-px flex-1 bg-black/10" />
+              <span className="text-[13px] text-black/40">หรือ</span>
+              <span className="h-px flex-1 bg-black/10" />
+            </div>
+
+            {/* Provider ID — branded button (Figma 1182:5475). Opens the same
+                role picker as the primary sign-in. */}
+            <button
+              type="button"
+              onClick={() => {
+                setLoginMode("provider");
+                setPickerOpen(true);
+              }}
+              aria-label="เข้าสู่ระบบด้วย Provider ID"
+              className="mt-3 flex h-12 w-full items-center justify-center rounded-full border border-[#28a440] bg-white px-6 shadow-[0px_4px_12px_rgba(0,133,91,0.12)] transition hover:bg-[#28a440]/4 active:scale-[0.99]"
             >
-              สมัครเข้าใช้งาน
-            </Button>
+              <img
+                src={PROVIDER_ID}
+                alt="Provider ID"
+                className="h-7 w-auto object-contain"
+              />
+            </button>
           </motion.div>
         </div>
       </section>
@@ -323,7 +392,7 @@ export default function Login() {
         role={role}
         onPick={pickRole}
         account={account}
-        onConfirm={signIn}
+        onConfirm={enter}
       />
     </div>
   );
@@ -355,14 +424,48 @@ function RolePicker({
   role: UserRole;
   onPick: (r: RoleMeta) => void;
   account: { name: string; title: string; initials: string };
-  onConfirm: () => void;
+  onConfirm: (ctx: {
+    branch: string;
+    department: string;
+    room: string;
+  }) => void;
 }) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [branch, setBranch] = useState(BRANCHES[0].code);
+  const [dept, setDept] = useState(DEFAULT_DEPT.doctor);
+  const [room, setRoom] = useState(roomsForDept(DEFAULT_DEPT.doctor)[0].code);
+  const rooms = roomsForDept(dept);
+
+  // Reset to the role step every time the modal opens.
+  useEffect(() => {
+    if (open) setStep(1);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  const goWorkStep = () => {
+    const d = DEFAULT_DEPT[role];
+    setDept(d);
+    setRoom(roomsForDept(d)[0].code);
+    setStep(2);
+  };
+
+  const changeDept = (code: string) => {
+    setDept(code);
+    setRoom(roomsForDept(code)[0]?.code ?? "");
+  };
+
+  const confirm = () =>
+    onConfirm({
+      branch: BRANCHES.find((b) => b.code === branch)?.name ?? "",
+      department: DEPARTMENTS.find((d) => d.code === dept)?.name ?? "",
+      room: rooms.find((r) => r.code === room)?.name ?? "",
+    });
 
   return (
     <AnimatePresence>
@@ -376,7 +479,7 @@ function RolePicker({
           onClick={onClose}
           role="dialog"
           aria-modal="true"
-          aria-label="เลือกบทบาทเพื่อเข้าใช้งาน"
+          aria-label="เลือกบทบาทและที่ทำงาน"
         >
           <motion.div
             onClick={(e) => e.stopPropagation()}
@@ -389,8 +492,18 @@ function RolePicker({
             {/* Header */}
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-[13px] font-semibold tracking-wide text-black/55">
+                {step === 2 && (
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    aria-label="ย้อนกลับ"
+                    className="grid h-6 w-6 place-items-center rounded-full text-black/45 hover:bg-black/5 hover:text-black/70"
+                  >
+                    <IconArrowLeft size={16} />
+                  </button>
+                )}
                 <IconSettings size={15} style={{ color: ACCENT }} />
-                DEMO · ทดลองตามบทบาท
+                {step === 1 ? "DEMO · ทดลองตามบทบาท" : "เลือกหน่วยงาน · ที่ทำงาน"}
               </span>
               <button
                 type="button"
@@ -402,75 +515,193 @@ function RolePicker({
               </button>
             </div>
 
-            {/* Role grid */}
-            <div className="mt-4 grid grid-cols-2 gap-2.5">
-              {ROLES.map((r) => {
-                const active = r.role === role;
-                const { Icon, tint, bg } = ROLE_ICON[r.role];
-                const isAdmin = r.role === "admin";
-                return (
+            <AnimatePresence mode="wait">
+              {step === 1 ? (
+                <motion.div
+                  key="roles"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2, ease: EASE }}
+                >
+                  {/* Role grid */}
+                  <div className="mt-4 grid grid-cols-2 gap-2.5">
+                    {ROLES.map((r) => {
+                      const active = r.role === role;
+                      const { Icon, tint, bg } = ROLE_ICON[r.role];
+                      const isAdmin = r.role === "admin";
+                      return (
+                        <button
+                          key={r.role}
+                          type="button"
+                          onClick={() => onPick(r)}
+                          className={`relative flex items-center gap-2.5 rounded-2xl border p-3 text-left transition ${
+                            isAdmin ? "col-span-2" : ""
+                          } ${
+                            active
+                              ? "border-[#1f9d4d] bg-[#1f9d4d]/[0.06]"
+                              : "border-black/10 bg-white hover:border-black/20"
+                          }`}
+                        >
+                          <span
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
+                            style={{ background: bg, color: tint }}
+                          >
+                            <Icon size={18} />
+                          </span>
+                          <span className="min-w-0 leading-tight">
+                            <span className="block text-[14px] font-semibold text-[#111]">
+                              {r.label}
+                            </span>
+                            <span className="block text-[12px] text-black/45">
+                              {r.sub}
+                            </span>
+                          </span>
+                          {active && (
+                            <IconCircleCheckFilled
+                              size={18}
+                              className="absolute right-2.5 top-2.5 text-[#1f9d4d]"
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected demo account — continue to work step */}
                   <button
-                    key={r.role}
                     type="button"
-                    onClick={() => onPick(r)}
-                    className={`relative flex items-center gap-2.5 rounded-2xl border p-3 text-left transition ${
-                      isAdmin ? "col-span-2" : ""
-                    } ${
-                      active
-                        ? "border-[#1f9d4d] bg-[#1f9d4d]/[0.06]"
-                        : "border-black/10 bg-white hover:border-black/20"
-                    }`}
+                    onClick={goWorkStep}
+                    className="group mt-3 flex w-full items-center gap-3 rounded-2xl border border-black/10 bg-white p-3 text-left transition hover:border-[#1f9d4d] hover:bg-[#1f9d4d]/[0.04]"
                   >
-                    <span
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
-                      style={{ background: bg, color: tint }}
-                    >
-                      <Icon size={18} />
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#34a853] to-[#1f7d3f] text-[15px] font-semibold text-white">
+                      {account.initials}
+                    </span>
+                    <span className="min-w-0 flex-1 leading-tight">
+                      <span className="block truncate text-[15px] font-semibold text-[#111]">
+                        {account.name}
+                      </span>
+                      <span className="block truncate text-[12px] text-black/50">
+                        {account.title}
+                      </span>
+                    </span>
+                    <IconArrowRight
+                      size={20}
+                      className="text-black/30 transition group-hover:translate-x-0.5 group-hover:text-[#1f9d4d]"
+                    />
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="work"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  transition={{ duration: 0.2, ease: EASE }}
+                >
+                  {/* Selected account summary */}
+                  <div className="mt-4 flex items-center gap-3 rounded-2xl bg-[#1f9d4d]/[0.06] p-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#34a853] to-[#1f7d3f] text-[13px] font-semibold text-white">
+                      {account.initials}
                     </span>
                     <span className="min-w-0 leading-tight">
-                      <span className="block text-[14px] font-semibold text-[#111]">
-                        {r.label}
+                      <span className="block truncate text-[14px] font-semibold text-[#111]">
+                        {account.name}
                       </span>
-                      <span className="block text-[12px] text-black/45">
-                        {r.sub}
+                      <span className="block truncate text-[12px] text-black/50">
+                        {account.title}
                       </span>
                     </span>
-                    {active && (
-                      <IconCircleCheckFilled
-                        size={18}
-                        className="absolute right-2.5 top-2.5 text-[#1f9d4d]"
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                  </div>
 
-            {/* Selected demo account — click to enter */}
-            <button
-              type="button"
-              onClick={onConfirm}
-              className="group mt-3 flex w-full items-center gap-3 rounded-2xl border border-black/10 bg-white p-3 text-left transition hover:border-[#1f9d4d] hover:bg-[#1f9d4d]/[0.04]"
-            >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#34a853] to-[#1f7d3f] text-[15px] font-semibold text-white">
-                {account.initials}
-              </span>
-              <span className="min-w-0 flex-1 leading-tight">
-                <span className="block truncate text-[15px] font-semibold text-[#111]">
-                  {account.name}
-                </span>
-                <span className="block truncate text-[12px] text-black/50">
-                  {account.title}
-                </span>
-              </span>
-              <IconArrowRight
-                size={20}
-                className="text-black/30 transition group-hover:translate-x-0.5 group-hover:text-[#1f9d4d]"
-              />
-            </button>
+                  {/* Branch / Department / Room selects */}
+                  <div className="mt-4 space-y-3.5">
+                    <WorkSelect
+                      label="สาขา / หน่วยบริการ"
+                      icon={<IconBuildingHospital size={18} />}
+                      selected={branch}
+                      onChange={setBranch}
+                      items={BRANCHES.map((b) => ({
+                        key: b.code,
+                        label: b.name,
+                      }))}
+                    />
+                    <WorkSelect
+                      label="หน่วยงาน"
+                      icon={<IconBuilding size={18} />}
+                      selected={dept}
+                      onChange={changeDept}
+                      items={DEPARTMENTS.map((d) => ({
+                        key: d.code,
+                        label: d.name,
+                      }))}
+                    />
+                    <WorkSelect
+                      label="ห้องทำงาน"
+                      icon={<IconDoor size={18} />}
+                      selected={room}
+                      onChange={setRoom}
+                      items={rooms.map((r) => ({ key: r.code, label: r.name }))}
+                    />
+                  </div>
+
+                  <Button
+                    onPress={confirm}
+                    radius="full"
+                    isDisabled={!branch || !dept || !room}
+                    className="mt-5 h-12 w-full bg-[#3485ff] text-[16px] font-medium text-white shadow-[0_10px_24px_rgba(52,133,255,0.3)]"
+                    endContent={<IconArrowRight size={18} />}
+                  >
+                    เข้าสู่ระบบ
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+function WorkSelect({
+  label,
+  icon,
+  selected,
+  onChange,
+  items,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  selected: string;
+  onChange: (key: string) => void;
+  items: { key: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-1.5">
+      <span className="block text-[13px] font-medium text-black/70">{label}</span>
+      <Select
+        aria-label={label}
+        selectedKeys={selected ? [selected] : []}
+        onSelectionChange={(keys) => {
+          const k = Array.from(keys)[0];
+          if (k != null) onChange(String(k));
+        }}
+        variant="bordered"
+        radius="lg"
+        startContent={<span className="text-black/40">{icon}</span>}
+        classNames={{
+          trigger:
+            "h-12 min-h-12 border-black/[0.08] bg-white data-[hover=true]:border-black/20 data-[open=true]:!border-[#1f9d4d]",
+          value: "text-[14px] text-[#111]",
+        }}
+      >
+        {items.map((it) => (
+          <SelectItem key={it.key} textValue={it.label}>
+            {it.label}
+          </SelectItem>
+        ))}
+      </Select>
+    </div>
   );
 }
