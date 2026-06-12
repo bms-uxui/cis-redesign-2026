@@ -124,7 +124,7 @@ function RoleCardView({
       type="button"
       onClick={onClick}
       aria-label={card.title}
-      className="group relative flex w-[250px] flex-col overflow-hidden rounded-[20px] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] text-center outline-none ring-2 ring-transparent transition duration-200 hover:-translate-y-1 hover:ring-[var(--theme-primary)] hover:shadow-[var(--theme-shadow-md)] focus-visible:ring-[var(--theme-primary)]"
+      className="group relative flex w-[280px] flex-col overflow-hidden rounded-[20px] border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] text-center outline-none ring-2 ring-transparent transition duration-200 hover:-translate-y-1 hover:ring-[var(--theme-primary)] hover:shadow-[var(--theme-shadow-md)] focus-visible:ring-[var(--theme-primary)]"
     >
       {/* Photo (office bg + optional people foreground) */}
       <div className="relative h-[200px] w-full overflow-hidden bg-[var(--theme-base)]">
