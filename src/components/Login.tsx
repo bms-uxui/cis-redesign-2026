@@ -20,7 +20,7 @@ import {
 import { useUser } from "../contexts/UserContext";
 import type { UserRole } from "../contexts/UserContext";
 import { ROLES, DEMO_ACCOUNTS, type RoleMeta } from "../data/mock/auth";
-import LOGO from "../assets/figma/login/ehp-logo.png";
+import LOGO from "../assets/figma/login/ehp-logo-dark.png";
 import HERO from "../assets/figma/login/image15.png";
 import FEATURE_BG from "../assets/figma/login/feature-card.png";
 import PROMO from "../assets/figma/login/promo.png";
