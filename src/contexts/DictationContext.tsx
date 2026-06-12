@@ -443,7 +443,7 @@ export function DictationProvider({ children }: { children: ReactNode }) {
       clearPersistedSession();
       return;
     }
-    setFrozenSegments([{ id: `manual-${Date.now()}`, speaker: 1, text: trimmed }]);
+    setFrozenSegments([{ speaker: 1, text: trimmed }]);
     setReviewing(true);
     // Force re-normalization on next pass by clearing the dedupe key.
     lastNormalizedKeyRef.current = "";

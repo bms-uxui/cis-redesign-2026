@@ -787,9 +787,11 @@ export default function NewPatientByVoice() {
                 <PatientReviewForm
                   initialData={extracted.data ?? {}}
                   onApply={(data) =>
-                    handleA2UIAction({ action: "apply_all", data })
+                    handleA2UIAction({ action: "apply_all", data, source: "review_form" })
                   }
-                  onDiscard={() => handleA2UIAction({ action: "discard", data: {} })}
+                  onDiscard={() =>
+                    handleA2UIAction({ action: "discard", data: {}, source: "review_form" })
+                  }
                 />
                 <div className="flex min-h-0 flex-col gap-4">
                   <div className="min-h-[320px] flex-1">
@@ -3391,7 +3393,7 @@ function normalizeGeneratedNote(raw: unknown): GeneratedNote {
       .filter((x) => x.code || x.label),
     medications: medsRaw
       .map((x) => {
-        const o = (x ?? {}) as Record<string, unknown>;
+        const o = (x ?? {}) as unknown as Record<string, unknown>;
         return {
           name: s(o.name),
           dose: s(o.dose),
@@ -3455,7 +3457,7 @@ function GenerationStageCard({
   canGenerate: boolean;
   onGenerate: () => void;
 }) {
-  const sections: { key: keyof Omit<GeneratedNote, "icd10">; label: string; sub: string }[] = [
+  const sections: { key: keyof Omit<GeneratedNote, "icd10" | "medications">; label: string; sub: string }[] = [
     { key: "cc", label: "CC", sub: "Chief Complaint" },
     { key: "pi", label: "PI", sub: "Present Illness" },
     { key: "pe", label: "PE", sub: "Physical Exam" },
