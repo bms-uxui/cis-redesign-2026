@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import AivaDrawer from "./AivaDrawer";
 import { AivaProvider, useAiva } from "../contexts/AivaContext";
 import TopBar from "./TopBar";
@@ -12,11 +12,28 @@ import DictationIsland from "./DictationIsland";
 import { HeaderSlotProvider } from "../contexts/HeaderSlotContext";
 import { TabsProvider } from "../contexts/TabsContext";
 import { SidebarProvider } from "../contexts/SidebarContext";
-import { UserProvider } from "../contexts/UserContext";
+import { UserProvider, useUser } from "../contexts/UserContext";
+import { useTabs } from "../contexts/TabsContext";
+import Login from "./Login";
 
 export default function AppShell() {
   return (
     <UserProvider>
+      <AuthGate />
+    </UserProvider>
+  );
+}
+
+/**
+ * Gate the whole workspace behind the login screen. Until the user signs in
+ * we render only <Login> (no top bar / sidebar / tabs); afterwards the full
+ * shell and its providers mount.
+ */
+function AuthGate() {
+  const { isAuthenticated } = useUser();
+  if (!isAuthenticated) return <Login />;
+
+  return (
     <DictationProvider>
       <HeaderSlotProvider>
         <TabsProvider>
@@ -28,12 +45,24 @@ export default function AppShell() {
         </TabsProvider>
       </HeaderSlotProvider>
     </DictationProvider>
-    </UserProvider>
   );
 }
 
 function AppShellInner() {
   const { open: aivaOpen, closeAiva, toggleAiva } = useAiva();
+  const { user } = useUser();
+  const { openTab } = useTabs();
+
+  // Role-based landing: doctors open straight into the doctor workspace
+  // (ตารางเวร / DoctorSchedule). Everyone else lands on Home (the default
+  // active tab). useLayoutEffect runs before paint so there's no flash of
+  // Home before the doctor tab takes over.
+  const didRoute = useRef(false);
+  useLayoutEffect(() => {
+    if (didRoute.current) return;
+    didRoute.current = true;
+    if (user.role === "doctor") openTab("/schedule");
+  }, [user.role, openTab]);
 
   // Cmd+K (or Ctrl+K) toggles Aiva drawer from any screen.
   useEffect(() => {

@@ -120,7 +120,7 @@ export default function Settings() {
       <div
         className={[
           "mr-4 pb-4 pt-4 transition-[margin] duration-300 ease-out",
-          railHidden ? "ml-4" : "ml-[296px]",
+          railHidden ? "ml-4" : "ml-4 lg:ml-[296px]",
         ].join(" ")}
       >
         {/* Two-column sheet — same rounded-3xl + soft shadow as Home cards.

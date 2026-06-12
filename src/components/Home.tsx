@@ -152,7 +152,7 @@ export default function Home() {
             "flex min-w-0 flex-col gap-[var(--theme-space-md)] mr-[var(--theme-space-md)] pb-24 pt-[var(--theme-space-md)] transition-[margin] duration-300 ease-out",
             // Match the global Notion-style sidebar width: 280px panel +
             // 16px gutter on each side = 312px when visible, 16px hidden.
-            railHidden ? "ml-4" : "ml-[296px]",
+            railHidden ? "ml-4" : "ml-4 lg:ml-[296px]",
           ].join(" ")}
         >
           {/* Hero banner — per Figma 941:13736. White card with a
@@ -261,7 +261,7 @@ export default function Home() {
           </div>
 
           {/* Feature cards row */}
-          <div className="grid grid-cols-1 gap-[var(--theme-space-md)] md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-[var(--theme-space-md)] lg:grid-cols-2">
             {/* Feature card — "บันทึกประวัติผู้ป่วยโดยไม่ต้องจด" per
                 Figma 1069:1315. Wide horizontal card with a diagonal
                 white-to-blue split; left half holds the AI badge + title

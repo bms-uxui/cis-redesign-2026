@@ -6,6 +6,7 @@ import {
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconSearch,
+  IconMenu2,
 } from "@tabler/icons-react";
 import { useSidebar } from "../../contexts/SidebarContext";
 import { useTabs } from "../../contexts/TabsContext";
@@ -82,6 +83,13 @@ export default function Sidebar() {
   const [edgePeek, setEdgePeek] = useState(false);
   const edgePeekTimer = useRef<number | undefined>(undefined);
 
+  // Tablet/mobile drawer — below `lg` the sidebar isn't pinned; it opens as
+  // an overlay via the hamburger and closes on backdrop tap or navigation.
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
   useEffect(() => {
     if (!railHidden) setEdgePeek(false);
   }, [railHidden]);
@@ -135,6 +143,7 @@ export default function Sidebar() {
     .filter((r): r is RailEntry => !!r);
 
   const handleFavoriteClick = (rail: RailEntry) => {
+    setMobileOpen(false);
     if (rail.navigateTo) {
       openTab(rail.navigateTo, { title: rail.label });
       return;
@@ -143,6 +152,7 @@ export default function Sidebar() {
   };
 
   const handleItemClick = (railKey: string, item: PanelItem) => {
+    setMobileOpen(false);
     setPinnedRail(railKey);
     setActiveChild(item.key);
     // Items with their own route also navigate. Others rely on the host
@@ -154,7 +164,7 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Left-edge peek trigger — only mounted while hidden. */}
+      {/* Left-edge peek trigger — only mounted while hidden (desktop). */}
       {railHidden && (
         <div
           aria-hidden
@@ -163,17 +173,43 @@ export default function Sidebar() {
         />
       )}
 
+      {/* Tablet/mobile: hamburger to open the drawer. */}
+      {!mobileOpen && (
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="เปิดเมนู"
+          className="fixed left-4 top-4 z-40 flex h-12 w-12 items-center justify-center rounded-[16px] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] text-[var(--theme-neutral)] shadow-[var(--theme-shadow-sm)] lg:hidden"
+        >
+          <IconMenu2 className="h-5 w-5" stroke={1.75} />
+        </button>
+      )}
+
+      {/* Tablet/mobile: backdrop behind the drawer. */}
+      {mobileOpen && (
+        <div
+          aria-hidden
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+        />
+      )}
+
       <aside
         aria-label="Sidebar"
-        aria-hidden={!visibleNow}
+        aria-hidden={!visibleNow && !mobileOpen}
         onMouseEnter={isPeeking ? triggerPeek : undefined}
         onMouseLeave={isPeeking ? cancelPeek : undefined}
         className={[
-          "fixed bottom-0 top-0 left-0 z-30 hidden w-[280px] flex-col overflow-hidden border-r border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] lg:flex",
-          visibleNow
-            ? "translate-x-0 opacity-100"
+          "fixed bottom-0 top-0 left-0 z-30 flex w-[280px] flex-col overflow-hidden border-r border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          // Tablet/mobile (< lg): driven by the drawer toggle.
+          mobileOpen
+            ? "z-50 translate-x-0 opacity-100 shadow-[var(--theme-shadow-md)]"
             : "-translate-x-full opacity-0 pointer-events-none",
-          isPeeking && "z-50 shadow-[var(--theme-shadow-md)]",
+          // Desktop (lg+): driven by the pinned/peek state.
+          visibleNow
+            ? "lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto"
+            : "lg:-translate-x-full lg:opacity-0 lg:pointer-events-none",
+          isPeeking && "lg:z-50 lg:shadow-[var(--theme-shadow-md)]",
         ]
           .filter(Boolean)
           .join(" ")}

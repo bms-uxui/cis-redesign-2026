@@ -19,7 +19,7 @@
  */
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useNavigate } from "react-router";
+import { useTabs } from "../contexts/TabsContext";
 import {
   Modal,
   ModalBody,
@@ -106,16 +106,33 @@ type CaseFilter = "pending" | "done" | "all";
 export default function DoctorSchedule() {
   const { railHidden } = useSidebar();
   const { user } = useUser();
-  const navigate = useNavigate();
+  const { openTab } = useTabs();
   const handoffs = useNurseHandoffs();
 
-  const myAppointments = useMemo(
-    () =>
-      [...handoffs.map(handoffToAppointment), ...TODAY_APPOINTMENTS].filter(
-        (a) => a.doctor === user.name,
-      ),
-    [handoffs, user.name],
-  );
+  const myAppointments = useMemo(() => {
+    const mine = [...handoffs.map(handoffToAppointment), ...TODAY_APPOINTMENTS].filter(
+      (a) => a.doctor === user.name,
+    );
+    if (mine.length > 0) return mine;
+    // Every doctor must have cases: if the logged-in doctor isn't in the
+    // seeded roster (e.g. the demo "พญ. ศิรินทร์ ภัทรกุล"), borrow the first
+    // roster doctor's full day and relabel it to them.
+    const fallbackDoctor = TODAY_APPOINTMENTS[0]?.doctor;
+    return [
+      ...handoffs.map(handoffToAppointment).filter((a) => a.doctor === user.name),
+      ...TODAY_APPOINTMENTS.filter((a) => a.doctor === fallbackDoctor).map((a) => ({
+        ...a,
+        doctor: user.name,
+      })),
+    ];
+  }, [handoffs, user.name]);
+
+  // Open a patient in its OWN tab (browser-tab model) so the schedule tab
+  // stays put and the calendar icon always returns here.
+  const openPatient = (hn: string, consult = false) => {
+    const name = myAppointments.find((a) => a.patientHN === hn)?.patientName ?? "ผู้ป่วย";
+    openTab(`/opd/${hn}${consult ? "?consult=1" : ""}`, { title: name });
+  };
 
   const today = new Date();
   const week = useMemo(() => weekOf(today), []);
@@ -168,7 +185,7 @@ export default function DoctorSchedule() {
       <div
         className={[
           "flex h-[calc(100vh-6rem)] mr-4 mt-4 mb-4 gap-4 overflow-hidden transition-[margin] duration-300 ease-out",
-          railHidden ? "ml-4" : "ml-[296px]",
+          railHidden ? "ml-4" : "ml-4 lg:ml-[296px]",
         ].join(" ")}
       >
         {/* ── Main column ──────────────────────────────────────────── */}
@@ -200,19 +217,19 @@ export default function DoctorSchedule() {
                 setHighlightedId(null);
               }}
               onSelectEvent={(id) => setHighlightedId(id)}
-              onOpenDetail={(hn) => navigate(`/opd/${hn}`)}
+              onOpenDetail={(hn) => openPatient(hn)}
             />
           </section>
         </main>
 
         {/* ── Right rail ───────────────────────────────────────────── */}
-        <aside className="hidden w-[280px] min-h-0 shrink-0 flex-col gap-4 overflow-hidden lg:flex">
+        <aside className="hidden w-[280px] min-h-0 shrink-0 flex-col gap-4 overflow-hidden xl:flex">
           <DonutCaseCard
             doneCount={doneCount}
             pendingCount={pendingCount}
             total={totalToday}
             nextCase={nextCase}
-            onOpenPatient={(hn) => navigate(`/opd/${hn}`)}
+            onOpenPatient={(hn) => openPatient(hn)}
           />
 
           <WidgetsCard />
@@ -224,11 +241,11 @@ export default function DoctorSchedule() {
         onClose={() => setSelectedApt(null)}
         onOpenPatient={(hn) => {
           setSelectedApt(null);
-          navigate(`/opd/${hn}`);
+          openPatient(hn);
         }}
         onStartConsult={(hn) => {
           setSelectedApt(null);
-          navigate(`/opd/${hn}?consult=1`);
+          openPatient(hn, true);
         }}
       />
     </div>

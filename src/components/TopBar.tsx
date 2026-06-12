@@ -30,6 +30,7 @@ import { useNavigate } from "react-router";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTabs, type Tab } from "../contexts/TabsContext";
 import { useSidebar } from "../contexts/SidebarContext";
+import { useUser } from "../contexts/UserContext";
 import AVATAR from "../assets/figma/ellipse-avatar.png";
 
 /**
@@ -41,12 +42,9 @@ export default function TopBar() {
   const { tabs, activeId, openTab, closeTab, activateTab } = useTabs();
   const { railHidden, toggleRailHiddenSidebar } = useSidebar();
   const { config: themeConfig, applyPreset, commit: commitTheme } = useTheme();
+  const { logout } = useUser();
   const navigate = useNavigate();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-
-  // Sidebar is flush against the screen edge — 280px wide. Content sits
-  // 16px away from it; when hidden the topbar tucks against the 16px gutter.
-  const leftPx = railHidden ? 16 : 296;
 
   // ── Tab overflow ─────────────────────────────────────────────────────
   // The strip has a fixed amount of horizontal space; once tabs no longer
@@ -126,12 +124,14 @@ export default function TopBar() {
   return (
     <header
       className={[
-        // Floating card aligned with the sidebar's top edge — slides left
-        // when the sidebar collapses, or all the way to the page edge when
-        // the sidebar is fully hidden.
+        // Floating card. On tablet (< lg) the pinned sidebar is gone — it
+        // becomes a drawer — so the bar tucks next to the hamburger; at lg+
+        // it aligns with the sidebar's top edge / collapsed gutter.
         "fixed top-4 right-4 h-12 overflow-hidden rounded-[16px] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] transition-[left] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+        // Tablet: clear the hamburger (left-4 + w-12 = 64px) with a 12px gap.
+        "left-[76px]",
+        railHidden ? "lg:left-4" : "lg:left-[296px]",
       ].join(" ")}
-      style={{ left: `${leftPx}px` }}
     >
       {/* Sidebar toggle — shown only when sidebar is fully hidden. Restores
           the rail when clicked. Lives at the leftmost edge of the topbar. */}
@@ -169,11 +169,14 @@ export default function TopBar() {
             active={tab.id === activeId}
             onActivate={() => {
               activateTab(tab.id);
-              // The home icon acts as "return to home page": activating the
-              // home tab also resets its inner path back to "/" if it has
-              // drifted (e.g. user navigated to /patient inside it).
+              // The pinned home / schedule icons act as "return to that page":
+              // activating them also resets the tab's inner path if it has
+              // drifted (e.g. opened a patient from the schedule, which
+              // navigates the schedule tab to /opd/:hn).
               if (tab.iconKind === "home" && tab.path !== "/") {
                 navigate("/");
+              } else if (tab.iconKind === "schedule" && tab.path !== "/schedule") {
+                navigate("/schedule");
               }
             }}
             onClose={() => closeTab(tab.id)}
@@ -309,7 +312,7 @@ export default function TopBar() {
                   openTab("/settings", { title: "การตั้งค่า" });
                   break;
                 case "logout":
-                  console.log("[topbar] log out");
+                  logout();
                   break;
               }
               setUserMenuOpen(false);
