@@ -19,6 +19,7 @@ import { saveProfile } from "../../data/patientStore";
 import type { Patient } from "../../data/mock/patients";
 import {
   ConversationCard,
+  RecordingPanel,
   useSymptomTopicsFromLLM,
   useHpiNarrativeFromLLM,
   useMedsFromLLM,
@@ -106,7 +107,30 @@ export default function DrNoteConsult({
   const [tab, setTab] = useState<CenterTab>("summary");
   const [note, setNote] = useState<NoteDraft | null>(null);
   const [proposed, setProposed] = useState<ProposedAction[] | null>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Patient identity for the conversation card's collapsible header,
+  // derived from the doctor's actual patient record.
+  const patientInfo = useMemo(
+    () => ({
+      fullName: `${patient.prefix}${patient.firstName} ${patient.lastName}`,
+      prefix: patient.prefix,
+      cid: `HN ${patient.hn}`,
+      gender: patient.gender === "M" ? "ชาย" : patient.gender === "F" ? "หญิง" : "—",
+      age: `${patient.age} ปี`,
+      bloodPressure: patient.vitals
+        ? `${patient.vitals.systolic}/${patient.vitals.diastolic} mmHg`
+        : "—",
+      pulse: patient.vitals?.heartRate ? `${patient.vitals.heartRate} ครั้ง/นาที` : "—",
+      temperature: patient.vitals?.temperature ? `${patient.vitals.temperature} °C` : "—",
+      respiratoryRate: "—",
+      spo2: "—",
+      weight: patient.vitals?.weight ? `${patient.vitals.weight} กก.` : "—",
+      height: patient.vitals?.height ? `${patient.vitals.height} ซม.` : "—",
+    }),
+    [patient],
+  );
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -254,22 +278,31 @@ export default function DrNoteConsult({
           {/* Body */}
           <div className="flex min-h-0 flex-1 flex-col p-4">
             {phase === "consult" && (
-              <ConversationCard
-                patientName={`${patient.prefix}${patient.firstName} ${patient.lastName}`}
-                topics={topics}
-                hpi={hpi}
-                ehr={ehr}
-                interviewMeds={interviewMeds}
-                segments={segments}
-                isRecording={isRecording}
-                onToggleRecord={() => (isRecording ? void stopSession() : startSession("mic"))}
-                onTabAudio={() => startSession("tab")}
-                onAudioFile={() => fileInputRef.current?.click()}
-                tab={tab}
-                onTabChange={setTab}
-                asrInFlight={asrInFlight}
-                topicInFlight={topicInFlight}
-              />
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 portrait:flex portrait:flex-col portrait:snap-y portrait:snap-mandatory portrait:overflow-y-auto lg:grid-cols-[minmax(400px,454px)_minmax(0,1fr)]">
+                <RecordingPanel
+                  isRecording={isRecording}
+                  started={segments.length > 0}
+                  asrInFlight={asrInFlight}
+                  topicInFlight={topicInFlight}
+                  onToggleRecord={() => (isRecording ? void stopSession() : startSession("mic"))}
+                  onTabAudio={() => startSession("tab")}
+                  onAudioFile={() => fileInputRef.current?.click()}
+                />
+                <ConversationCard
+                  patientName={`${patient.prefix}${patient.firstName} ${patient.lastName}`}
+                  patientInfo={patientInfo}
+                  infoOpen={infoOpen}
+                  onToggleInfo={() => setInfoOpen((v) => !v)}
+                  topics={topics}
+                  hpi={hpi}
+                  ehr={ehr}
+                  interviewMeds={interviewMeds}
+                  segments={segments}
+                  isRecording={isRecording}
+                  tab={tab}
+                  onTabChange={setTab}
+                />
+              </div>
             )}
 
             {phase === "loading" && (

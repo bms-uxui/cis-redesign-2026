@@ -181,11 +181,10 @@ export default function NewPatientByVoice() {
   const [extracted, setExtracted] = useState<A2UIResponse | null>(null);
   const [portraitUrl, setPortraitUrl] = useState<string | null>(null);
   const [centerTab, setCenterTab] = useState<CenterTab>("summary");
-  // Default the ID card collapsed on tablet/mobile (< lg) so the ID column +
-  // conversation + mascot don't squeeze; the user can expand it on demand.
-  const [idCardCollapsed, setIdCardCollapsed] = useState(
-    () => typeof window !== "undefined" && window.innerWidth < 1024,
-  );
+  // Patient identity now lives as a collapsible header inside the
+  // conversation card (Figma 1373:3773) — collapsed by default so the
+  // workspace leads with the live summary; the user expands it on demand.
+  const [idCardCollapsed, setIdCardCollapsed] = useState(true);
   // Extraction runs in the background while the user stays on the input
   // screen (the "ถัดไป" button spins). No dedicated loading page.
   const [isExtracting, setIsExtracting] = useState(false);
@@ -733,38 +732,37 @@ export default function NewPatientByVoice() {
               transition={{ duration: 0.45, ease: EASE_TV }}
               className="flex min-h-0 flex-1 flex-col gap-4"
             >
-              {/* Two-column layout (Figma 1117:1864) — ID card on the
-                  left so the doctor can verify identity at a glance,
-                  workspace on the right. */}
-              <div
-                className={[
-                  "grid min-h-0 flex-1 gap-4 transition-[grid-template-columns] duration-300 ease-out",
-                  idCardCollapsed
-                    ? "grid-cols-[52px_minmax(0,1fr)]"
-                    : "grid-cols-[300px_minmax(0,1fr)]",
-                ].join(" ")}
-              >
-                <PatientIdCard
-                  info={patientInfo}
-                  portraitUrl={portraitUrl}
-                  collapsed={idCardCollapsed}
-                  onToggle={() => setIdCardCollapsed((v) => !v)}
+              {/* Two-card workspace (Figma 1373:3773) — a standalone
+                  recording panel on the left (mascot + soundwave + record
+                  control) and the conversation card on the right. Patient
+                  identity now lives as a collapsible header inside the
+                  conversation card. */}
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 portrait:flex portrait:flex-col portrait:snap-y portrait:snap-mandatory portrait:overflow-y-auto lg:grid-cols-[minmax(400px,454px)_minmax(0,1fr)]">
+                <RecordingPanel
+                  isRecording={isRecording}
+                  started={segments.length > 0}
+                  asrInFlight={asrInFlight}
+                  topicInFlight={topicInFlight}
+                  onToggleRecord={handleMic}
+                  onTabAudio={handleTabAudio}
+                  onAudioFile={handleAudioFile}
                 />
                 <ConversationCard
                   patientName={patientInfo.fullName || "ผู้ป่วยใหม่"}
+                  patientInfo={patientInfo}
+                  portraitUrl={portraitUrl}
+                  infoOpen={!idCardCollapsed}
+                  onToggleInfo={() => setIdCardCollapsed((v) => !v)}
+                  vitals={vitalsValues}
+                  onVitalsSave={setVitalsValues}
                   topics={topics}
                   hpi={hpi}
                   ehr={ehr}
                   interviewMeds={interviewMeds}
                   segments={segments}
                   isRecording={isRecording}
-                  onToggleRecord={handleMic}
-                  onTabAudio={handleTabAudio}
-                  onAudioFile={handleAudioFile}
                   tab={centerTab}
                   onTabChange={setCenterTab}
-                  asrInFlight={asrInFlight}
-                  topicInFlight={topicInFlight}
                 />
                 <input
                   ref={fileInputRef}
@@ -878,6 +876,7 @@ export default function NewPatientByVoice() {
           input phase. Both ข้าม and บันทึก close it. */}
       <VitalSignsModal
         open={vitalsModalOpen}
+        initial={vitalsValues}
         onSkip={() => setVitalsModalOpen(false)}
         onSave={(vitals) => {
           setVitalsValues(vitals);
@@ -1875,7 +1874,7 @@ function SelectMethodView({
 }) {
   return (
     <div className="mx-auto flex w-full max-w-[1200px] flex-1 items-center justify-center px-6">
-      <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-3">
+      <div className="grid w-full grid-cols-1 gap-6 landscape:md:grid-cols-3">
         <MethodCard
           Icon={IconId}
           title="สแกนบัตรประชาชน"
@@ -2197,14 +2196,21 @@ const VITAL_FIELDS: VitalField[] = [
 
 function VitalSignsModal({
   open,
+  initial,
   onSkip,
   onSave,
 }: {
   open: boolean;
+  initial?: VitalsState | null;
   onSkip: () => void;
   onSave: (vitals: VitalsState) => void;
 }) {
   const [state, setState] = useState<VitalsState>(VITALS_INIT);
+  // Pre-fill with previously-entered vitals each time the modal opens, so
+  // "แก้ไขข้อมูล" edits the current values instead of a blank form.
+  useEffect(() => {
+    if (open) setState(initial ?? VITALS_INIT);
+  }, [open, initial]);
   const update = (key: keyof VitalsState, value: string) =>
     setState((s) => ({ ...s, [key]: value }));
 
@@ -2418,19 +2424,22 @@ type CenterTab = "summary" | "transcript" | "oldcarts";
 
 interface ConversationCardProps {
   patientName: string;
+  patientInfo: PatientInfo;
+  portraitUrl?: string | null;
+  infoOpen: boolean;
+  onToggleInfo: () => void;
+  /** When provided, the expanded panel shows inline-edit + voice buttons
+   *  and writes edited vitals straight back through this callback. */
+  vitals?: VitalsState | null;
+  onVitalsSave?: (v: VitalsState) => void;
   topics: SymptomTopic[];
   hpi: string;
   ehr: PatientEhr;
   interviewMeds: string[];
   segments: { text: string }[];
   isRecording: boolean;
-  onToggleRecord: () => void;
-  onTabAudio: () => void;
-  onAudioFile: () => void;
   tab: CenterTab;
   onTabChange: (t: CenterTab) => void;
-  asrInFlight?: number;
-  topicInFlight?: number;
 }
 
 /** "อื่น ๆ" audio-source picker (tab audio / audio file). Shared between the
@@ -2487,50 +2496,249 @@ function AudioSourceDropdown({
   );
 }
 
+type SpeechResultEvent = {
+  results: { length: number; [i: number]: { [j: number]: { transcript: string } } };
+};
+type SpeechRec = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((e: SpeechResultEvent) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
 export function ConversationCard({
   patientName,
+  patientInfo,
+  portraitUrl,
+  infoOpen,
+  onToggleInfo,
+  vitals,
+  onVitalsSave,
   topics,
   hpi,
   ehr,
   interviewMeds,
   segments,
   isRecording,
-  onToggleRecord,
-  onTabAudio,
-  onAudioFile,
   tab,
   onTabChange,
-  asrInFlight = 0,
-  topicInFlight = 0,
 }: ConversationCardProps) {
-  // The summary already has something to show before recording starts when
-  // a known patient was scanned (EHR history/meds) — or once any live
-  // content exists. In that case the mic must live in the LEFT panel so the
-  // big centered CTA doesn't float on top of the report.
-  const started = segments.length > 0;
-  const hasContent =
-    isRecording ||
-    started ||
-    topics.length > 0 ||
-    hpi.length > 0 ||
-    interviewMeds.length > 0 ||
-    ehr.history.length > 0 ||
-    ehr.meds.length > 0;
+  // The expanded panel edits vitals inline (no popup). `editing` swaps the
+  // value cells for inputs; the mic dictates into whichever field is focused.
+  const canEdit = !!onVitalsSave;
+  const [editing, setEditing] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [draft, setDraft] = useState<VitalsState>(VITALS_INIT);
+  const focusedKeyRef = useRef<keyof VitalsState | null>(null);
+  const recRef = useRef<SpeechRec | null>(null);
+
+  const stopMic = useCallback(() => {
+    recRef.current?.stop();
+    recRef.current = null;
+    setListening(false);
+  }, []);
+  useEffect(() => () => recRef.current?.stop(), []);
+
+  const setField = (key: keyof VitalsState, value: string) =>
+    setDraft((d) => ({ ...d, [key]: value }));
+  const startEditing = () => {
+    setDraft(vitals ?? VITALS_INIT);
+    setEditing(true);
+  };
+  const saveEditing = () => {
+    stopMic();
+    onVitalsSave?.(draft);
+    setEditing(false);
+  };
+  const handleToggleInfo = () => {
+    stopMic();
+    setEditing(false);
+    onToggleInfo();
+  };
+  const toggleMic = () => {
+    if (!editing) {
+      setDraft(vitals ?? VITALS_INIT);
+      setEditing(true);
+    }
+    if (listening) {
+      stopMic();
+      return;
+    }
+    const w = window as unknown as {
+      SpeechRecognition?: new () => SpeechRec;
+      webkitSpeechRecognition?: new () => SpeechRec;
+    };
+    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!Ctor) return; // browser without speech support — inputs still editable by hand
+    const rec = new Ctor();
+    rec.lang = "th-TH";
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      const key = focusedKeyRef.current;
+      if (!key) return;
+      const last = e.results[e.results.length - 1];
+      const text = (last?.[0]?.transcript ?? "").trim();
+      const numeric = text.replace(/[^\d./]/g, "");
+      setField(key, numeric || text);
+    };
+    rec.onend = () => setListening(false);
+    recRef.current = rec;
+    rec.start();
+    setListening(true);
+  };
+
+  // Patient detail in a 2-column grid (row-major) per Figma 1377:4256.
+  // Rows with `field`/`bp` become inline inputs while editing.
+  const gridRows: {
+    label: string;
+    value: string;
+    field?: keyof VitalsState;
+    bp?: boolean;
+  }[] = [
+    { label: "ชื่อและนามสกุล", value: patientInfo.fullName || "—" },
+    { label: "อายุ", value: patientInfo.age || "—" },
+    { label: "เพศ", value: patientInfo.gender || "—" },
+    { label: "ความดันโลหิต", value: patientInfo.bloodPressure || "—", bp: true },
+    { label: "ชีพจร", value: patientInfo.pulse || "—", field: "pulse" },
+    { label: "อุณหภูมิ", value: patientInfo.temperature || "—", field: "temperature" },
+    { label: "อัตราหายใจ", value: patientInfo.respiratoryRate || "—", field: "respiratoryRate" },
+    { label: "SpO2", value: patientInfo.spo2 || "—", field: "spo2" },
+    { label: "น้ำหนัก", value: patientInfo.weight || "—", field: "weight" },
+    { label: "ส่วนสูง", value: patientInfo.height || "—", field: "height" },
+  ];
+
+  const vitalInput = (field: keyof VitalsState, width: string) => (
+    <input
+      value={draft[field]}
+      onChange={(e) => setField(field, e.target.value)}
+      onFocus={() => {
+        focusedKeyRef.current = field;
+      }}
+      inputMode="decimal"
+      className={`${width} rounded-md border border-[var(--theme-neutral)]/25 bg-white px-2 py-0.5 text-right text-[14px] text-[var(--theme-neutral)] outline-none focus:border-[#3965e1]`}
+    />
+  );
 
   return (
-    <section className="relative flex h-full min-h-0 flex-col items-stretch gap-4 rounded-3xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)]">
-      {/* The floating mascot in the header has been retired — per Figma
-          1117:1779 / 1117:2105 the mascot now lives inside the workspace
-          (centered CTA when idle, left panel when recording) instead of
-          poking above the card. */}
+    <section className="relative flex h-full min-h-0 flex-col items-stretch overflow-hidden rounded-3xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] portrait:h-auto portrait:shrink-0 portrait:snap-start">
+      {/* Patient identity header — collapsed to an avatar + name + chevron
+          (Figma 1377:4488); expands to a large avatar + 2-column detail
+          grid + footer note (Figma 1377:4256). */}
+      <div className="flex shrink-0 flex-col border-b border-[var(--theme-neutral)]/15 p-4">
+        {infoOpen ? (
+          <div className="flex w-full items-start gap-6">
+            <span className="flex h-[100px] w-[100px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#eee] text-[var(--theme-neutral)]/40">
+              {portraitUrl ? (
+                <img src={portraitUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <IconUser className="h-10 w-10" stroke={1.5} />
+              )}
+            </span>
+            <div className="flex min-w-px flex-1 flex-col">
+              <div className="grid grid-cols-2 gap-x-6 text-[14px] font-medium">
+                {gridRows.map((r) => (
+                  <div
+                    key={r.label}
+                    className="flex items-center justify-between gap-4 border-b border-[#ebebec] py-4"
+                  >
+                    <span className="whitespace-nowrap text-[var(--theme-neutral)]/60">
+                      {r.label}
+                    </span>
+                    {editing && r.field ? (
+                      vitalInput(r.field, "w-20")
+                    ) : editing && r.bp ? (
+                      <span className="flex items-center gap-1 text-[var(--theme-neutral)]">
+                        {vitalInput("systolic", "w-12")}
+                        <span>/</span>
+                        {vitalInput("diastolic", "w-12")}
+                      </span>
+                    ) : (
+                      <span className="truncate text-right text-[var(--theme-neutral)]">
+                        {r.value}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between gap-4 pt-6">
+                <p className="min-w-px flex-1 text-center text-[14px] font-medium text-[var(--theme-neutral)]/60">
+                  โปรดตรวจสอบความถูกต้องการบันทึกเสมอ
+                </p>
+                {canEdit && (
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={editing ? saveEditing : startEditing}
+                      className="inline-flex items-center gap-2 rounded-lg border border-[#d9d9d9] bg-white px-3 py-1.5 text-[16px] font-bold text-[#3965e1] transition hover:bg-[#3965e1]/5"
+                    >
+                      {editing ? (
+                        <IconCheck className="h-5 w-5" stroke={2.2} />
+                      ) : (
+                        <IconPencil className="h-5 w-5" stroke={2} />
+                      )}
+                      {editing ? "บันทึก" : "แก้ไขข้อมูล"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleMic}
+                      aria-label="กรอกข้อมูลด้วยเสียง"
+                      aria-pressed={listening}
+                      className={`flex h-9 w-9 items-center justify-center rounded-lg text-white transition ${
+                        listening ? "animate-pulse bg-[#ff383c]" : "bg-[#3965e1] hover:brightness-110"
+                      }`}
+                    >
+                      <IconMicrophone className="h-5 w-5" stroke={2} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleInfo}
+              aria-expanded={infoOpen}
+              aria-label="ย่อข้อมูลผู้ป่วย"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--theme-neutral)]/55 transition hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-primary)]"
+            >
+              <IconChevronDown className="h-5 w-5 rotate-180" stroke={2} />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleToggleInfo}
+            aria-expanded={infoOpen}
+            aria-label="ดูข้อมูลผู้ป่วย"
+            className="flex w-full items-center gap-4 text-left"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#eee] text-[var(--theme-neutral)]/40">
+              {portraitUrl ? (
+                <img src={portraitUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <IconUser className="h-5 w-5" stroke={1.75} />
+              )}
+            </span>
+            <span className="flex-1 text-[14px] font-medium text-[var(--theme-neutral)]">
+              {patientName}
+            </span>
+            <IconChevronDown
+              className="h-5 w-5 shrink-0 text-[var(--theme-neutral)]/55"
+              stroke={2}
+            />
+          </button>
+        )}
+      </div>
 
-      {/* Header (Figma 1117:1892) — title block on the left + tab control
-          on the right, so the workspace surface below is dedicated to
-          either the empty CTA or the live summary/form/transcript view. */}
-      <header className="relative flex min-h-[80px] items-center justify-between gap-4 rounded-t-3xl border-b border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-4">
+      {/* Title + tab control (Figma 1377:4448) — workspace title/subtitle on
+          the left, summary / form / transcript tabs on the right. */}
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--theme-neutral)]/15 p-4">
         <div className="flex flex-1 flex-col gap-2">
           <h2 className="text-[16px] font-bold text-[var(--theme-neutral)]">
-            บทสนทนากับผู้ป่วย {patientName}
+            บทสนทนากับผู้ป่วย
           </h2>
           <p className="flex items-center gap-1.5 text-[14px] font-medium text-[var(--theme-neutral)]/60">
             {isRecording ? (
@@ -2562,75 +2770,16 @@ export function ConversationCard({
               tabContent: "text-[var(--theme-neutral)]/55 group-data-[selected=true]:text-[var(--theme-neutral)]",
             }}
           >
-            <Tab key="summary" title="สรุปอาการสำคัญ" />
+            <Tab key="summary" title="สรุปอาการเจ็บป่วย" />
             <Tab key="oldcarts" title="แบบฟอร์ม" />
             <Tab key="transcript" title="บทสนทนา" />
           </Tabs>
         </div>
       </header>
 
-      {/* Body — splits into a LEFT recording panel + RIGHT scroll area
-          while live, collapses to a single full-width scroll area when
-          idle or done. */}
-      <div className="flex min-h-0 flex-1 gap-4 px-4">
-        <AnimatePresence initial={false}>
-          {(isRecording || hasContent) && (
-            <motion.aside
-              key="record-panel"
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 273, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.4, ease: EASE_TV }}
-              className="flex shrink-0 flex-col items-center justify-center gap-6 overflow-hidden border-r border-[var(--theme-neutral)]/15"
-            >
-              <img
-                src={AI_DOCTOR}
-                alt=""
-                aria-hidden
-                className="h-[200px] w-[215px] object-contain"
-              />
-              <div className="flex w-full flex-col items-center gap-4">
-                {/* Soundwave only animates during live capture; once the
-                    user stops, the panel keeps its position but the wave
-                    is replaced with a paused caption so the layout stays
-                    consistent. */}
-                {isRecording ? (
-                  <>
-                    <Soundwave />
-                    <ListeningCaption />
-                  </>
-                ) : started ? (
-                  <PausedCaption
-                    asrInFlight={asrInFlight}
-                    topicInFlight={topicInFlight}
-                  />
-                ) : (
-                  <p className="text-center text-[14px] text-[var(--theme-neutral)]/60">
-                    กดไมค์เพื่อเริ่มซักประวัติ
-                  </p>
-                )}
-              </div>
-              <div className="flex w-full flex-col items-center gap-2 px-2">
-                <button
-                  type="button"
-                  onClick={onToggleRecord}
-                  className="inline-flex items-center gap-4 rounded-2xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-4 text-[14px] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
-                >
-                  <RecordButtonGlyph isRecording={isRecording} />
-                  {isRecording ? "หยุดการบันทึก" : started ? "บันทึกต่อ" : "เริ่มบันทึก"}
-                </button>
-                {!isRecording && (
-                  <AudioSourceDropdown
-                    variant="sm"
-                    onTabAudio={onTabAudio}
-                    onAudioFile={onAudioFile}
-                  />
-                )}
-              </div>
-            </motion.aside>
-          )}
-        </AnimatePresence>
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
+      {/* Body — full-width scroll area. The mic + soundwave now live in the
+          standalone RecordingPanel to the left. */}
+      <div className="flex min-h-0 flex-1 flex-col p-4">
         <ScrollArea>
           {/* Keep BOTH tabs mounted at all times — only toggle visibility.
               This preserves the typewriter progress in SummaryTab and the
@@ -2652,59 +2801,138 @@ export function ConversationCard({
             <OldCartsTab />
           </div>
         </ScrollArea>
+      </div>
+    </section>
+  );
+}
+
+// ── Standalone recording panel (Figma 1377:4404) ──────────────────────────
+// The mascot, soundwave and record control now live in their own card to
+// the left of the conversation, replacing the old patient ID-card column.
+
+export function RecordingPanel({
+  isRecording,
+  started,
+  asrInFlight,
+  topicInFlight,
+  onToggleRecord,
+  onTabAudio,
+  onAudioFile,
+}: {
+  isRecording: boolean;
+  started: boolean;
+  asrInFlight: number;
+  topicInFlight: number;
+  onToggleRecord: () => void;
+  onTabAudio: () => void;
+  onAudioFile: () => void;
+}) {
+  return (
+    <aside className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-14 overflow-y-auto rounded-3xl border border-[var(--theme-neutral)]/15 bg-white p-6 portrait:h-auto portrait:shrink-0 portrait:snap-start">
+      {/* Concentric circles wrapping the Dr. Note mascot (1377:4436) —
+          the rings breathe with the live mic level while recording. */}
+      <MascotRings isRecording={isRecording} />
+
+      <div className="flex w-full flex-col items-center gap-6">
+        {/* Soundwave only animates during live capture; paused / idle states
+            swap in a caption so the panel keeps its rhythm. */}
+        <div className="flex min-h-[20px] w-full flex-col items-center gap-4">
+          {isRecording ? (
+            <>
+              <Soundwave />
+              <ListeningCaption />
+            </>
+          ) : started ? (
+            <PausedCaption asrInFlight={asrInFlight} topicInFlight={topicInFlight} />
+          ) : (
+            <p className="text-center text-[14px] text-[var(--theme-neutral)]/60">
+              กดไมค์เพื่อเริ่มซักประวัติ
+            </p>
+          )}
+        </div>
+        <div className="flex w-full flex-col items-center gap-2 px-2">
+          <button
+            type="button"
+            onClick={onToggleRecord}
+            className="inline-flex items-center gap-4 rounded-2xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-4 text-[14px] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
+          >
+            <RecordButtonGlyph isRecording={isRecording} />
+            {isRecording ? "หยุดการบันทึก" : started ? "บันทึกต่อ" : "เริ่มบันทึก"}
+          </button>
+          {!isRecording && (
+            <AudioSourceDropdown
+              variant="sm"
+              onTabAudio={onTabAudio}
+              onAudioFile={onAudioFile}
+            />
+          )}
         </div>
       </div>
+    </aside>
+  );
+}
 
-      {/* Centered CTA — only when the card is in its empty/pre-recording
-          state (no segments yet AND not recording). Once there's any
-          transcript content the mic migrates to the footer so it doesn't
-          float on top of the summary/transcript cards. */}
-      {!isRecording && !hasContent && tab === "summary" && (
-        <motion.div
-          key="cta-center"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 12 }}
-          transition={{ duration: 0.35, ease: EASE_TV }}
-          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
-        >
-          <div className="pointer-events-auto flex w-[339px] flex-col items-center gap-7">
-            {/* Mascot lives in the centered CTA per Figma 1117:1779 —
-                serves as the visual anchor before recording starts. */}
-            <img
-              src={AI_DOCTOR}
-              alt=""
-              aria-hidden
-              className="h-[200px] w-[215px] object-contain"
-            />
-            <div className="flex items-center gap-4">
-              {/* Primary mic action (Figma 1117:1819). */}
-              <button
-                type="button"
-                onClick={onToggleRecord}
-                className="inline-flex items-center gap-2 rounded-full bg-[var(--theme-primary)] px-6 py-4 text-[14px] font-medium text-white shadow-[var(--theme-shadow-sm)] transition hover:brightness-110"
-              >
-                <IconMicrophone className="h-5 w-5" stroke={2} />
-                เริ่มบันทึกโดยไมโครโฟน
-              </button>
-              {/* Secondary "อื่น ๆ" outline action (Figma 1117:1820) —
-                  opens the source dropdown so the doctor can pick
-                  tab audio or an audio file. */}
-              <AudioSourceDropdown
-                variant="lg"
-                onTabAudio={onTabAudio}
-                onAudioFile={onAudioFile}
-              />
-            </div>
-          </div>
-        </motion.div>
-      )}
+/** Concentric rings around the mascot that pulse with the live mic level.
+ *  The rings are absolutely stacked so each can scale independently without
+ *  distorting the mascot, which sits on top untouched. While idle the rings
+ *  smoothly settle back to their resting size. */
+function MascotRings({ isRecording }: { isRecording: boolean }) {
+  const { levelRef } = useDictationContext();
+  const outerRef = useRef<HTMLDivElement>(null);
+  const midRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const mascotRef = useRef<HTMLImageElement>(null);
 
-      {/* Thin spacer to round out the card bottom. The LEFT panel now
-          owns the re-record control whether the user is mid-capture or
-          paused, so a dedicated bottom footer would just duplicate it. */}
-      <div className="h-4 shrink-0 rounded-b-3xl" />
-    </section>
+  useEffect(() => {
+    let raf = 0;
+    let smooth = 0;
+    const tick = () => {
+      const level = isRecording ? levelRef.current ?? 0 : 0;
+      // Punchier perceptual mapping than the soundwave so the rings react
+      // hard even to moderate speech.
+      const target = Math.min(1, Math.pow(level * 6, 0.55));
+      // Asymmetric smoothing: snap up fast on a peak, ease back down slowly
+      // — reads as a lively "pop" instead of a gentle breathe.
+      const k = target > smooth ? 0.5 : 0.1;
+      smooth += (target - smooth) * k;
+
+      const o = outerRef.current,
+        m = midRef.current,
+        i = innerRef.current,
+        s = mascotRef.current;
+      if (o) {
+        o.style.transform = `scale(${1 + smooth * 0.42})`;
+        o.style.opacity = `${0.45 + smooth * 0.55}`;
+      }
+      if (m) {
+        m.style.transform = `scale(${1 + smooth * 0.28})`;
+        m.style.opacity = `${0.5 + smooth * 0.5}`;
+      }
+      if (i) {
+        i.style.transform = `scale(${1 + smooth * 0.16})`;
+        i.style.opacity = `${0.55 + smooth * 0.45}`;
+      }
+      // Subtle mascot bounce so the character itself feels alive.
+      if (s) s.style.transform = `scale(${1 + smooth * 0.06})`;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [isRecording, levelRef]);
+
+  return (
+    <div className="relative flex size-[350px] shrink-0 items-center justify-center">
+      <div ref={outerRef} className="absolute inset-0 rounded-full bg-[var(--theme-primary)]/[0.06] will-change-transform" />
+      <div ref={midRef} className="absolute inset-[25px] rounded-full bg-[var(--theme-primary)]/[0.10] will-change-transform" />
+      <div ref={innerRef} className="absolute inset-[50px] rounded-full bg-[var(--theme-primary)]/[0.16] will-change-transform" />
+      <img
+        ref={mascotRef}
+        src={AI_DOCTOR}
+        alt=""
+        aria-hidden
+        className="relative h-[200px] w-[215px] object-contain will-change-transform"
+      />
+    </div>
   );
 }
 
@@ -2905,7 +3133,7 @@ function ScrollArea({ children }: { children: React.ReactNode }) {
       <div
         ref={ref}
         onScroll={check}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-48"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-48 portrait:pb-4"
       >
         {children}
       </div>
@@ -2976,76 +3204,76 @@ function SummaryTab({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Report card — bold headings + flowing content, AppointReady style */}
-      <div className="rounded-2xl border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <ReportSection heading="Primary concern:">
-          {primary ? (
-            <p className="text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
-              {primary.title}
-            </p>
-          ) : (
-            <ReportLineSkeleton />
-          )}
-        </ReportSection>
+      {/* Summary sections — each a soft-blue card with a white chip header
+          (Figma 1377:4711 / 1377:4721). */}
+      <SummarySection icon={IconAlertCircle} label="Primary concern">
+        {primary ? (
+          <p className="text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
+            {primary.title}
+          </p>
+        ) : (
+          <ReportLineSkeleton />
+        )}
+      </SummarySection>
 
-        <ReportSection heading="History of Present Illness (HPI):">
-          {hpi ? (
-            <HpiDiffText text={hpi} />
-          ) : isRecording ? (
-            <ReportLineSkeleton />
-          ) : (
-            <p className="text-[13px] text-[var(--theme-neutral)]/45">—</p>
-          )}
-        </ReportSection>
+      <SummarySection icon={IconNote} label="History of Present Illness (HPI)">
+        {hpi ? (
+          <HpiDiffText text={hpi} />
+        ) : isRecording ? (
+          <ReportLineSkeleton />
+        ) : (
+          <p className="text-[13px] text-[var(--theme-neutral)]/45">—</p>
+        )}
+      </SummarySection>
 
-        <ReportSection heading="Relevant Medical History (from EHR):">
-          {ehr.history.length > 0 ? (
-            <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
-              {ehr.history.map((h, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="text-[var(--theme-neutral)]/30">•</span>
-                  <span>{renderAllergy(h, `pmh${i}`)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-[13px] text-[var(--theme-neutral)]/45">
-              ไม่มีข้อมูลใน EHR (ผู้ป่วยใหม่)
-            </p>
-          )}
-        </ReportSection>
+      <SummarySection icon={IconStethoscope} label="Relevant Medical History (from EHR)">
+        {ehr.history.length > 0 ? (
+          <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
+            {ehr.history.map((h, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="text-[var(--theme-neutral)]/30">•</span>
+                <span>{renderAllergy(h, `pmh${i}`)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[13px] text-[var(--theme-neutral)]/45">
+            ไม่มีข้อมูลใน EHR (ผู้ป่วยใหม่)
+          </p>
+        )}
+      </SummarySection>
 
-        <ReportSection heading="Medications (from EHR and interview):" last>
-          {ehr.meds.length > 0 || interviewMeds.length > 0 ? (
-            <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
-              {ehr.meds.map((m, i) => (
-                <li key={`e${i}`} className="flex items-center gap-2">
-                  <span className="text-[var(--theme-neutral)]/30">•</span>
-                  <span>{m}</span>
-                  <span className="rounded bg-[var(--theme-neutral)]/10 px-1 text-[9px] font-semibold text-[var(--theme-neutral)]/45">
-                    EHR
-                  </span>
-                </li>
-              ))}
-              {interviewMeds.map((m, i) => (
-                <li key={`i${i}`} className="flex items-center gap-2">
-                  <span className="text-[var(--theme-neutral)]/30">•</span>
-                  <span>{m}</span>
-                  <span className="rounded bg-[var(--theme-primary)]/10 px-1 text-[9px] font-semibold text-[var(--theme-primary)]">
-                    ซักประวัติ
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : isRecording ? (
-            <ReportLineSkeleton />
-          ) : (
-            <p className="text-[13px] text-[var(--theme-neutral)]/45">ยังไม่มีรายการยา</p>
-          )}
-        </ReportSection>
+      <SummarySection icon={IconNote} label="Medications (from EHR and interview)">
+        {ehr.meds.length > 0 || interviewMeds.length > 0 ? (
+          <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
+            {ehr.meds.map((m, i) => (
+              <li key={`e${i}`} className="flex items-center gap-2">
+                <span className="text-[var(--theme-neutral)]/30">•</span>
+                <span>{m}</span>
+                <span className="rounded bg-[var(--theme-neutral)]/10 px-1 text-[9px] font-semibold text-[var(--theme-neutral)]/45">
+                  EHR
+                </span>
+              </li>
+            ))}
+            {interviewMeds.map((m, i) => (
+              <li key={`i${i}`} className="flex items-center gap-2">
+                <span className="text-[var(--theme-neutral)]/30">•</span>
+                <span>{m}</span>
+                <span className="rounded bg-[var(--theme-primary)]/10 px-1 text-[9px] font-semibold text-[var(--theme-primary)]">
+                  ซักประวัติ
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : isRecording ? (
+          <ReportLineSkeleton />
+        ) : (
+          <p className="text-[13px] text-[var(--theme-neutral)]/45">ยังไม่มีรายการยา</p>
+        )}
+      </SummarySection>
 
-        {/* Report evaluation — collapsible */}
-        <div className="mt-5">
+      {/* Report evaluation — collapsible */}
+      <div className="px-1">
           <button
             type="button"
             onClick={() => setEvalOpen((v) => !v)}
@@ -3103,7 +3331,6 @@ function SummaryTab({
             ***
           </p>
         </div>
-      </div>
 
       {/* Disclaimer */}
       <div className="flex gap-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-3">
@@ -3117,20 +3344,25 @@ function SummaryTab({
   );
 }
 
-/** One report heading + body, bold-heading-with-colon style. `last` drops
- *  the bottom spacing. Local to the dr-note summary tab. */
-function ReportSection({
-  heading,
-  last,
+/** One summary block — soft-blue card with a white chip header (icon +
+ *  label), matching Figma 1377:4711. Local to the dr-note summary tab. */
+function SummarySection({
+  icon: Icon,
+  label,
   children,
 }: {
-  heading: string;
-  last?: boolean;
+  icon: typeof IconNote;
+  label: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className={last ? "" : "mb-5"}>
-      <h4 className="mb-2 text-[15px] font-bold text-[var(--theme-neutral)]">{heading}</h4>
+    <div className="flex flex-col gap-4 rounded-3xl bg-[#f5f7fd] p-4">
+      <div className="flex items-center">
+        <div className="inline-flex items-center gap-2 rounded-lg bg-white px-2 py-1">
+          <Icon className="h-4 w-4 text-[var(--theme-primary)]" stroke={1.75} />
+          <span className="text-[14px] font-medium text-[var(--theme-neutral)]">{label}</span>
+        </div>
+      </div>
       {children}
     </div>
   );
@@ -4223,6 +4455,9 @@ interface PatientInfo {
   age: string;
   bloodPressure: string;
   pulse: string;
+  temperature: string;
+  respiratoryRate: string;
+  spo2: string;
   weight: string;
   height: string;
 }
@@ -4253,6 +4488,9 @@ function derivePatientInfo(
     age,
     bloodPressure: bp,
     pulse: vitals?.pulse.trim() ?? "",
+    temperature: vitals?.temperature.trim() ?? "",
+    respiratoryRate: vitals?.respiratoryRate.trim() ?? "",
+    spo2: vitals?.spo2.trim() ?? "",
     weight: vitals?.weight.trim() ?? "",
     height: vitals?.height.trim() ?? "",
   };
