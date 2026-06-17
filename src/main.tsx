@@ -12,7 +12,7 @@ import "@radix-ui/themes/styles.css";
 const muiTheme = createTheme({
   typography: {
     fontFamily:
-      '"Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif',
+      '"Sukhumvit Set", "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif',
   },
   palette: {
     primary: { main: "#4285F4" },
@@ -39,8 +39,6 @@ createRoot(document.getElementById("root")!).render(
                   radius: "lg",
                   variant: "bordered",
                   classNames: {
-                    // `!` on bg/border to win over HeroUI's color-prop styling
-                    // — otherwise color="success" tints the base white-ish.
                     base: "!bg-[#0c0c0c] !text-white !border-0 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-md py-3 pl-4 pr-3 gap-3",
                     title: "font-medium text-[14px]",
                     description: "!text-white/65 text-[13px]",

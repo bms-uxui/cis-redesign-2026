@@ -42,9 +42,9 @@ import {
   DropdownTrigger,
   Input,
   Modal,
-  ModalBody,
   ModalContent,
-  ModalFooter,
+  ModalBody,
+    ModalFooter,
   ModalHeader,
   Tab,
   Tabs,
@@ -163,7 +163,7 @@ function ehrForCid(cid?: string): PatientEhr {
 export default function NewPatientByVoice() {
   const navigate = useNavigate();
   const toast = useToast();
-  const { isRecording, startSession, stopSession, segments, source, asrInFlight, handleClose: clearDictation } =
+  const { isRecording, startSession, resumeSession, stopSession, segments, source, asrInFlight, handleClose: clearDictation } =
     useDictationContext();
 
   // Clear any persisted dictation session on mount so a fresh visit to
@@ -257,6 +257,8 @@ export default function NewPatientByVoice() {
   // Live clinical-topic extraction (Figma 996:1456) — drives the center
   // summary tab. OLD CARTS topics surface as the patient is interviewed.
   const { topics, inFlight: topicInFlight } = useSymptomTopicsFromLLM(segments, isRecording);
+  // Chief complaint — a single replaceable phrase (honors spoken corrections).
+  const chiefComplaint = useChiefComplaintFromLLM(segments, isRecording);
   // Live HPI narrative — a single prose paragraph the LLM refines in place
   // as the interview grows (separate from the OLD CARTS topic chips).
   const { hpi } = useHpiNarrativeFromLLM(segments, isRecording);
@@ -289,15 +291,19 @@ export default function NewPatientByVoice() {
         return;
       }
       void stopSession();
+    } else if (segments.length > 0) {
+      // Continue the existing transcript instead of wiping it.
+      resumeSession("mic");
     } else {
       startSession("mic");
     }
-  }, [isRecording, startSession, stopSession, asrInFlight, topicInFlight]);
+  }, [isRecording, startSession, resumeSession, stopSession, segments.length, asrInFlight, topicInFlight]);
 
   const handleTabAudio = useCallback(() => {
     if (isRecording) void stopSession();
+    else if (segments.length > 0) resumeSession("tab");
     else startSession("tab");
-  }, [isRecording, startSession, stopSession]);
+  }, [isRecording, startSession, resumeSession, stopSession, segments.length]);
 
   // Audio-file fallback: open a native file picker; once a file is chosen
   // we let the dictation context handle ingestion if/when that path is
@@ -753,6 +759,7 @@ export default function NewPatientByVoice() {
                 <ConversationCard
                   patientName={patientInfo.fullName || "ผู้ป่วยใหม่"}
                   topics={topics}
+                  chiefComplaint={chiefComplaint}
                   hpi={hpi}
                   ehr={ehr}
                   interviewMeds={interviewMeds}
@@ -1621,7 +1628,8 @@ export function useSymptomTopicsFromLLM(
 
   useEffect(() => {
     if (isRecording && !wasRecordingRef.current) {
-      setTopics([]);
+      // Keep accumulated topics across "บันทึกต่อ" — only re-arm firing so the
+      // next tick re-derives from the (resumed) full transcript.
       lastFiredTranscriptRef.current = "";
     }
     wasRecordingRef.current = isRecording;
@@ -1691,6 +1699,69 @@ export function useSymptomTopicsFromLLM(
   return { topics, inFlight };
 }
 
+/** Live chief complaint (อาการสำคัญ) — a SINGLE phrase that the LLM re-derives
+ *  from the full transcript each tick and is allowed to REPLACE (unlike the
+ *  append-only OLD CARTS topic list). This is what makes spoken corrections
+ *  like "แก้ไขอาการสำคัญเป็นปวดหัว" actually change the Primary concern. */
+export function useChiefComplaintFromLLM(
+  segments: { text: string }[],
+  isRecording: boolean,
+): string {
+  const [cc, setCc] = useState("");
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+  const ccRef = useRef("");
+  ccRef.current = cc;
+  const lastFiredTranscriptRef = useRef("");
+
+  useEffect(() => {
+    if (!isRecording) return;
+    let cancelled = false;
+    const tick = async () => {
+      const transcript = segmentsRef.current
+        .map((s) => s.text)
+        .join(" ")
+        .trim();
+      if (transcript.length < 6) return;
+      if (transcript === lastFiredTranscriptRef.current) return;
+      lastFiredTranscriptRef.current = transcript;
+      try {
+        const result = await chatJSON<{ cc?: string }>(
+          [
+            {
+              role: "system",
+              content:
+                "You extract the SINGLE current chief complaint (อาการสำคัญ) from a Thai patient interview transcript that GROWS over time. " +
+                "Return the most clinically salient presenting complaint as a SHORT Thai phrase (≤24 characters, e.g. 'ปวดท้อง', 'ไข้สูง', 'ปวดหัว'). " +
+                "CRITICAL — honor explicit corrections by the clinician: if the transcript contains an instruction such as 'แก้ไขอาการสำคัญเป็น X', 'เปลี่ยนอาการสำคัญเป็น X', 'Primary concern เป็น X', or 'ที่จริงอาการสำคัญคือ X', then X is the chief complaint, overriding any earlier mention. The latest correction always wins. " +
+                "Do NOT include the command words ('แก้ไข', 'เปลี่ยน', 'เป็น') in the output — only the complaint itself. " +
+                'Output ONLY JSON: {"cc":"..."}. If nothing clinically relevant yet, return {"cc":""}.',
+            },
+            {
+              role: "user",
+              content: `Transcript so far:\n${transcript}\n\nPrevious chief complaint:\n${ccRef.current || "(none)"}`,
+            },
+          ],
+          { temperature: 0.1, maxTokens: 120, fast: true },
+        );
+        if (cancelled) return;
+        const next = typeof result?.cc === "string" ? result.cc.trim() : "";
+        if (next) setCc(next);
+      } catch {
+        // Silent — next tick retries.
+      }
+    };
+    tick();
+    const interval = window.setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isRecording]);
+
+  return cc;
+}
+
 /** Live HPI narrative — distinct from the OLD CARTS topic list. Polls the
  *  growing transcript and asks the LLM to (re)write a SINGLE cohesive HPI
  *  paragraph, feeding back the previous draft so it refines in place as new
@@ -1710,7 +1781,8 @@ export function useHpiNarrativeFromLLM(
 
   useEffect(() => {
     if (isRecording && !wasRecordingRef.current) {
-      setHpi("");
+      // Keep the prior HPI draft across "บันทึกต่อ" so the resumed session
+      // surgically amends it instead of starting from scratch.
       lastFiredTranscriptRef.current = "";
     }
     wasRecordingRef.current = isRecording;
@@ -1790,7 +1862,7 @@ export function useMedsFromLLM(
 
   useEffect(() => {
     if (isRecording && !wasRecordingRef.current) {
-      setMeds([]);
+      // Keep accumulated meds across "บันทึกต่อ".
       lastFiredTranscriptRef.current = "";
     }
     wasRecordingRef.current = isRecording;
@@ -2419,6 +2491,7 @@ type CenterTab = "summary" | "transcript" | "oldcarts";
 interface ConversationCardProps {
   patientName: string;
   topics: SymptomTopic[];
+  chiefComplaint?: string;
   hpi: string;
   ehr: PatientEhr;
   interviewMeds: string[];
@@ -2490,6 +2563,7 @@ function AudioSourceDropdown({
 export function ConversationCard({
   patientName,
   topics,
+  chiefComplaint,
   hpi,
   ehr,
   interviewMeds,
@@ -2503,6 +2577,7 @@ export function ConversationCard({
   asrInFlight = 0,
   topicInFlight = 0,
 }: ConversationCardProps) {
+  const { levelRef } = useDictationContext();
   // The summary already has something to show before recording starts when
   // a known patient was scanned (EHR history/meds) — or once any live
   // content exists. In that case the mic must live in the LEFT panel so the
@@ -2596,7 +2671,7 @@ export function ConversationCard({
                     consistent. */}
                 {isRecording ? (
                   <>
-                    <Soundwave />
+                    <Soundwave levelRef={levelRef} />
                     <ListeningCaption />
                   </>
                 ) : started ? (
@@ -2617,7 +2692,7 @@ export function ConversationCard({
                   className="inline-flex items-center gap-4 rounded-2xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-4 text-[14px] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
                 >
                   <RecordButtonGlyph isRecording={isRecording} />
-                  {isRecording ? "หยุดการบันทึก" : started ? "บันทึกต่อ" : "เริ่มบันทึก"}
+                  {isRecording ? "หยุดซักประวัติ" : started ? "บันทึกต่อ" : "เริ่มซักประวัติ"}
                 </button>
                 {!isRecording && (
                   <AudioSourceDropdown
@@ -2639,6 +2714,7 @@ export function ConversationCard({
           <div className={tab === "summary" ? "flex flex-col" : "hidden"}>
             <SummaryTab
               topics={topics}
+              chiefComplaint={chiefComplaint}
               hpi={hpi}
               ehr={ehr}
               interviewMeds={interviewMeds}
@@ -2685,7 +2761,7 @@ export function ConversationCard({
                 className="inline-flex items-center gap-2 rounded-full bg-[var(--theme-primary)] px-6 py-4 text-[14px] font-medium text-white shadow-[var(--theme-shadow-sm)] transition hover:brightness-110"
               >
                 <IconMicrophone className="h-5 w-5" stroke={2} />
-                เริ่มบันทึกโดยไมโครโฟน
+                เริ่มซักประวัติ
               </button>
               {/* Secondary "อื่น ๆ" outline action (Figma 1117:1820) —
                   opens the source dropdown so the doctor can pick
@@ -2762,7 +2838,7 @@ function RecordControl({
             <IconMicrophone className={large ? "h-6 w-6" : "h-5 w-5"} stroke={2} />
           )}
         </span>
-        {isRecording ? "หยุดการบันทึก" : "เริ่มบันทึก"}
+        {isRecording ? "พักการบันทึก" : "เริ่มบันทึก"}
       </button>
       {!isRecording && (
         <Dropdown placement="top-end">
@@ -2820,8 +2896,13 @@ const SOUNDWAVE_BARS = 24;
 const SOUNDWAVE_MIN_PX = 4;
 const SOUNDWAVE_MAX_PX = 44;
 
-function Soundwave() {
-  const { levelRef } = useDictationContext();
+export function Soundwave({
+  levelRef,
+  barClassName,
+}: {
+  levelRef: React.RefObject<number>;
+  barClassName?: string;
+}) {
   const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const historyRef = useRef<number[]>(new Array(SOUNDWAVE_BARS).fill(0));
 
@@ -2861,7 +2942,7 @@ function Soundwave() {
           ref={(el) => {
             barRefs.current[i] = el;
           }}
-          className="block w-1 rounded-full bg-[var(--theme-primary)] transition-[height] duration-100 ease-out"
+          className={`block w-1 rounded-full transition-[height] duration-100 ease-out ${barClassName ?? "bg-[var(--theme-primary)]"}`}
           style={{ height: SOUNDWAVE_MIN_PX }}
         />
       ))}
@@ -2929,26 +3010,63 @@ function ScrollArea({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Interview self-evaluation seeds (would be produced by the LLM once the
-// transcript is complete — mirrors AppointReady's report evaluation).
-const SUMMARY_HELPFUL_SEED = [
-  "บันทึกอาการสำคัญและคำบรรยายจากผู้ป่วยครบถ้วน",
-  "มีการระบุระยะเวลาและลักษณะของอาการ",
-];
-const SUMMARY_GAPS_SEED = [
-  "ประวัติแพ้ยา / อาหาร",
-  "ประวัติโรคประจำตัวและยาที่ใช้ประจำ",
-  "สัญญาณชีพ (อุณหภูมิ / ความดัน / ชีพจร)",
-];
+// ── Editable report section ───────────────────────────────────────────────
+// A report section in *view* mode — just heading + body.
+function Section({
+  heading,
+  children,
+  last,
+}: {
+  heading: string;
+  children: React.ReactNode;
+  last?: boolean;
+}) {
+  return (
+    <div className={last ? "" : "mb-5"}>
+      <h4 className="mb-2 text-[15px] font-bold text-[var(--theme-neutral)]">{heading}</h4>
+      {children}
+    </div>
+  );
+}
+
+// A report section in *edit* mode — heading + textarea (keyboard). Voice
+// editing is handled separately by continuing the recording (mic under
+// Dr. Note), so this is type-only and uncluttered.
+function FieldEditor({
+  heading,
+  value,
+  onChange,
+  last,
+}: {
+  heading: string;
+  value: string;
+  onChange: (value: string) => void;
+  last?: boolean;
+}) {
+  return (
+    <div className={last ? "" : "mb-5"}>
+      <h4 className="mb-2 text-[15px] font-bold text-[var(--theme-neutral)]">{heading}</h4>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={Math.max(2, value.split("\n").length)}
+        placeholder="พิมพ์เพื่อแก้ไข…"
+        className="w-full resize-y rounded-xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-3 text-[14px] leading-relaxed text-[var(--theme-neutral)] outline-none transition focus:border-[var(--theme-primary)]"
+      />
+    </div>
+  );
+}
 
 function SummaryTab({
   topics,
+  chiefComplaint,
   hpi,
   ehr,
   interviewMeds,
   isRecording,
 }: {
   topics: SymptomTopic[];
+  chiefComplaint?: string;
   hpi: string;
   ehr: PatientEhr;
   interviewMeds: string[];
@@ -2958,10 +3076,32 @@ function SummaryTab({
   // most once every ~1.2s so the list grows calmly even when the model
   // emits a burst on a single tick.
   const visible = useThrottledReveal(topics, 1200);
-  const [evalOpen, setEvalOpen] = useState(false);
+
+  // Manual edits (typed or dictated) to each report section. Once a field is
+  // edited it holds its value (override wins over the live AI extraction) so
+  // the user's double-checked correction isn't clobbered by a later LLM tick.
+  const [overrides, setOverrides] = useState<{
+    primary?: string;
+    hpi?: string;
+    history?: string;
+    meds?: string;
+  }>({});
+
+  // Single edit mode for the whole report — the pencil button enters it,
+  // every section becomes a textarea, and บันทึก/ยกเลิก commit or discard.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ primary: "", hpi: "", history: "", meds: "" });
 
   const hasEhr = ehr.history.length > 0 || ehr.meds.length > 0;
-  if (topics.length === 0 && !hpi && !hasEhr && interviewMeds.length === 0 && !isRecording) {
+  if (
+    topics.length === 0 &&
+    !chiefComplaint &&
+    !hpi &&
+    !hasEhr &&
+    interviewMeds.length === 0 &&
+    !isRecording &&
+    Object.keys(overrides).length === 0
+  ) {
     return (
       <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[var(--theme-neutral)]/40">
         ยังไม่มีอาการสำคัญที่สรุปได้
@@ -2969,140 +3109,187 @@ function SummaryTab({
     );
   }
 
-  // The first extracted topic reads as the chief / primary concern; the HPI
-  // is the LLM's evolving narrative paragraph (refined live as the interview
-  // grows), not a list of the remaining topics.
+  // The HPI is the LLM's evolving narrative paragraph (refined live as the
+  // interview grows), not a list of the remaining topics.
   const primary = visible[0];
+
+  // Current text per section: a manual override wins over the live extraction.
+  // Primary concern prefers the dedicated chief-complaint extraction (which is
+  // replaceable and honors spoken corrections) over the append-only topic[0].
+  const primaryText =
+    overrides.primary ?? (chiefComplaint?.trim() || primary?.title || "");
+  const hpiText = overrides.hpi ?? hpi;
+  const historyText = overrides.history ?? ehr.history.join("\n");
+  const medsText = overrides.meds ?? [...ehr.meds, ...interviewMeds].join("\n");
+  const medsEdited = overrides.meds !== undefined;
+
+  const toItems = (t: string) =>
+    t.split("\n").map((s) => s.trim()).filter(Boolean);
+  const historyItems = toItems(historyText);
+  const medsItems = toItems(medsText);
+
+  const beginEdit = () => {
+    setDraft({ primary: primaryText, hpi: hpiText, history: historyText, meds: medsText });
+    setEditing(true);
+  };
+  const saveEdit = () => {
+    const next = { ...overrides };
+    if (draft.primary.trim() !== primaryText) next.primary = draft.primary.trim();
+    if (draft.hpi.trim() !== hpiText) next.hpi = draft.hpi.trim();
+    if (draft.history.trim() !== historyText) next.history = draft.history.trim();
+    if (draft.meds.trim() !== medsText) next.meds = draft.meds.trim();
+    setOverrides(next);
+    setEditing(false);
+  };
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Report card — bold headings + flowing content, AppointReady style */}
+      {/* Report card — bold headings + flowing content, AppointReady style.
+          One pencil toggles the whole report into edit mode (type or dictate). */}
       <div className="rounded-2xl border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <ReportSection heading="Primary concern:">
-          {primary ? (
-            <p className="text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
-              {primary.title}
-            </p>
+        {/* Single edit toolbar */}
+        <div className="mb-4 flex items-center justify-end gap-2">
+          {editing ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="rounded-full px-3 py-1.5 text-[12px] font-medium text-[var(--theme-neutral)]/60 transition hover:bg-[var(--theme-neutral)]/5"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                className="inline-flex items-center gap-1.5 rounded-full bg-[var(--theme-primary)] px-3.5 py-1.5 text-[12px] font-semibold text-white transition hover:brightness-110"
+              >
+                <IconCheck className="h-3.5 w-3.5" stroke={2.4} />
+                บันทึก
+              </button>
+            </>
           ) : (
-            <ReportLineSkeleton />
+            /* Keyboard edit. Voice editing is done by continuing the
+               recording (the mic button under Dr. Note) — the live
+               transcript pipeline rewrites the report automatically. */
+            <button
+              type="button"
+              onClick={beginEdit}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--theme-neutral)]/15 px-3.5 py-1.5 text-[12px] font-medium text-[var(--theme-neutral)]/70 transition hover:border-[var(--theme-primary)]/40 hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-primary)]"
+            >
+              <IconPencil className="h-3.5 w-3.5" stroke={1.75} />
+              แก้ไขข้อมูล
+            </button>
           )}
-        </ReportSection>
-
-        <ReportSection heading="History of Present Illness (HPI):">
-          {hpi ? (
-            <HpiDiffText text={hpi} />
-          ) : isRecording ? (
-            <ReportLineSkeleton />
-          ) : (
-            <p className="text-[13px] text-[var(--theme-neutral)]/45">—</p>
-          )}
-        </ReportSection>
-
-        <ReportSection heading="Relevant Medical History (from EHR):">
-          {ehr.history.length > 0 ? (
-            <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
-              {ehr.history.map((h, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="text-[var(--theme-neutral)]/30">•</span>
-                  <span>{renderAllergy(h, `pmh${i}`)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-[13px] text-[var(--theme-neutral)]/45">
-              ไม่มีข้อมูลใน EHR (ผู้ป่วยใหม่)
-            </p>
-          )}
-        </ReportSection>
-
-        <ReportSection heading="Medications (from EHR and interview):" last>
-          {ehr.meds.length > 0 || interviewMeds.length > 0 ? (
-            <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
-              {ehr.meds.map((m, i) => (
-                <li key={`e${i}`} className="flex items-center gap-2">
-                  <span className="text-[var(--theme-neutral)]/30">•</span>
-                  <span>{m}</span>
-                  <span className="rounded bg-[var(--theme-neutral)]/10 px-1 text-[9px] font-semibold text-[var(--theme-neutral)]/45">
-                    EHR
-                  </span>
-                </li>
-              ))}
-              {interviewMeds.map((m, i) => (
-                <li key={`i${i}`} className="flex items-center gap-2">
-                  <span className="text-[var(--theme-neutral)]/30">•</span>
-                  <span>{m}</span>
-                  <span className="rounded bg-[var(--theme-primary)]/10 px-1 text-[9px] font-semibold text-[var(--theme-primary)]">
-                    ซักประวัติ
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : isRecording ? (
-            <ReportLineSkeleton />
-          ) : (
-            <p className="text-[13px] text-[var(--theme-neutral)]/45">ยังไม่มีรายการยา</p>
-          )}
-        </ReportSection>
-
-        {/* Report evaluation — collapsible */}
-        <div className="mt-5">
-          <button
-            type="button"
-            onClick={() => setEvalOpen((v) => !v)}
-            className="flex items-center gap-1 rounded-full bg-[#ddd6fe] px-3 py-1.5 text-[12px] font-medium text-[#6d28d9] transition hover:bg-[#c4b5fd]"
-          >
-            <IconChevronDown
-              className={`h-3.5 w-3.5 transition-transform ${evalOpen ? "rotate-180" : ""}`}
-              stroke={2}
-            />
-            View Report Evaluation
-          </button>
-
-          {evalOpen && (
-            <div className="mt-3 flex flex-col gap-3">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[12px] font-semibold text-[var(--theme-success)]">
-                  ข้อมูลที่ได้ (helpful facts)
-                </span>
-                <ul className="flex flex-col gap-1">
-                  {SUMMARY_HELPFUL_SEED.map((f, i) => (
-                    <li
-                      key={i}
-                      className="flex gap-1.5 text-[12px] leading-snug text-[var(--theme-neutral)]/80"
-                    >
-                      <IconCheck
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--theme-success)]"
-                        stroke={2}
-                      />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[12px] font-semibold text-[var(--theme-warning)]">
-                  ยังไม่ได้ถาม แต่ควรถามเพิ่ม
-                </span>
-                <ul className="flex flex-col gap-1">
-                  {SUMMARY_GAPS_SEED.map((g, i) => (
-                    <li
-                      key={i}
-                      className="flex gap-1.5 text-[12px] leading-snug text-[var(--theme-neutral)]/80"
-                    >
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--theme-warning)]" />
-                      <span>{g}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-
-          <p className="mt-4 text-center text-[14px] font-bold tracking-[0.4em] text-[var(--theme-neutral)]/35">
-            ***
-          </p>
         </div>
+
+        {editing ? (
+          <>
+            <FieldEditor
+              heading="Primary concern:"
+              value={draft.primary}
+              onChange={(v) => setDraft((d) => ({ ...d, primary: v }))}
+            />
+            <FieldEditor
+              heading="History of Present Illness (HPI):"
+              value={draft.hpi}
+              onChange={(v) => setDraft((d) => ({ ...d, hpi: v }))}
+            />
+            <FieldEditor
+              heading="Relevant Medical History (from EHR):"
+              value={draft.history}
+              onChange={(v) => setDraft((d) => ({ ...d, history: v }))}
+            />
+            <FieldEditor
+              heading="Medications (from EHR and interview):"
+              value={draft.meds}
+              onChange={(v) => setDraft((d) => ({ ...d, meds: v }))}
+              last
+            />
+          </>
+        ) : (
+          <>
+            <Section heading="Primary concern:">
+              {primaryText ? (
+                <HpiDiffText text={primaryText} />
+              ) : (
+                <p className="text-[13px] text-[var(--theme-neutral)]/45">
+                  {isRecording ? "กำลังฟังเพื่อสรุปอาการสำคัญ…" : "—"}
+                </p>
+              )}
+            </Section>
+
+            <Section heading="History of Present Illness (HPI):">
+              {hpiText ? (
+                <HpiDiffText text={hpiText} />
+              ) : isRecording ? (
+                <p className="text-[13px] text-[var(--theme-neutral)]/45">
+                  กำลังเรียบเรียงประวัติการเจ็บป่วยปัจจุบัน…
+                </p>
+              ) : (
+                <p className="text-[13px] text-[var(--theme-neutral)]/45">—</p>
+              )}
+            </Section>
+
+            <Section heading="Relevant Medical History (from EHR):">
+              {historyItems.length > 0 ? (
+                <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
+                  {historyItems.map((h, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-[var(--theme-neutral)]/30">•</span>
+                      <span>{renderAllergy(h, `pmh${i}`)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[13px] text-[var(--theme-neutral)]/45">
+                  ไม่มีข้อมูลใน EHR (ผู้ป่วยใหม่)
+                </p>
+              )}
+            </Section>
+
+            <Section heading="Medications (from EHR and interview):" last>
+              {medsItems.length === 0 ? (
+                isRecording ? (
+                  <p className="text-[13px] text-[var(--theme-neutral)]/45">
+                    กำลังประมวลผลรายการยา…
+                  </p>
+                ) : (
+                  <p className="text-[13px] text-[var(--theme-neutral)]/45">ยังไม่มีรายการยา</p>
+                )
+              ) : medsEdited ? (
+                <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
+                  {medsItems.map((m, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <span className="text-[var(--theme-neutral)]/30">•</span>
+                      <span>{m}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
+                  {ehr.meds.map((m, i) => (
+                    <li key={`e${i}`} className="flex items-center gap-2">
+                      <span className="text-[var(--theme-neutral)]/30">•</span>
+                      <span>{m}</span>
+                      <span className="rounded bg-[var(--theme-neutral)]/10 px-1 text-[9px] font-semibold text-[var(--theme-neutral)]/45">
+                        EHR
+                      </span>
+                    </li>
+                  ))}
+                  {interviewMeds.map((m, i) => (
+                    <li key={`i${i}`} className="flex items-center gap-2">
+                      <span className="text-[var(--theme-neutral)]/30">•</span>
+                      <span>{m}</span>
+                      <span className="rounded bg-[var(--theme-primary)]/10 px-1 text-[9px] font-semibold text-[var(--theme-primary)]">
+                        ซักประวัติ
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          </>
+        )}
       </div>
 
       {/* Disclaimer */}
@@ -3113,47 +3300,6 @@ function SummaryTab({
           ไม่ได้มีไว้เพื่อวินิจฉัยหรือแนะนำการรักษาโรคใด ๆ และไม่ควรใช้แทนคำแนะนำจากแพทย์
         </p>
       </div>
-    </div>
-  );
-}
-
-/** One report heading + body, bold-heading-with-colon style. `last` drops
- *  the bottom spacing. Local to the dr-note summary tab. */
-function ReportSection({
-  heading,
-  last,
-  children,
-}: {
-  heading: string;
-  last?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={last ? "" : "mb-5"}>
-      <h4 className="mb-2 text-[15px] font-bold text-[var(--theme-neutral)]">{heading}</h4>
-      {children}
-    </div>
-  );
-}
-
-/** Inline single-line shimmer for a report field still being transcribed. */
-function ReportLineSkeleton() {
-  return (
-    <div className="flex flex-col gap-2">
-      <div
-        className="h-[16px] w-full animate-pulse rounded-full"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, rgba(189,189,189,0.6), rgba(221,221,221,0.6))",
-        }}
-      />
-      <div
-        className="h-[16px] w-3/4 animate-pulse rounded-full"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, rgba(189,189,189,0.6), rgba(221,221,221,0.6))",
-        }}
-      />
     </div>
   );
 }
@@ -3227,7 +3373,7 @@ function renderAllergy(text: string, keyPrefix: string) {
   );
 }
 
-function HpiDiffText({ text }: { text: string }) {
+export function HpiDiffText({ text }: { text: string }) {
   const [ops, setOps] = useState<DiffOp[]>(() =>
     text ? [{ type: "same", text }] : [],
   );
@@ -3761,7 +3907,7 @@ const LISTENING_PHRASES = [
   "กำลังเรียงลำดับเหตุการณ์",
 ];
 
-function ListeningCaption() {
+export function ListeningCaption({ tone }: { tone?: "primary" | "white" } = {}) {
   const [idx, setIdx] = useState(0);
   useEffect(() => {
     const t = window.setInterval(
@@ -3772,7 +3918,7 @@ function ListeningCaption() {
   }, []);
   const current = LISTENING_PHRASES[idx];
   return (
-    <div className="flex h-5 items-center gap-2 overflow-hidden text-[13px] text-[var(--theme-primary)]">
+    <div className={`flex h-5 items-center gap-2 overflow-hidden text-[13px] ${tone === "white" ? "text-white" : "text-[var(--theme-primary)]"}`}>
       <IconLoader2 className="h-3 w-3 shrink-0 animate-spin" stroke={2.2} />
       <AnimatePresence mode="wait" initial={false}>
         <motion.span

@@ -45,6 +45,9 @@ export interface DictationContextValue {
   isIcdLoading: boolean;
   // controls
   startSession: (source: "mic" | "tab", opts?: DictationSessionOptions) => void;
+  /** Continue ("บันทึกต่อ") the current transcript: resumes recording with the
+   *  prior segments seeded so new audio appends instead of wiping them. */
+  resumeSession: (source: "mic" | "tab") => void;
   stopSession: () => Promise<void>;
   handleSummarize: () => Promise<void>;
   handleSuggestIcd: () => Promise<void>;
@@ -307,6 +310,21 @@ export function DictationProvider({ children }: { children: ReactNode }) {
     [start],
   );
 
+  const resumeSession = useCallback(
+    (source: "mic" | "tab") => {
+      sourceRef.current = source;
+      setReviewing(false);
+      setMinimized(false);
+      // Seed from whatever transcript is currently shown (live or frozen) so
+      // "บันทึกต่อ" extends it rather than starting over. Frozen segments are
+      // intentionally NOT cleared.
+      const seed = effectiveSegments;
+      lastNormalizedKeyRef.current = "";
+      void start(source, { seed });
+    },
+    [start, effectiveSegments],
+  );
+
   const stopSession = useCallback(async () => {
     await stop();
   }, [stop]);
@@ -466,6 +484,7 @@ export function DictationProvider({ children }: { children: ReactNode }) {
     isIcdLoading,
     isSummarizing,
     startSession,
+    resumeSession,
     stopSession,
     handleSummarize,
     handleSuggestIcd,

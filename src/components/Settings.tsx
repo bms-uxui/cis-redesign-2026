@@ -8,6 +8,7 @@ import {
   IconLanguage,
   IconTrash,
   IconUpload,
+  IconVolume,
 } from "@tabler/icons-react";
 import { Switch, Avatar, Button } from "@heroui/react";
 import AVATAR from "../assets/figma/ellipse-avatar.png";
@@ -15,8 +16,7 @@ import { useToast } from "../contexts/ToastContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useTheme } from "../contexts/ThemeContext";
 import ThemeStudio from "./settings/ThemeStudio";
-
-const PREFS_KEY = "ehp-cis.settings.prefs";
+import { PREFS_KEY, PREFS_EVENT } from "../services/ttsPrefs";
 
 interface Prefs {
   language: string;
@@ -25,6 +25,9 @@ interface Prefs {
   spellcheck: boolean;
   hideTimes: boolean;
   showTimes: boolean;
+  ttsEnabled: boolean;
+  ttsVoice: string;
+  ttsSpeed: number;
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -34,6 +37,9 @@ const DEFAULT_PREFS: Prefs = {
   spellcheck: true,
   hideTimes: true,
   showTimes: true,
+  ttsEnabled: true,
+  ttsVoice: "female",
+  ttsSpeed: 1,
 };
 
 function loadPrefs(): Prefs {
@@ -89,7 +95,10 @@ export default function Settings() {
       draft.truncate !== savedPrefs.truncate ||
       draft.spellcheck !== savedPrefs.spellcheck ||
       draft.hideTimes !== savedPrefs.hideTimes ||
-      draft.showTimes !== savedPrefs.showTimes,
+      draft.showTimes !== savedPrefs.showTimes ||
+      draft.ttsEnabled !== savedPrefs.ttsEnabled ||
+      draft.ttsVoice !== savedPrefs.ttsVoice ||
+      draft.ttsSpeed !== savedPrefs.ttsSpeed,
     [draft, savedPrefs],
   );
   const isDirty = prefsDirty || themeDirty;
@@ -101,6 +110,7 @@ export default function Settings() {
     savePrefs(draft);
     setSavedPrefs(draft);
     commitTheme();
+    window.dispatchEvent(new CustomEvent(PREFS_EVENT));
     toast.success(
       "บันทึกการตั้งค่าเรียบร้อย",
       "การตั้งค่าและธีมของคุณถูกบันทึกแล้ว",
@@ -159,6 +169,8 @@ export default function Settings() {
           <div className="relative flex min-h-0 flex-col">
             {/* Main content — the only scrollable area */}
             <main className="flex-1 overflow-y-auto px-8 pb-8 pt-20">
+            {activeNav === "user" && (
+              <>
             {/* Avatar */}
             <Row
               title="รูปประจำตัว"
@@ -295,6 +307,63 @@ export default function Settings() {
                 </div>
               </div>
             </Row>
+              </>
+            )}
+
+            {activeNav === "system" && (
+              <>
+                {/* Text-to-speech (อ่านออกเสียงข้อความที่เลือก) */}
+                <Row
+                  title={
+                    <span className="inline-flex items-center gap-1.5">
+                      การอ่านออกเสียงข้อความ
+                      <IconVolume className="h-4 w-4 text-[var(--theme-neutral)]/40" stroke={1.75} />
+                    </span>
+                  }
+                  description="เลือกข้อความในหน้าใดก็ได้เพื่อฟังเสียงอ่านภาษาไทย (Text-to-Speech)"
+                  last
+                >
+                  <div className="flex flex-col gap-4">
+                    <ToggleRow
+                      title="เปิดใช้การอ่านออกเสียงข้อความที่เลือก"
+                      description="แสดงปุ่ม “ฟังเสียง” เมื่อมีการไฮไลต์ข้อความ"
+                      value={draft.ttsEnabled}
+                      onChange={(v) => updateDraft("ttsEnabled", v)}
+                    />
+                    <div
+                      className={[
+                        "flex flex-col gap-4 transition",
+                        draft.ttsEnabled ? "" : "pointer-events-none opacity-50",
+                      ].join(" ")}
+                    >
+                      <Field label="เสียงผู้อ่าน">
+                        <Segmented
+                          value={draft.ttsVoice}
+                          onChange={(v) => updateDraft("ttsVoice", v)}
+                          options={[
+                            { value: "female", label: "หญิง" },
+                            { value: "male", label: "ชาย" },
+                            { value: "female_sofia", label: "นุ่มนวล" },
+                          ]}
+                        />
+                      </Field>
+                      <Field label="ความเร็วในการอ่าน">
+                        <Segmented
+                          value={draft.ttsSpeed}
+                          onChange={(v) => updateDraft("ttsSpeed", v)}
+                          options={[
+                            { value: 0.75, label: "0.75×" },
+                            { value: 1, label: "1×" },
+                            { value: 1.25, label: "1.25×" },
+                            { value: 1.5, label: "1.5×" },
+                          ]}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                </Row>
+              </>
+            )}
             </main>
 
             {/* Floating save bar — pill anchored to the top-right of the
@@ -392,6 +461,39 @@ function SelectLike({
       </span>
       <IconChevronDown className="h-4 w-4 text-[var(--theme-neutral)]/50" stroke={1.75} />
     </button>
+  );
+}
+
+function Segmented<T extends string | number>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-1">
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className={[
+              "rounded-md px-3.5 py-1.5 text-[13px] font-medium transition",
+              active
+                ? "bg-[var(--theme-primary)] text-white"
+                : "text-[var(--theme-neutral)]/65 hover:bg-[var(--theme-primary-soft)]",
+            ].join(" ")}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

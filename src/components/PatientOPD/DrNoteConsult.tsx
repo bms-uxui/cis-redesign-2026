@@ -7,19 +7,23 @@ import {
   IconCheck,
   IconNotes,
   IconChevronLeft,
+  IconChevronRight,
   IconCalendarPlus,
   IconPill,
   IconFlask,
 } from "@tabler/icons-react";
 import { useDictationContext } from "../../contexts/DictationContext";
+import { useSidebar } from "../../contexts/SidebarContext";
 import { useToast } from "../../contexts/ToastContext";
 import { useUser } from "../../contexts/UserContext";
 import { chat } from "../../services/ai/llm";
 import { saveProfile } from "../../data/patientStore";
+import PhysicalExamForm from "./PhysicalExamForm";
 import type { Patient } from "../../data/mock/patients";
 import {
   ConversationCard,
   useSymptomTopicsFromLLM,
+  useChiefComplaintFromLLM,
   useHpiNarrativeFromLLM,
   useMedsFromLLM,
   type PatientEhr,
@@ -96,8 +100,10 @@ export default function DrNoteConsult({
 }) {
   const toast = useToast();
   const { user } = useUser();
-  const { isRecording, startSession, stopSession, segments, asrInFlight } = useDictationContext();
+  const { railHidden } = useSidebar();
+  const { isRecording, startSession, resumeSession, stopSession, segments, asrInFlight } = useDictationContext();
   const { topics, inFlight: topicInFlight } = useSymptomTopicsFromLLM(segments, isRecording);
+  const chiefComplaint = useChiefComplaintFromLLM(segments, isRecording);
   const { hpi } = useHpiNarrativeFromLLM(segments, isRecording);
   const { meds: interviewMeds } = useMedsFromLLM(segments, isRecording);
   const ehr = useMemo(() => buildEhr(patient), [patient]);
@@ -106,6 +112,7 @@ export default function DrNoteConsult({
   const [tab, setTab] = useState<CenterTab>("summary");
   const [note, setNote] = useState<NoteDraft | null>(null);
   const [proposed, setProposed] = useState<ProposedAction[] | null>(null);
+  const [peText, setPeText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -176,7 +183,9 @@ export default function DrNoteConsult({
   const handleSaveNote = () => {
     if (!note) return;
     const body =
-      `CC: ${note.cc}\nHPI: ${note.hpi}\nImpression: ${note.impression}\nPlan: ${note.plan}`;
+      `CC: ${note.cc}\nHPI: ${note.hpi}\n` +
+      `PE:\n${peText || "—"}\n` +
+      `Impression: ${note.impression}\nPlan: ${note.plan}`;
     saveProfile(patient.hn, { note: body }, {});
     toast.success("บันทึก Dr. Note แล้ว", `HN ${patient.hn}`);
     close();
@@ -190,56 +199,29 @@ export default function DrNoteConsult({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25, ease: EASE }}
-          className="fixed inset-0 z-[120] flex flex-col bg-[#f4f4f4]"
+          className={`fixed bottom-4 right-4 top-[68px] z-[120] flex flex-col overflow-hidden rounded-[20px] border border-[var(--theme-neutral)]/10 bg-[#f4f4f4] shadow-[0_20px_60px_rgba(0,0,0,0.18)] transition-[left] duration-300 ease-out ${
+            railHidden ? "left-4" : "left-[76px] lg:left-[296px]"
+          }`}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-[var(--theme-neutral)]/10 bg-white px-6 py-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--theme-primary-soft)]">
-                <IconNotes className="h-5 w-5 text-[var(--theme-primary)]" stroke={1.75} />
+          {/* Header — title row + stepper panel (mirrors the nurse intake
+              StepperBar used in เวชระเบียน). */}
+          <div className="flex flex-col gap-3 border-b border-[var(--theme-neutral)]/10 bg-white px-4 pb-3 pt-3 sm:px-6">
+            {/* Title row */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--theme-primary-soft)]">
+                  <IconNotes className="h-5 w-5 text-[var(--theme-primary)]" stroke={1.75} />
+                </div>
+                <div className="flex flex-col">
+                  <h2 className="text-[15px] font-bold text-[var(--theme-neutral)]">
+                    ซักประวัติ · Dr. Note
+                  </h2>
+                  <span className="text-[12px] text-[var(--theme-neutral)]/55">
+                    {patient.prefix}
+                    {patient.firstName} {patient.lastName} · HN {patient.hn}
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-col">
-                <h2 className="text-[15px] font-bold text-[var(--theme-neutral)]">
-                  ซักประวัติ · Dr. Note
-                </h2>
-                <span className="text-[12px] text-[var(--theme-neutral)]/55">
-                  {patient.prefix}
-                  {patient.firstName} {patient.lastName} · HN {patient.hn}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {phase === "consult" && (
-                <button
-                  type="button"
-                  onClick={handleFinish}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--theme-primary)] px-4 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110"
-                >
-                  <IconSparkles className="h-4 w-4" stroke={2} />
-                  สรุป & เสนอแผนการดูแล
-                </button>
-              )}
-              {phase === "result" && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setPhase("consult")}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--theme-neutral)]/15 bg-white px-3.5 py-2.5 text-[13px] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
-                  >
-                    <IconChevronLeft className="h-4 w-4" stroke={2} />
-                    กลับไปแก้ไข
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveNote}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--theme-primary)] px-4 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110"
-                  >
-                    <IconCheck className="h-4 w-4" stroke={2.2} />
-                    บันทึก Dr. Note
-                  </button>
-                </>
-              )}
               <button
                 type="button"
                 onClick={close}
@@ -249,6 +231,47 @@ export default function DrNoteConsult({
                 <IconX className="h-4 w-4" stroke={2} />
               </button>
             </div>
+
+            {/* Stepper panel */}
+            <div className="flex flex-col gap-2 rounded-2xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 flex-1 items-center gap-1">
+                <DrStepPill state={phase === "consult" ? "current" : "done"} label="ซักประวัติ" />
+                <IconChevronRight className="h-4 w-4 shrink-0 text-neutral-300" stroke={2} />
+                <DrStepPill state={phase === "result" ? "current" : "upcoming"} label="สรุป & แผนการดูแล" />
+              </div>
+              <div className="flex items-center gap-2">
+                {phase === "consult" && (
+                  <button
+                    type="button"
+                    onClick={handleFinish}
+                    className="inline-flex items-center gap-2 rounded-full bg-[var(--theme-primary)] px-4 py-2 text-[13px] font-semibold text-white transition hover:brightness-110"
+                  >
+                    <IconSparkles className="h-4 w-4" stroke={2} />
+                    สรุป & เสนอแผนการดูแล
+                  </button>
+                )}
+                {phase === "result" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setPhase("consult")}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[var(--theme-neutral)]/15 bg-white px-3.5 py-2 text-[13px] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
+                    >
+                      <IconChevronLeft className="h-4 w-4" stroke={2} />
+                      กลับไปแก้ไข
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveNote}
+                      className="inline-flex items-center gap-2 rounded-full bg-[var(--theme-primary)] px-4 py-2 text-[13px] font-semibold text-white transition hover:brightness-110"
+                    >
+                      <IconCheck className="h-4 w-4" stroke={2.2} />
+                      บันทึก Dr. Note
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Body */}
@@ -257,13 +280,22 @@ export default function DrNoteConsult({
               <ConversationCard
                 patientName={`${patient.prefix}${patient.firstName} ${patient.lastName}`}
                 topics={topics}
+                chiefComplaint={chiefComplaint}
                 hpi={hpi}
                 ehr={ehr}
                 interviewMeds={interviewMeds}
                 segments={segments}
                 isRecording={isRecording}
-                onToggleRecord={() => (isRecording ? void stopSession() : startSession("mic"))}
-                onTabAudio={() => startSession("tab")}
+                onToggleRecord={() =>
+                  isRecording
+                    ? void stopSession()
+                    : segments.length > 0
+                      ? resumeSession("mic")
+                      : startSession("mic")
+                }
+                onTabAudio={() =>
+                  segments.length > 0 ? resumeSession("tab") : startSession("tab")
+                }
                 onAudioFile={() => fileInputRef.current?.click()}
                 tab={tab}
                 onTabChange={setTab}
@@ -287,6 +319,7 @@ export default function DrNoteConsult({
                   doctorName={user.name}
                   doctorAvatar={user.avatarUrl}
                   onAction={handleProposedAction}
+                  onPeChange={setPeText}
                 />
               </div>
             )}
@@ -299,18 +332,50 @@ export default function DrNoteConsult({
   );
 }
 
+/** Step pill for the Dr. Note stepper — mirrors the nurse intake StepperBar. */
+function DrStepPill({
+  state,
+  label,
+}: {
+  state: "done" | "current" | "upcoming";
+  label: string;
+}) {
+  if (state === "done") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-xl bg-[#3eaf3f] px-3 py-1.5 text-[13px] font-medium text-white sm:px-4 sm:py-2 sm:text-sm">
+        <IconCheck className="h-4 w-4" stroke={2.5} />
+        {label}
+      </span>
+    );
+  }
+  if (state === "current") {
+    return (
+      <span className="inline-flex items-center rounded-xl bg-[var(--theme-primary)]/10 px-3 py-1.5 text-[13px] font-medium text-[var(--theme-primary)] sm:px-4 sm:py-2 sm:text-sm">
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-xl px-3 py-1.5 text-[13px] font-medium text-[var(--theme-neutral)] opacity-50 sm:px-4 sm:py-2 sm:text-sm">
+      {label}
+    </span>
+  );
+}
+
 function ResultView({
   note,
   proposed,
   doctorName,
   doctorAvatar,
   onAction,
+  onPeChange,
 }: {
   note: NoteDraft;
   proposed: ProposedAction[] | null;
   doctorName: string;
   doctorAvatar?: string;
   onAction: (a: ProposedAction) => void;
+  onPeChange: (text: string) => void;
 }) {
   const rows: { label: string; value: string }[] = [
     { label: "อาการสำคัญ (CC)", value: note.cc },
@@ -331,6 +396,8 @@ function ResultView({
           </div>
         ))}
       </section>
+
+      <PhysicalExamForm onChange={onPeChange} />
 
       <ProposedActions
         actions={proposed ?? []}
