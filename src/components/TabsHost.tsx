@@ -12,6 +12,7 @@ import Dashboards from "./Dashboards";
 import DashboardView from "./Dashboards/View";
 import PatientOPD from "./PatientOPD";
 import PatientRegister from "./PatientRegister";
+import ERRegister from "./ERRegister";
 
 /**
  * Renders every open tab simultaneously. Only the active tab is visible —
@@ -50,6 +51,7 @@ export default function TabsHost() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/patient/new" element={<NewPatientByVoice />} />
               <Route path="/patient/new/manual" element={<NewPatientByVoice />} />
+              <Route path="/er/register" element={<ERRegister />} />
               <Route path="/soap" element={<SOAPSummary />} />
             </Routes>
           </div>

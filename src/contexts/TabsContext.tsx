@@ -61,6 +61,7 @@ function titleForPath(path: string): string {
   if (p === "/menus") return "เมนูทั้งหมด";
   if (p === "/settings") return "การตั้งค่า";
   if (p === "/opd/register") return "ทะเบียนผู้ป่วย";
+  if (p === "/er/register") return "ลงทะเบียน ER";
   if (p === "/patient/new" || p === "/patient/new/manual") return "ลงทะเบียนผู้ป่วยใหม่";
   if (p.startsWith("/patient")) return "บันทึกประวัติ";
   return "หน้าใหม่";
