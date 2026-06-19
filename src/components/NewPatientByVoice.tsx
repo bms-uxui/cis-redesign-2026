@@ -1690,6 +1690,68 @@ export function useSymptomTopicsFromLLM(
   return { topics, inFlight };
 }
 
+/** Live chief-complaint extractor — keeps a single salient อาการสำคัญ from the
+ *  growing transcript, honoring explicit clinician corrections in-transcript.
+ *  (Ported from this branch; the doctor OPD flow imports it.) */
+export function useChiefComplaintFromLLM(
+  segments: { text: string }[],
+  isRecording: boolean,
+): string {
+  const [cc, setCc] = useState("");
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+  const ccRef = useRef("");
+  ccRef.current = cc;
+  const lastFiredTranscriptRef = useRef("");
+
+  useEffect(() => {
+    if (!isRecording) return;
+    let cancelled = false;
+    const tick = async () => {
+      const transcript = segmentsRef.current
+        .map((s) => s.text)
+        .join(" ")
+        .trim();
+      if (transcript.length < 6) return;
+      if (transcript === lastFiredTranscriptRef.current) return;
+      lastFiredTranscriptRef.current = transcript;
+      try {
+        const result = await chatJSON<{ cc?: string }>(
+          [
+            {
+              role: "system",
+              content:
+                "You extract the SINGLE current chief complaint (อาการสำคัญ) from a Thai patient interview transcript that GROWS over time. " +
+                "Return the most clinically salient presenting complaint as a SHORT Thai phrase (≤24 characters, e.g. 'ปวดท้อง', 'ไข้สูง', 'ปวดหัว'). " +
+                "CRITICAL — honor explicit corrections by the clinician: if the transcript contains an instruction such as 'แก้ไขอาการสำคัญเป็น X', 'เปลี่ยนอาการสำคัญเป็น X', 'Primary concern เป็น X', or 'ที่จริงอาการสำคัญคือ X', then X is the chief complaint, overriding any earlier mention. The latest correction always wins. " +
+                "Do NOT include the command words ('แก้ไข', 'เปลี่ยน', 'เป็น') in the output — only the complaint itself. " +
+                'Output ONLY JSON: {"cc":"..."}. If nothing clinically relevant yet, return {"cc":""}.',
+            },
+            {
+              role: "user",
+              content: `Transcript so far:\n${transcript}\n\nPrevious chief complaint:\n${ccRef.current || "(none)"}`,
+            },
+          ],
+          { temperature: 0.1, maxTokens: 120, fast: true },
+        );
+        if (cancelled) return;
+        const next = typeof result?.cc === "string" ? result.cc.trim() : "";
+        if (next) setCc(next);
+      } catch {
+        // Silent — next tick retries.
+      }
+    };
+    tick();
+    const interval = window.setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isRecording]);
+
+  return cc;
+}
+
 /** Live HPI narrative — distinct from the OLD CARTS topic list. Polls the
  *  growing transcript and asks the LLM to (re)write a SINGLE cohesive HPI
  *  paragraph, feeding back the previous draft so it refines in place as new
@@ -3048,8 +3110,15 @@ const SOUNDWAVE_BARS = 24;
 const SOUNDWAVE_MIN_PX = 4;
 const SOUNDWAVE_MAX_PX = 44;
 
-function Soundwave() {
-  const { levelRef } = useDictationContext();
+export function Soundwave({
+  levelRef: levelRefProp,
+  barClassName,
+}: {
+  levelRef?: { current: number };
+  barClassName?: string;
+} = {}) {
+  const ctx = useDictationContext();
+  const levelRef = levelRefProp ?? ctx.levelRef;
   const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const historyRef = useRef<number[]>(new Array(SOUNDWAVE_BARS).fill(0));
 
@@ -3089,7 +3158,7 @@ function Soundwave() {
           ref={(el) => {
             barRefs.current[i] = el;
           }}
-          className="block w-1 rounded-full bg-[var(--theme-primary)] transition-[height] duration-100 ease-out"
+          className={`block w-1 rounded-full transition-[height] duration-100 ease-out ${barClassName ?? "bg-[var(--theme-primary)]"}`}
           style={{ height: SOUNDWAVE_MIN_PX }}
         />
       ))}
@@ -3459,7 +3528,7 @@ function renderAllergy(text: string, keyPrefix: string) {
   );
 }
 
-function HpiDiffText({ text }: { text: string }) {
+export function HpiDiffText({ text }: { text: string }) {
   const [ops, setOps] = useState<DiffOp[]>(() =>
     text ? [{ type: "same", text }] : [],
   );
@@ -3993,7 +4062,7 @@ const LISTENING_PHRASES = [
   "กำลังเรียงลำดับเหตุการณ์",
 ];
 
-function ListeningCaption() {
+export function ListeningCaption({ tone }: { tone?: "white" } = {}) {
   const [idx, setIdx] = useState(0);
   useEffect(() => {
     const t = window.setInterval(
@@ -4004,7 +4073,7 @@ function ListeningCaption() {
   }, []);
   const current = LISTENING_PHRASES[idx];
   return (
-    <div className="flex h-5 items-center gap-2 overflow-hidden text-[13px] text-[var(--theme-primary)]">
+    <div className={`flex h-5 items-center gap-2 overflow-hidden text-[13px] ${tone === "white" ? "text-white/85" : "text-[var(--theme-primary)]"}`}>
       <IconLoader2 className="h-3 w-3 shrink-0 animate-spin" stroke={2.2} />
       <AnimatePresence mode="wait" initial={false}>
         <motion.span

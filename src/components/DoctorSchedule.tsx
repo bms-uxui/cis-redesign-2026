@@ -22,9 +22,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useTabs } from "../contexts/TabsContext";
 import {
   Modal,
-  ModalBody,
   ModalContent,
-  ModalFooter,
+  ModalBody,
+    ModalFooter,
   ModalHeader,
   Button,
 } from "@heroui/react";

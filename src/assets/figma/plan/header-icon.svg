@@ -1,0 +1,15 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Frame" clip-path="url(#clip0_1345_5085)">
+<g id="Vector">
+</g>
+<path id="Vector_2" d="M13.334 17.5H26.6673" stroke="var(--stroke-0, white)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_3" d="M13.334 24.1666H23.334" stroke="var(--stroke-0, white)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_4" d="M18.3167 34.51L13.3333 37.5V32.5H10C8.67392 32.5 7.40215 31.9732 6.46447 31.0355C5.52678 30.0978 5 28.826 5 27.5V14.1666C5 12.8405 5.52678 11.5688 6.46447 10.6311C7.40215 9.69341 8.67392 9.16663 10 9.16663H30C31.3261 9.16663 32.5979 9.69341 33.5355 10.6311C34.4732 11.5688 35 12.8405 35 14.1666V24.1666" stroke="var(--stroke-0, white)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_5" d="M25 34.1667L28.3333 37.5L35 30.8334" stroke="var(--stroke-0, white)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<clipPath id="clip0_1345_5085">
+<rect width="40" height="40" fill="white"/>
+</clipPath>
+</defs>
+</svg>

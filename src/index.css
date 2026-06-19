@@ -1,9 +1,55 @@
 @import url("https://fonts.googleapis.com/css?family=Google+Sans:400,500,700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Thai+Looped:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap");
 @import "tailwindcss";
-
 @plugin './hero.ts';
 @source '../node_modules/@heroui/theme/dist/**/*.{js,mjs}';
+
+/* ============================================
+   Sukhumvit Set — self-hosted (covers Thai + Latin).
+   url() is relative to this file so Vite rewrites with the right base.
+   ============================================ */
+@font-face {
+  font-family: "Sukhumvit Set";
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+  src: url("./assets/fonts/SukhumvitSet-Thin.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Sukhumvit Set";
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  src: url("./assets/fonts/SukhumvitSet-Light.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Sukhumvit Set";
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url("./assets/fonts/SukhumvitSet-Text.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Sukhumvit Set";
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url("./assets/fonts/SukhumvitSet-Medium.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Sukhumvit Set";
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src: url("./assets/fonts/SukhumvitSet-SemiBold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Sukhumvit Set";
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url("./assets/fonts/SukhumvitSet-Bold.ttf") format("truetype");
+}
 
 /* ============================================
    Google Sans Font Family
@@ -12,7 +58,7 @@
    public fallback if Google Sans fails to load.
    ============================================ */
 @theme {
-  --font-sans: "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Sukhumvit Set", "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif;
 
   /* Design Tokens - Customize these! */
   --color-primary: #4285F4;
@@ -36,7 +82,7 @@ body {
 }
 
 body {
-  font-family: "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif;
+  font-family: "Sukhumvit Set", "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--theme-base);
@@ -67,7 +113,7 @@ button:disabled,
 /* Force IBM Plex Sans Thai Looped on everything (overrides Radix Theme font) */
 *,
 .radix-themes {
-  font-family: "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif !important;
+  font-family: "Sukhumvit Set", "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif !important;
 }
 
 /* Override Radix Themes `--color-background` (its default `white` or a stray
@@ -167,6 +213,38 @@ button:disabled,
   animation: magic-pulse 3.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   transform-origin: center;
   will-change: transform, opacity;
+}
+
+/* Sweeping highlight for call-to-action buttons (e.g. เริ่มบันทึก). */
+@keyframes btn-shimmer {
+  0% {
+    left: -60%;
+  }
+  60%,
+  100% {
+    left: 130%;
+  }
+}
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 45%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.45),
+    transparent
+  );
+  transform: skewX(-20deg);
+  animation: btn-shimmer 3s ease-in-out infinite;
+  pointer-events: none;
 }
 
 /* Reduced-motion users get nothing fancy. */

@@ -237,17 +237,23 @@ export function useDictation(opts: UseDictationOptions = {}) {
   );
 
   const start = useCallback(
-    async (source: PcmSource = "mic") => {
+    async (source: PcmSource = "mic", opts?: { seed?: DictationSegment[] }) => {
       if (status === "recording" || status === "requesting") return;
       setError(null);
-      committedRef.current = [];
+      // `seed` lets a session CONTINUE from an earlier transcript ("บันทึกต่อ"):
+      // the prior segments are committed up front so new audio appends to them
+      // instead of replacing them.
+      const seed = opts?.seed?.length
+        ? opts.seed.map((s) => ({ speaker: s.speaker, text: s.text }))
+        : [];
+      committedRef.current = seed;
       pendingRef.current = null;
       pendingSeqRef.current = 0;
       lastAppliedSeqRef.current = 0;
       clustererRef.current.reset();
       speakerBySeqRef.current.clear();
       finalQueueRef.current = Promise.resolve();
-      setSegments([]);
+      setSegments(seed);
       setStatus("requesting");
       try {
         const rec = await startPcmRecorder(source, {

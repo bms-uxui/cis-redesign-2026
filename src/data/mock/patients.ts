@@ -78,11 +78,50 @@ export interface AppointmentSummary {
   type: string;
 }
 
+/**
+ * History of present illness captured during nurse/doctor interview, in the
+ * OPQRST framework: Onset, Provocation/Palliation, Quality, Region/Radiation,
+ * Severity, Timing (+ associated symptoms). `painCharacterId` links Quality to
+ * a token in `data/painCharacters.ts` so the body-model marker is deterministic.
+ */
+export interface OPQRST {
+  /** O — เริ่มเป็นเมื่อไหร่ / เกิดขึ้นอย่างไร */
+  onset: string;
+  /** P — อะไรทำให้ดีขึ้น/แย่ลง */
+  provocation: string;
+  /** Q — ลักษณะอาการ */
+  quality: string;
+  /** Q → token id ใน painCharacters.ts (เมื่อเป็นอาการปวด) */
+  painCharacterId?: string;
+  /** R — ตำแหน่ง */
+  region: string;
+  /** R — ร้าวไปที่ใด */
+  radiation?: string;
+  /** S — ความรุนแรง 0–10 */
+  severity: number;
+  /** T — ระยะเวลา / รูปแบบการเป็น */
+  timing: string;
+  /** อาการร่วม */
+  associated?: string;
+}
+
+/** A clinical photo taken at a visit (e.g. nurse photographs a wound), pinned
+ *  to a body region so it surfaces as a marker on the body model. */
+export interface VisitAttachment {
+  /** BodyRegionId the photo is pinned to. */
+  region: string;
+  label: string;
+  url: string;
+  note?: string;
+}
+
 export interface VisitSummary {
   date: string;
   clinic: string;
   chiefComplaint: string;
   diagnosis: string;
+  opqrst?: OPQRST;
+  attachments?: VisitAttachment[];
 }
 
 export interface Patient {
@@ -183,6 +222,23 @@ export const PATIENTS: Patient[] = [
     ],
     nextAppointment: { date: isoDaysAhead(22), clinic: "DM Clinic", doctor: "นพ.ราอูล มันเมาะ", type: "Follow-up" },
     recentVisits: [
+      {
+        date: isoDaysAgo(0),
+        clinic: "OPD อายุรกรรม",
+        chiefComplaint: "ปวดแสบลิ้นปี่หลังอาหาร 2 วัน",
+        diagnosis: "สงสัยกระเพาะอาหารอักเสบ (Gastritis / GERD)",
+        opqrst: {
+          onset: "เริ่มปวดเมื่อ 2 วันก่อน หลังรับประทานอาหารรสจัดและกาแฟตอนท้องว่าง",
+          provocation: "ปวดมากขึ้นหลังมื้ออาหารและเวลาท้องว่าง บรรเทาลงเล็กน้อยเมื่อกินยาลดกรด",
+          quality: "ปวดแสบร้อนบริเวณลิ้นปี่",
+          painCharacterId: "burning",
+          region: "ลิ้นปี่ (epigastrium)",
+          radiation: "ไม่มีปวดร้าวไปหลังหรือหน้าอก",
+          severity: 7,
+          timing: "เป็น ๆ หาย ๆ สัมพันธ์กับมื้ออาหาร แต่ละครั้งนาน 15–30 นาที",
+          associated: "คลื่นไส้เล็กน้อย แสบยอดอก ไม่อาเจียน ไม่มีถ่ายดำ",
+        },
+      },
       { date: isoDaysAgo(8), clinic: "DM Clinic", chiefComplaint: "ติดตามผล HbA1c", diagnosis: "DM type 2 uncontrolled (HbA1c 8.4%)" },
       { date: isoDaysAgo(38), clinic: "อายุรกรรม", chiefComplaint: "ปวดตึงท้ายทอยตอนเช้า เวียนศีรษะ", diagnosis: "ความดันโลหิตสูงควบคุมไม่ดี (BP 158/96)" },
       { date: isoDaysAgo(98), clinic: "DM Clinic", chiefComplaint: "ติดตามผล + เบิกยาเดิม", diagnosis: "DM type 2, HT, ไขมันในเลือดสูง" },
@@ -222,7 +278,26 @@ export const PATIENTS: Patient[] = [
       { test: "Creatinine", value: 0.9, unit: "mg/dL", referenceRange: "0.7-1.2", abnormal: false, takenAt: isoDaysAgo(3) },
     ],
     nextAppointment: { date: isoDaysAhead(87), clinic: "DM Clinic", doctor: "พญ.วราภรณ์ ดีพร้อม", type: "Follow-up" },
-    recentVisits: [{ date: isoDaysAgo(3), clinic: "DM Clinic", chiefComplaint: "ติดตามผล", diagnosis: "DM type 2" }],
+    recentVisits: [
+      {
+        date: isoDaysAgo(0),
+        clinic: "OPD ทั่วไป",
+        chiefComplaint: "ปวดศีรษะตุบ ๆ ขมับสองข้าง 1 วัน",
+        diagnosis: "ปวดศีรษะจากความเครียด (Tension/Migraine)",
+        opqrst: {
+          onset: "เริ่มปวดเมื่อเช้านี้ หลังนอนดึกและทำงานหน้าจอนาน",
+          provocation: "ปวดมากขึ้นเมื่ออยู่ในที่แสงจ้าและมีเสียงดัง ดีขึ้นเมื่อพักในที่มืดและกินพาราเซตามอล",
+          quality: "ปวดตุบ ๆ เป็นจังหวะ",
+          painCharacterId: "throbbing",
+          region: "ขมับสองข้างและท้ายทอย",
+          radiation: "ร้าวลงต้นคอเล็กน้อย",
+          severity: 5,
+          timing: "ปวดต่อเนื่องเป็นชั่วโมง เป็น ๆ หนักขึ้นตอนบ่าย",
+          associated: "ตาล้า คลื่นไส้เล็กน้อย ไม่มีตาพร่าหรือแขนขาอ่อนแรง",
+        },
+      },
+      { date: isoDaysAgo(3), clinic: "DM Clinic", chiefComplaint: "ติดตามผล", diagnosis: "DM type 2" },
+    ],
     riskFlags: [],
   },
   {
@@ -369,7 +444,12 @@ export const PATIENTS: Patient[] = [
       { drug: "Alendronate", dose: "70 mg", frequency: "สัปดาห์ละครั้ง", startedAt: "2021-08-25" },
       { drug: "Calcium + Vit D", dose: "1 เม็ด", frequency: "วันละ 2 ครั้ง", startedAt: "2021-08-25" },
     ],
-    labs: [],
+    labs: [
+      { test: "Creatinine", value: 1.0, unit: "mg/dL", referenceRange: "0.7-1.2", abnormal: false, takenAt: isoDaysAgo(20) },
+      { test: "LDL", value: 138, unit: "mg/dL", referenceRange: "<130", abnormal: true, takenAt: isoDaysAgo(20) },
+      { test: "Vitamin D", value: 22, unit: "ng/mL", referenceRange: ">30", abnormal: true, takenAt: isoDaysAgo(20) },
+      { test: "Calcium", value: 9.2, unit: "mg/dL", referenceRange: "8.5-10.5", abnormal: false, takenAt: isoDaysAgo(20) },
+    ],
     nextAppointment: { date: isoDaysAhead(45), clinic: "HT Clinic", doctor: "พญ.วราภรณ์ ดีพร้อม", type: "Follow-up" },
     recentVisits: [{ date: isoDaysAgo(20), clinic: "HT Clinic", chiefComplaint: "ติดตามผล", diagnosis: "Essential HT" }],
     riskFlags: ["fall-risk"],
@@ -447,9 +527,29 @@ export const PATIENTS: Patient[] = [
       { drug: "Tiotropium (Spiriva)", dose: "18 mcg", frequency: "พ่นวันละครั้ง", startedAt: "2016-09-20" },
       { drug: "Salbutamol", dose: "100 mcg/dose", frequency: "พ่น prn", startedAt: "2016-09-20" },
     ],
-    labs: [],
+    labs: [
+      { test: "Hb", value: 17.4, unit: "g/dL", referenceRange: "13-17", abnormal: true, takenAt: isoDaysAgo(30) },
+      { test: "WBC", value: 9.2, unit: "10³/µL", referenceRange: "4-10", abnormal: false, takenAt: isoDaysAgo(30) },
+      { test: "Creatinine", value: 1.1, unit: "mg/dL", referenceRange: "0.7-1.2", abnormal: false, takenAt: isoDaysAgo(30) },
+    ],
     nextAppointment: { date: isoDaysAhead(30), clinic: "Pulm Clinic", doctor: "นพ.สถาพร พลคง", type: "Follow-up" },
-    recentVisits: [{ date: isoDaysAgo(11), clinic: "Pulm Clinic", chiefComplaint: "หอบเหนื่อยขึ้น", diagnosis: "COPD exacerbation" }],
+    recentVisits: [
+      {
+        date: isoDaysAgo(11),
+        clinic: "Pulm Clinic",
+        chiefComplaint: "หอบเหนื่อยขึ้น ไอมีเสมหะเขียว 3 วัน",
+        diagnosis: "COPD exacerbation",
+        opqrst: {
+          onset: "เหนื่อยมากขึ้นแบบค่อยเป็นค่อยไปใน 3 วัน หลังเป็นหวัด",
+          provocation: "เหนื่อยมากขึ้นเมื่อเดินหรือออกแรง ดีขึ้นเมื่อนั่งพักและพ่นยา Salbutamol",
+          quality: "แน่นหน้าอก หายใจไม่อิ่ม มีเสียงหวีด",
+          region: "หน้าอกทั้งสองข้าง",
+          severity: 6,
+          timing: "เป็นตลอดทั้งวัน แย่ลงตอนกลางคืนและเช้ามืด",
+          associated: "ไอมีเสมหะเขียว ไม่มีไข้สูง ไม่มีเจ็บหน้าอกแบบบีบรัด",
+        },
+      },
+    ],
     riskFlags: ["smoker"],
   },
 
@@ -477,9 +577,28 @@ export const PATIENTS: Patient[] = [
     diagnoses: [{ code: "J45.9", name: "โรคหืดในเด็ก (ควบคุมได้)", onsetDate: "2024-08-20", severity: "mild" }],
     allergies: [{ substance: "ฝุ่นไรฝุ่น", reaction: "หายใจมีเสียงหวีด" }],
     medications: [{ drug: "Salbutamol", dose: "100 mcg/dose", frequency: "พ่น prn", startedAt: "2024-08-20" }],
-    labs: [],
+    labs: [
+      { test: "Eosinophil", value: 6.5, unit: "%", referenceRange: "1-4", abnormal: true, takenAt: isoDaysAgo(20) },
+      { test: "WBC", value: 8.4, unit: "10³/µL", referenceRange: "5-15", abnormal: false, takenAt: isoDaysAgo(20) },
+    ],
     nextAppointment: { date: isoDaysAhead(60), clinic: "Pediatrics", doctor: "พญ.อมรรัตน์ ใจงาม", type: "Annual check-up" },
-    recentVisits: [{ date: isoDaysAgo(28), clinic: "Pediatrics", chiefComplaint: "หายใจหวีด", diagnosis: "Asthma mild" }],
+    recentVisits: [
+      {
+        date: isoDaysAgo(28),
+        clinic: "Pediatrics",
+        chiefComplaint: "หายใจมีเสียงหวีด ไอกลางคืน 2 วัน",
+        diagnosis: "Asthma mild",
+        opqrst: {
+          onset: "เริ่มมีเสียงหวีดและไอกลางคืนเมื่อ 2 วันก่อน หลังเล่นกับแมวที่บ้าน",
+          provocation: "เป็นมากขึ้นเมื่อโดนฝุ่น/ขนสัตว์และตอนกลางคืน ดีขึ้นเมื่อพ่นยา Salbutamol",
+          quality: "หายใจมีเสียงหวีด แน่นหน้าอกเล็กน้อย",
+          region: "หน้าอก",
+          severity: 4,
+          timing: "เป็น ๆ หาย ๆ ส่วนใหญ่ตอนกลางคืนและเช้ามืด",
+          associated: "ไอแห้ง ไม่มีไข้ กินได้เล่นได้ปกติ",
+        },
+      },
+    ],
     riskFlags: [],
   },
   {
@@ -505,7 +624,10 @@ export const PATIENTS: Patient[] = [
     diagnoses: [],
     allergies: [],
     medications: [],
-    labs: [],
+    labs: [
+      { test: "Hb", value: 12.4, unit: "g/dL", referenceRange: "11.5-14.5", abnormal: false, takenAt: isoDaysAgo(180) },
+      { test: "Hct", value: 37, unit: "%", referenceRange: "34-44", abnormal: false, takenAt: isoDaysAgo(180) },
+    ],
     recentVisits: [{ date: isoDaysAgo(180), clinic: "Pediatrics", chiefComplaint: "ฉีดวัคซีน", diagnosis: "Well-child visit" }],
     riskFlags: [],
   },
@@ -753,7 +875,12 @@ export const PATIENTS: Patient[] = [
       { drug: "Losartan", dose: "100 mg", frequency: "วันละครั้ง เช้า", startedAt: "2020-11-04" },
       { drug: "Sertraline", dose: "50 mg", frequency: "วันละครั้ง เช้า", startedAt: "2022-06-20" },
     ],
-    labs: [],
+    labs: [
+      { test: "Creatinine", value: 1.4, unit: "mg/dL", referenceRange: "0.7-1.2", abnormal: true, takenAt: isoDaysAgo(15) },
+      { test: "eGFR", value: 56, unit: "mL/min/1.73m²", referenceRange: ">60", abnormal: true, takenAt: isoDaysAgo(15) },
+      { test: "FBS", value: 118, unit: "mg/dL", referenceRange: "70-100", abnormal: true, takenAt: isoDaysAgo(15) },
+      { test: "LDL", value: 152, unit: "mg/dL", referenceRange: "<130", abnormal: true, takenAt: isoDaysAgo(15) },
+    ],
     recentVisits: [{ date: isoDaysAgo(70), clinic: "HT Clinic", chiefComplaint: "ติดตามผล", diagnosis: "Resistant HT" }],
     riskFlags: ["ht-uncontrolled", "missed-followup", "smoker"],
   },
@@ -892,7 +1019,11 @@ export const PATIENTS: Patient[] = [
       { drug: "Salbutamol", dose: "100 mcg/dose", frequency: "พ่น prn", startedAt: "2018-04-10" },
       { drug: "Amlodipine", dose: "5 mg", frequency: "วันละครั้ง", startedAt: "2019-11-15" },
     ],
-    labs: [],
+    labs: [
+      { test: "Hb", value: 17.1, unit: "g/dL", referenceRange: "13-17", abnormal: true, takenAt: isoDaysAgo(22) },
+      { test: "WBC", value: 8.6, unit: "10³/µL", referenceRange: "4-10", abnormal: false, takenAt: isoDaysAgo(22) },
+      { test: "Creatinine", value: 1.2, unit: "mg/dL", referenceRange: "0.7-1.2", abnormal: false, takenAt: isoDaysAgo(22) },
+    ],
     nextAppointment: { date: isoDaysAhead(40), clinic: "Pulm Clinic", doctor: "นพ.สถาพร พลคง", type: "Follow-up" },
     recentVisits: [{ date: isoDaysAgo(22), clinic: "Pulm Clinic", chiefComplaint: "ติดตามผล", diagnosis: "COPD stable" }],
     riskFlags: ["smoker"],
@@ -920,7 +1051,11 @@ export const PATIENTS: Patient[] = [
     diagnoses: [{ code: "Z34.0", name: "ฝากครรภ์ครั้งที่สอง (GA 12w)", onsetDate: "2025-02-20", severity: "mild" }],
     allergies: [],
     medications: [{ drug: "Folic acid + Iron", dose: "1 เม็ด", frequency: "วันละครั้ง", startedAt: "2025-02-25" }],
-    labs: [],
+    labs: [
+      { test: "Hb", value: 10.8, unit: "g/dL", referenceRange: "11-14", abnormal: true, takenAt: isoDaysAgo(10) },
+      { test: "Hct", value: 33, unit: "%", referenceRange: "33-43", abnormal: false, takenAt: isoDaysAgo(10) },
+      { test: "FBS", value: 84, unit: "mg/dL", referenceRange: "70-95", abnormal: false, takenAt: isoDaysAgo(10) },
+    ],
     nextAppointment: { date: isoDaysAhead(28), clinic: "ANC", doctor: "พญ.อมรรัตน์ ใจงาม", type: "Antenatal" },
     recentVisits: [{ date: isoDaysAgo(10), clinic: "ANC", chiefComplaint: "ฝากครรภ์", diagnosis: "Normal pregnancy" }],
     riskFlags: [],
@@ -953,7 +1088,12 @@ export const PATIENTS: Patient[] = [
     medications: [
       { drug: "Losartan", dose: "50 mg", frequency: "วันละครั้ง เช้า", startedAt: "2021-08-25" },
     ],
-    labs: [],
+    labs: [
+      { test: "FBS", value: 112, unit: "mg/dL", referenceRange: "70-100", abnormal: true, takenAt: isoDaysAgo(18) },
+      { test: "HbA1c", value: 6.1, unit: "%", referenceRange: "<6.5", abnormal: false, takenAt: isoDaysAgo(18) },
+      { test: "LDL", value: 165, unit: "mg/dL", referenceRange: "<130", abnormal: true, takenAt: isoDaysAgo(18) },
+      { test: "Triglyceride", value: 220, unit: "mg/dL", referenceRange: "<150", abnormal: true, takenAt: isoDaysAgo(18) },
+    ],
     recentVisits: [{ date: isoDaysAgo(150), clinic: "HT Clinic", chiefComplaint: "ติดตามผล", diagnosis: "HT, obesity" }],
     riskFlags: ["missed-followup", "obesity"],
   },
@@ -988,7 +1128,12 @@ export const PATIENTS: Patient[] = [
       { drug: "Alendronate", dose: "70 mg", frequency: "สัปดาห์ละครั้ง", startedAt: "2019-04-22" },
       { drug: "Donepezil", dose: "5 mg", frequency: "ก่อนนอน", startedAt: "2024-02-15" },
     ],
-    labs: [],
+    labs: [
+      { test: "Creatinine", value: 1.3, unit: "mg/dL", referenceRange: "0.7-1.2", abnormal: true, takenAt: isoDaysAgo(33) },
+      { test: "eGFR", value: 48, unit: "mL/min/1.73m²", referenceRange: ">60", abnormal: true, takenAt: isoDaysAgo(33) },
+      { test: "Vitamin D", value: 24, unit: "ng/mL", referenceRange: ">30", abnormal: true, takenAt: isoDaysAgo(33) },
+      { test: "TSH", value: 3.2, unit: "mIU/L", referenceRange: "0.4-4.0", abnormal: false, takenAt: isoDaysAgo(33) },
+    ],
     nextAppointment: { date: isoDaysAhead(50), clinic: "Geriatric Clinic", doctor: "นพ.ราอูล มันเมาะ", type: "Follow-up" },
     recentVisits: [{ date: isoDaysAgo(33), clinic: "Geriatric Clinic", chiefComplaint: "ติดตามอาการสมองเสื่อม", diagnosis: "MCI, HT, osteoporosis" }],
     riskFlags: ["fall-risk", "polypharmacy"],
@@ -1022,6 +1167,281 @@ export const PATIENTS: Patient[] = [
       { test: "LDL", value: 102, unit: "mg/dL", referenceRange: "<130", abnormal: false, takenAt: isoDaysAgo(1) },
     ],
     recentVisits: [{ date: isoDaysAgo(1), clinic: "Annual Checkup", chiefComplaint: "ตรวจสุขภาพประจำปี", diagnosis: "Well visit" }],
+    riskFlags: [],
+  },
+
+  // ── Ordinary acute OPD cases (common complaints) ───────────────────────
+  {
+    id: "p026",
+    hn: "00020340",
+    citizenId: "1-1011-12131-41-5",
+    prefix: "นางสาว",
+    firstName: "สุภาพร",
+    lastName: "แสงทอง",
+    birthDate: "1997-04-10",
+    age: 28,
+    gender: "F",
+    bloodType: "A",
+    rh: "+",
+    phone: "086-321-7788",
+    address: { district: "บางกะปิ", province: "กรุงเทพมหานคร" },
+    insurance: "SSO",
+    status: "active",
+    registeredDate: "2023-03-02",
+    lastVisit: isoDaysAgo(0),
+    primaryDoctor: "พญ.วราภรณ์ ดีพร้อม",
+    vitals: { height: 162, weight: 54, bmi: 20.6, systolic: 116, diastolic: 72, heartRate: 98, temperature: 38.6, measuredAt: isoDaysAgo(0) },
+    diagnoses: [],
+    allergies: [],
+    medications: [],
+    labs: [
+      { test: "WBC", value: 6.8, unit: "10³/µL", referenceRange: "4-10", abnormal: false, takenAt: isoDaysAgo(0) },
+      { test: "Hb", value: 12.6, unit: "g/dL", referenceRange: "12-16", abnormal: false, takenAt: isoDaysAgo(0) },
+      { test: "CRP", value: 8, unit: "mg/L", referenceRange: "<5", abnormal: true, takenAt: isoDaysAgo(0) },
+    ],
+    recentVisits: [
+      {
+        date: isoDaysAgo(0),
+        clinic: "OPD ทั่วไป",
+        chiefComplaint: "ปวดหัว ตัวร้อน มีไข้ 2 วัน",
+        diagnosis: "ไข้หวัด/ติดเชื้อไวรัสทางเดินหายใจส่วนบน (URI)",
+        opqrst: {
+          onset: "เริ่มมีไข้และปวดศีรษะเมื่อ 2 วันก่อน หลังตากฝน",
+          provocation: "ปวดมากขึ้นเวลามีไข้สูงและก้มศีรษะ ดีขึ้นเมื่อกินยาลดไข้พาราเซตามอล",
+          quality: "ปวดตุบ ๆ ทั่วศีรษะ",
+          painCharacterId: "throbbing",
+          region: "ศีรษะ (ขมับและหน้าผาก)",
+          severity: 6,
+          timing: "เป็นต่อเนื่อง แย่ลงช่วงไข้ขึ้น",
+          associated: "ไข้สูง 38–39°C ครั่นเนื้อครั่นตัว เจ็บคอเล็กน้อย น้ำมูกใส",
+        },
+      },
+    ],
+    riskFlags: [],
+  },
+  {
+    id: "p027",
+    hn: "00020370",
+    citizenId: "1-2021-22232-42-6",
+    prefix: "นาย",
+    firstName: "ธนกร",
+    lastName: "พูนสุข",
+    birthDate: "2003-09-18",
+    age: 22,
+    gender: "M",
+    bloodType: "O",
+    rh: "+",
+    phone: "090-552-1144",
+    address: { district: "คลองเตย", province: "กรุงเทพมหานคร" },
+    insurance: "UC",
+    status: "active",
+    registeredDate: "2024-06-20",
+    lastVisit: isoDaysAgo(0),
+    primaryDoctor: "นพ.สถาพร พลคง",
+    vitals: { height: 172, weight: 65, bmi: 22.0, systolic: 120, diastolic: 76, heartRate: 88, temperature: 38.0, measuredAt: isoDaysAgo(0) },
+    diagnoses: [],
+    allergies: [],
+    medications: [],
+    labs: [
+      { test: "WBC", value: 12.4, unit: "10³/µL", referenceRange: "4-10", abnormal: true, takenAt: isoDaysAgo(0) },
+      { test: "Neutrophil", value: 78, unit: "%", referenceRange: "40-75", abnormal: true, takenAt: isoDaysAgo(0) },
+      { test: "CRP", value: 24, unit: "mg/L", referenceRange: "<5", abnormal: true, takenAt: isoDaysAgo(0) },
+    ],
+    recentVisits: [
+      {
+        date: isoDaysAgo(0),
+        clinic: "OPD ทั่วไป",
+        chiefComplaint: "เจ็บคอ กลืนลำบาก มีไข้ต่ำ ๆ 3 วัน",
+        diagnosis: "คออักเสบเฉียบพลัน (Acute pharyngitis)",
+        opqrst: {
+          onset: "เริ่มเจ็บคอเมื่อ 3 วันก่อน ค่อย ๆ มากขึ้น",
+          provocation: "เจ็บมากขึ้นเวลากลืนน้ำลายและอาหาร ดีขึ้นเล็กน้อยเมื่อจิบน้ำอุ่น",
+          quality: "เจ็บแสบในลำคอ",
+          painCharacterId: "burning",
+          region: "คอ (ลำคอส่วนต้น)",
+          severity: 5,
+          timing: "เป็นตลอดทั้งวัน แย่ลงตอนเช้า",
+          associated: "ไข้ต่ำ ๆ ต่อมน้ำเหลืองที่คอโตเล็กน้อย ไอแห้ง",
+        },
+      },
+    ],
+    riskFlags: [],
+  },
+  {
+    id: "p028",
+    hn: "00020400",
+    citizenId: "1-3031-32333-43-7",
+    prefix: "นาง",
+    firstName: "กนกวรรณ",
+    lastName: "ทองใบ",
+    birthDate: "1990-12-05",
+    age: 35,
+    gender: "F",
+    bloodType: "B",
+    rh: "+",
+    phone: "081-447-9900",
+    address: { district: "ลาดพร้าว", province: "กรุงเทพมหานคร" },
+    insurance: "SSO",
+    status: "active",
+    registeredDate: "2021-11-11",
+    lastVisit: isoDaysAgo(0),
+    primaryDoctor: "พญ.วราภรณ์ ดีพร้อม",
+    vitals: { height: 158, weight: 56, bmi: 22.4, systolic: 110, diastolic: 70, heartRate: 92, temperature: 37.8, measuredAt: isoDaysAgo(0) },
+    diagnoses: [],
+    allergies: [],
+    medications: [],
+    labs: [
+      { test: "Na", value: 133, unit: "mmol/L", referenceRange: "135-145", abnormal: true, takenAt: isoDaysAgo(0) },
+      { test: "K", value: 3.2, unit: "mmol/L", referenceRange: "3.5-5.0", abnormal: true, takenAt: isoDaysAgo(0) },
+      { test: "WBC", value: 13.1, unit: "10³/µL", referenceRange: "4-10", abnormal: true, takenAt: isoDaysAgo(0) },
+      { test: "Creatinine", value: 1.1, unit: "mg/dL", referenceRange: "0.7-1.2", abnormal: false, takenAt: isoDaysAgo(0) },
+    ],
+    recentVisits: [
+      {
+        date: isoDaysAgo(0),
+        clinic: "OPD ทั่วไป",
+        chiefComplaint: "ปวดบิดท้องน้อย ถ่ายเหลว 4–5 ครั้ง",
+        diagnosis: "ลำไส้อักเสบเฉียบพลัน (Acute gastroenteritis)",
+        opqrst: {
+          onset: "เริ่มปวดท้องและถ่ายเหลวตั้งแต่เมื่อคืน หลังกินอาหารนอกบ้าน",
+          provocation: "ปวดเป็นพัก ๆ ก่อนถ่าย ดีขึ้นชั่วคราวหลังถ่าย",
+          quality: "ปวดบิดเป็นพัก ๆ",
+          painCharacterId: "colicky",
+          region: "ท้องน้อย (hypogastric)",
+          severity: 6,
+          timing: "ปวดเป็นระลอก ทุก 10–20 นาที",
+          associated: "ถ่ายเหลวเป็นน้ำ คลื่นไส้ ไข้ต่ำ ๆ ไม่มีมูกเลือด",
+        },
+      },
+    ],
+    riskFlags: [],
+  },
+  {
+    id: "p029",
+    hn: "00020430",
+    citizenId: "1-4041-42434-44-8",
+    prefix: "นาย",
+    firstName: "วิทยา",
+    lastName: "มั่นคง",
+    birthDate: "1980-02-28",
+    age: 45,
+    gender: "M",
+    bloodType: "A",
+    rh: "+",
+    phone: "082-665-3322",
+    address: { district: "ห้วยขวาง", province: "กรุงเทพมหานคร" },
+    insurance: "CSMBS",
+    status: "active",
+    registeredDate: "2019-08-19",
+    lastVisit: isoDaysAgo(0),
+    primaryDoctor: "นพ.ราอูล มันเมาะ",
+    vitals: { height: 170, weight: 74, bmi: 25.6, systolic: 126, diastolic: 80, heartRate: 78, temperature: 36.6, measuredAt: isoDaysAgo(0) },
+    diagnoses: [],
+    allergies: [],
+    medications: [],
+    labs: [
+      { test: "FBS", value: 98, unit: "mg/dL", referenceRange: "70-100", abnormal: false, takenAt: isoDaysAgo(5) },
+      { test: "LDL", value: 142, unit: "mg/dL", referenceRange: "<130", abnormal: true, takenAt: isoDaysAgo(5) },
+      { test: "Uric acid", value: 7.8, unit: "mg/dL", referenceRange: "3.5-7.2", abnormal: true, takenAt: isoDaysAgo(5) },
+    ],
+    recentVisits: [
+      {
+        date: isoDaysAgo(0),
+        clinic: "OPD ทั่วไป",
+        chiefComplaint: "ปวดเมื่อยต้นคอและไหล่ขวา 1 สัปดาห์",
+        diagnosis: "กล้ามเนื้ออักเสบจากท่าทาง (Office syndrome / Myofascial pain)",
+        opqrst: {
+          onset: "ปวดสะสมมา 1 สัปดาห์ หลังนั่งทำงานหน้าจอนาน",
+          provocation: "ปวดมากขึ้นเมื่อนั่งนานและสะบัดคอ ดีขึ้นเมื่อยืดเหยียดและนวด",
+          quality: "ปวดตื้อ ๆ หน่วง ๆ ตึงกล้ามเนื้อ",
+          painCharacterId: "dull",
+          region: "ต้นคอและไหล่ขวา",
+          radiation: "ร้าวลงสะบักขวา",
+          severity: 4,
+          timing: "เป็นเรื้อรังตลอดวัน แย่ลงช่วงบ่าย",
+          associated: "ปวดศีรษะตึง ๆ ท้ายทอยเป็นบางครั้ง ไม่มีชาหรืออ่อนแรง",
+        },
+      },
+    ],
+    riskFlags: [],
+  },
+  {
+    id: "p030",
+    hn: "00020460",
+    citizenId: "1-5051-52535-45-9",
+    prefix: "นาง",
+    firstName: "อารีย์",
+    lastName: "สุขสวัสดิ์",
+    birthDate: "1975-06-12",
+    age: 50,
+    gender: "F",
+    bloodType: "O",
+    rh: "+",
+    phone: "081-778-2200",
+    address: { district: "บางเขน", province: "กรุงเทพมหานคร" },
+    insurance: "UC",
+    status: "active",
+    registeredDate: "2020-05-04",
+    lastVisit: isoDaysAgo(0),
+    primaryDoctor: "นพ.ราอูล มันเมาะ",
+    vitals: { height: 160, weight: 60, bmi: 23.4, systolic: 122, diastolic: 76, heartRate: 80, temperature: 36.7, measuredAt: isoDaysAgo(0) },
+    diagnoses: [],
+    allergies: [],
+    medications: [],
+    labs: [
+      { test: "WBC", value: 7.4, unit: "10³/µL", referenceRange: "4-10", abnormal: false, takenAt: isoDaysAgo(7) },
+      { test: "CRP", value: 3, unit: "mg/L", referenceRange: "<5", abnormal: false, takenAt: isoDaysAgo(7) },
+      { test: "Hb", value: 11.6, unit: "g/dL", referenceRange: "12-16", abnormal: true, takenAt: isoDaysAgo(7) },
+    ],
+    recentVisits: [
+      {
+        date: isoDaysAgo(0),
+        clinic: "OPD ศัลยกรรม",
+        chiefComplaint: "ติดตามแผลถลอกที่แขนขวา ทำแผลครั้งที่ 2",
+        diagnosis: "แผลถลอกแขนขวากำลังหายดี (healing wound)",
+        opqrst: {
+          onset: "แผลเกิดจากหกล้มเมื่อ 1 สัปดาห์ก่อน วันนี้มาทำแผลตามนัด",
+          provocation: "เจ็บเล็กน้อยเวลาทำแผลและสัมผัส ดีขึ้นเมื่อปิดแผล",
+          quality: "แผลถลอก เริ่มแห้งเป็นสะเก็ด",
+          region: "แขนขวา (ปลายแขน)",
+          severity: 2,
+          timing: "ปวดน้อยลงเรื่อย ๆ ทุกวัน",
+          associated: "ไม่มีหนอง ไม่มีไข้ ขอบแผลไม่บวมแดง",
+        },
+        attachments: [
+          {
+            region: "r-arm",
+            label: "แผลถลอกแขนขวา (วันนี้)",
+            url: "https://picsum.photos/seed/wound-r-arm-now/640/480",
+            note: "แผลแห้ง เริ่มมีสะเก็ด ขอบแผลปกติ ไม่มีหนอง",
+          },
+        ],
+      },
+      {
+        date: isoDaysAgo(7),
+        clinic: "OPD ศัลยกรรม",
+        chiefComplaint: "แผลถลอกที่แขนขวาจากหกล้ม",
+        diagnosis: "แผลถลอก (abrasion) แขนขวา",
+        opqrst: {
+          onset: "หกล้มขณะเดิน แขนขวาครูดพื้น เมื่อ 1 สัปดาห์ก่อน",
+          provocation: "เจ็บมากขึ้นเวลาขยับและโดนน้ำ",
+          quality: "แผลถลอก แสบ",
+          painCharacterId: "burning",
+          region: "แขนขวา (ปลายแขน)",
+          severity: 5,
+          timing: "เจ็บตลอด แย่ลงเวลาสัมผัส",
+          associated: "มีเลือดซึมเล็กน้อย ไม่มีกระดูกผิดรูป",
+        },
+        attachments: [
+          {
+            region: "r-arm",
+            label: "แผลถลอกแขนขวา (แรกรับ)",
+            url: "https://picsum.photos/seed/wound-r-arm-d1/640/480",
+            note: "แผลถลอกขนาด 3×4 ซม. มีเลือดซึม ทำความสะอาดและปิดแผล",
+          },
+        ],
+      },
+    ],
     riskFlags: [],
   },
 ];

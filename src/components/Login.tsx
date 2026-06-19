@@ -279,7 +279,7 @@ export default function Login() {
             >
               เข้าสู่ระบบ
             </Button>
-            {/* Divider */}
+            {/* Separator */}
             <div className="mt-5 flex items-center gap-3">
               <span className="h-px flex-1 bg-black/10" />
               <span className="text-[13px] text-black/40">หรือ</span>

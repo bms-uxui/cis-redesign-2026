@@ -80,10 +80,7 @@ function push(
     description,
     color: TONE_TO_COLOR[tone],
     timeout: duration,
-    classNames: {
-      title: cls.title,
-      icon: cls.icon,
-    },
+    classNames: { title: cls.title, icon: cls.icon },
   });
 }
 
