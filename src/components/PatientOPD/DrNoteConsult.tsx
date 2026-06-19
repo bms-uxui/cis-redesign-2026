@@ -1,11 +1,9 @@
 import { useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate, useParams } from "react-router";
 import {
-  IconX,
   IconSparkles,
   IconLoader2,
   IconCheck,
-  IconNotes,
   IconChevronLeft,
   IconCalendarPlus,
   IconPill,
@@ -14,6 +12,7 @@ import {
 import { useDictationContext } from "../../contexts/DictationContext";
 import { useToast } from "../../contexts/ToastContext";
 import { useUser } from "../../contexts/UserContext";
+import { useSidebar } from "../../contexts/SidebarContext";
 import { chat } from "../../services/ai/llm";
 import { saveProfile } from "../../data/patientStore";
 import type { Patient } from "../../data/mock/patients";
@@ -25,8 +24,16 @@ import {
   useMedsFromLLM,
   type PatientEhr,
 } from "../NewPatientByVoice";
+import {
+  AboutPanel,
+  ModelPanel,
+  conditionFor,
+  resolvePatient,
+  useTranscriptFindings,
+  useTranscriptBodyRegions,
+  useSymptomPlot,
+} from "./index";
 
-const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 type CenterTab = "summary" | "transcript" | "oldcarts";
 
 // SOAP-style note distilled from the consultation transcript.
@@ -86,22 +93,41 @@ function buildEhr(p: Patient): PatientEhr {
 
 type Phase = "consult" | "loading" | "result";
 
-export default function DrNoteConsult({
-  open,
-  patient,
-  onClose,
-}: {
-  open: boolean;
-  patient: Patient;
-  onClose: () => void;
-}) {
+/** Doctor consultation (`/opd/:hn/consult`). Mirrors the PatientOPD page shell —
+ *  persistent sidebar/tab-bar chrome, AboutPanel on the left, body model on the
+ *  right — but keeps its own record → summarise → result phase flow. */
+export default function DrNoteConsult() {
+  const params = useParams();
+  const patient = useMemo<Patient | undefined>(() => resolvePatient(params.hn), [params.hn]);
+
+  if (!patient) {
+    return (
+      <div className="min-h-screen w-full bg-[var(--theme-base)] p-8">
+        <p className="text-[var(--theme-neutral)]/55">ไม่พบผู้ป่วยรายนี้</p>
+      </div>
+    );
+  }
+  return <ConsultPage patient={patient} />;
+}
+
+function ConsultPage({ patient }: { patient: Patient }) {
+  const navigate = useNavigate();
   const toast = useToast();
   const { user } = useUser();
+  const { railHidden } = useSidebar();
   const { isRecording, startSession, stopSession, segments, asrInFlight } = useDictationContext();
   const { topics, inFlight: topicInFlight } = useSymptomTopicsFromLLM(segments, isRecording);
   const { hpi } = useHpiNarrativeFromLLM(segments, isRecording);
   const { meds: interviewMeds } = useMedsFromLLM(segments, isRecording);
   const ehr = useMemo(() => buildEhr(patient), [patient]);
+
+  // Live transcript-driven body-model mapping — same hooks PatientOPD feeds the
+  // model with, so the consult body model behaves identically.
+  const transcriptText = useMemo(() => segments.map((s) => s.text).join(" "), [segments]);
+  const liveFindings = useTranscriptFindings(transcriptText, isRecording);
+  const liveRegions = useTranscriptBodyRegions(transcriptText, isRecording);
+  const symptomPlot = useSymptomPlot(transcriptText, isRecording);
+  const info = useMemo(() => conditionFor(patient), [patient]);
 
   const [phase, setPhase] = useState<Phase>("consult");
   const [tab, setTab] = useState<CenterTab>("summary");
@@ -142,9 +168,9 @@ export default function DrNoteConsult({
     e.target.value = "";
   };
 
-  const close = () => {
+  const leave = () => {
     if (isRecording) void stopSession();
-    onClose();
+    navigate("/schedule");
   };
 
   const handleFinish = async () => {
@@ -203,82 +229,86 @@ export default function DrNoteConsult({
       `CC: ${note.cc}\nHPI: ${note.hpi}\nImpression: ${note.impression}\nPlan: ${note.plan}`;
     saveProfile(patient.hn, { note: body }, {});
     toast.success("บันทึก Dr. Note แล้ว", `HN ${patient.hn}`);
-    close();
+    leave();
   };
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.25, ease: EASE }}
-          className="fixed inset-0 z-[120] flex flex-col bg-[#f4f4f4]"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-[var(--theme-neutral)]/10 bg-white px-6 py-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--theme-primary-soft)]">
-                <IconNotes className="h-5 w-5 text-[var(--theme-primary)]" stroke={1.75} />
-              </div>
-              <div className="flex flex-col">
-                <h2 className="text-[15px] font-bold text-[var(--theme-neutral)]">
-                  ซักประวัติ · Dr. Note
-                </h2>
-                <span className="text-[12px] text-[var(--theme-neutral)]/55">
-                  {patient.prefix}
-                  {patient.firstName} {patient.lastName} · HN {patient.hn}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {phase === "consult" && (
-                <button
-                  type="button"
-                  onClick={handleFinish}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--theme-primary)] px-4 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110"
-                >
-                  <IconSparkles className="h-4 w-4" stroke={2} />
-                  สรุป & เสนอแผนการดูแล
-                </button>
-              )}
-              {phase === "result" && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setPhase("consult")}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--theme-neutral)]/15 bg-white px-3.5 py-2.5 text-[13px] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
-                  >
-                    <IconChevronLeft className="h-4 w-4" stroke={2} />
-                    กลับไปแก้ไข
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveNote}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--theme-primary)] px-4 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110"
-                  >
-                    <IconCheck className="h-4 w-4" stroke={2.2} />
-                    บันทึก Dr. Note
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={close}
-                aria-label="ปิด"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--theme-neutral)]/55 transition hover:bg-[var(--theme-neutral)]/8"
-              >
-                <IconX className="h-4 w-4" stroke={2} />
-              </button>
+    <div className="h-screen w-full overflow-hidden bg-[#f4f4f4]">
+      <div className="h-16 shrink-0" aria-hidden />
+      <div
+        className={[
+          "flex h-[calc(100vh-6rem)] flex-col mr-4 mt-4 mb-4 gap-4 overflow-hidden transition-[margin] duration-300 ease-out",
+          railHidden ? "ml-4" : "ml-4 lg:ml-[296px]",
+        ].join(" ")}
+      >
+        {/* ── Top bar — back · title · phase actions ───────────────────── */}
+        <div className="flex shrink-0 items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={leave}
+              className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-[12px] font-semibold text-[var(--theme-neutral)]/60 transition hover:bg-black/[0.04] hover:text-[var(--theme-neutral)]"
+            >
+              <IconChevronLeft className="h-4 w-4" stroke={2} />
+              ตารางแพทย์
+            </button>
+            <span className="h-5 w-px shrink-0 bg-black/10" />
+            <div className="flex min-w-0 flex-col">
+              <h2 className="truncate text-[14px] font-bold text-[var(--theme-neutral)]">
+                ซักประวัติ · ปรึกษา
+              </h2>
+              <span className="truncate text-[12px] text-[var(--theme-neutral)]/55">
+                {patient.prefix}
+                {patient.firstName} {patient.lastName} · HN {patient.hn}
+              </span>
             </div>
           </div>
 
-          {/* Body */}
-          <div className="flex min-h-0 flex-1 flex-col p-4">
+          <div className="flex shrink-0 items-center gap-2">
             {phase === "consult" && (
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 portrait:flex portrait:flex-col portrait:snap-y portrait:snap-mandatory portrait:overflow-y-auto lg:grid-cols-[minmax(400px,454px)_minmax(0,1fr)]">
+              <button
+                type="button"
+                onClick={handleFinish}
+                className="inline-flex items-center gap-2 rounded-full bg-[var(--theme-primary)] px-4 py-2 text-[12px] font-semibold text-white transition hover:brightness-110"
+              >
+                <IconSparkles className="h-4 w-4" stroke={2} />
+                สรุป & เสนอแผนการดูแล
+              </button>
+            )}
+            {phase === "result" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setPhase("consult")}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--theme-neutral)]/15 bg-white px-3.5 py-2 text-[12px] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-primary-soft)]"
+                >
+                  <IconChevronLeft className="h-4 w-4" stroke={2} />
+                  กลับไปแก้ไข
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveNote}
+                  className="inline-flex items-center gap-2 rounded-full bg-[var(--theme-primary)] px-4 py-2 text-[12px] font-semibold text-white transition hover:brightness-110"
+                >
+                  <IconCheck className="h-4 w-4" stroke={2.2} />
+                  บันทึก Dr. Note
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── Body: patient · consult workspace · body model ───────────── */}
+        <div className="flex min-h-0 flex-1">
+          {/* LEFT — about patient */}
+          <div className="relative hidden w-[400px] shrink-0 overflow-hidden xl:mr-4 xl:block">
+            <AboutPanel patient={patient} />
+          </div>
+
+          {/* CENTER — record + conversation (consult) / loading / result */}
+          <div className="hidden min-w-[340px] flex-1 md:block">
+            {phase === "consult" && (
+              <div className="grid h-full min-h-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
                 <RecordingPanel
                   isRecording={isRecording}
                   started={segments.length > 0}
@@ -306,29 +336,44 @@ export default function DrNoteConsult({
             )}
 
             {phase === "loading" && (
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[var(--theme-primary)]">
+              <div className="flex h-full flex-col items-center justify-center gap-3 rounded-2xl bg-white text-[var(--theme-primary)]">
                 <IconLoader2 className="h-7 w-7 animate-spin" stroke={2} />
                 <p className="text-[14px] font-medium">กำลังสรุปและจัดทำแผนการดูแล…</p>
               </div>
             )}
 
             {phase === "result" && note && (
-              <div className="mx-auto w-full max-w-[860px] flex-1 overflow-y-auto">
-                <ResultView
-                  note={note}
-                  proposed={proposed}
-                  doctorName={user.name}
-                  doctorAvatar={user.avatarUrl}
-                  onAction={handleProposedAction}
-                />
+              <div className="h-full overflow-y-auto">
+                <div className="mx-auto w-full max-w-[860px]">
+                  <ResultView
+                    note={note}
+                    proposed={proposed}
+                    doctorName={user.name}
+                    doctorAvatar={user.avatarUrl}
+                    onAction={handleProposedAction}
+                  />
+                </div>
               </div>
             )}
           </div>
 
-          <input ref={fileInputRef} type="file" accept="audio/*" hidden onChange={handleFile} />
-        </motion.div>
-      )}
-    </AnimatePresence>
+          {/* RIGHT — body model, mirroring the OPD page */}
+          <div className="ml-4 hidden h-full w-[380px] shrink-0 lg:block">
+            <ModelPanel
+              patient={patient}
+              info={info}
+              liveFindings={liveFindings}
+              liveRegions={liveRegions}
+              liveHpi={hpi}
+              recording={isRecording}
+              symptomPlot={symptomPlot}
+            />
+          </div>
+        </div>
+      </div>
+
+      <input ref={fileInputRef} type="file" accept="audio/*" hidden onChange={handleFile} />
+    </div>
   );
 }
 

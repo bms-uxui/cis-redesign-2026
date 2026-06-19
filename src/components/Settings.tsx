@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   IconUser,
   IconSettings2,
@@ -13,10 +13,12 @@ import {
 import { Switch, Avatar, Button } from "@heroui/react";
 import AVATAR from "../assets/figma/ellipse-avatar.png";
 import { useToast } from "../contexts/ToastContext";
+import { useUser } from "../contexts/UserContext";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useTheme } from "../contexts/ThemeContext";
 import ThemeStudio from "./settings/ThemeStudio";
 import { PREFS_KEY, PREFS_EVENT } from "../services/ttsPrefs";
+import { FONT_OPTIONS, DEFAULT_FONT_ID, applyFont, loadFontId } from "../services/fontPrefs";
 
 interface Prefs {
   language: string;
@@ -28,6 +30,7 @@ interface Prefs {
   ttsEnabled: boolean;
   ttsVoice: string;
   ttsSpeed: number;
+  fontFamily: string;
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -40,6 +43,7 @@ const DEFAULT_PREFS: Prefs = {
   ttsEnabled: true,
   ttsVoice: "female",
   ttsSpeed: 1,
+  fontFamily: DEFAULT_FONT_ID,
 };
 
 function loadPrefs(): Prefs {
@@ -75,7 +79,27 @@ const NAV: NavItemFlat[] = [
 
 export default function Settings() {
   const toast = useToast();
+  const { user, setSignature } = useUser();
+  const sigInputRef = useRef<HTMLInputElement>(null);
   const { railHidden } = useSidebar();
+
+  const onPickSignature = (file?: File | null) => {
+    if (!file) return;
+    if (!/^image\/(png|jpe?g)$/.test(file.type)) {
+      toast.error("ไฟล์ไม่รองรับ", "รองรับเฉพาะ .PNG หรือ .JPG");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("ไฟล์ใหญ่เกินไป", "ขนาดต้องไม่เกิน 2 MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSignature(String(reader.result));
+      toast.success("บันทึกลายเซ็นแล้ว", "จะปรากฏบนใบรับรองแพทย์");
+    };
+    reader.readAsDataURL(file);
+  };
   const {
     isDirty: themeDirty,
     commit: commitTheme,
@@ -98,10 +122,20 @@ export default function Settings() {
       draft.showTimes !== savedPrefs.showTimes ||
       draft.ttsEnabled !== savedPrefs.ttsEnabled ||
       draft.ttsVoice !== savedPrefs.ttsVoice ||
-      draft.ttsSpeed !== savedPrefs.ttsSpeed,
+      draft.ttsSpeed !== savedPrefs.ttsSpeed ||
+      draft.fontFamily !== savedPrefs.fontFamily,
     [draft, savedPrefs],
   );
   const isDirty = prefsDirty || themeDirty;
+
+  // Live-preview the font as the draft changes; revert to the saved font on
+  // unmount (covers navigating away without saving).
+  useEffect(() => {
+    applyFont(draft.fontFamily);
+  }, [draft.fontFamily]);
+  useEffect(() => {
+    return () => applyFont(loadFontId());
+  }, []);
 
   const updateDraft = <K extends keyof Prefs>(key: K, value: Prefs[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
@@ -202,9 +236,89 @@ export default function Settings() {
               </Field>
             </Row>
 
+            {/* Doctor signature — stamped on the medical certificate */}
+            <Row
+              title="ลายเซ็นแพทย์"
+              description="อัปโหลดรูปลายเซ็นเพื่อใช้ลงนามบนใบรับรองแพทย์"
+            >
+              <Field label="รูปลายเซ็น">
+                <input
+                  ref={sigInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="hidden"
+                  onChange={(e) => {
+                    onPickSignature(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-28 items-center justify-center overflow-hidden rounded-lg border border-dashed border-[var(--theme-neutral)]/20 bg-[var(--theme-surface)]">
+                    {user.signatureUrl ? (
+                      <img src={user.signatureUrl} alt="ลายเซ็น" className="h-full w-full object-contain" />
+                    ) : (
+                      <span className="text-[11px] text-[var(--theme-neutral)]/40">ยังไม่มี</span>
+                    )}
+                  </div>
+                  <Button
+                    variant="bordered"
+                    radius="full"
+                    onPress={() => sigInputRef.current?.click()}
+                    className="h-11 border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-4 text-[14px] font-medium text-[var(--theme-neutral)] data-[hover=true]:bg-[var(--theme-primary-soft)]"
+                    startContent={<IconUpload className="h-4 w-4" stroke={1.75} />}
+                  >
+                    อัปโหลดลายเซ็น
+                  </Button>
+                  {user.signatureUrl && (
+                    <button
+                      type="button"
+                      aria-label="ลบลายเซ็น"
+                      title="ลบลายเซ็น"
+                      onClick={() => {
+                        setSignature(null);
+                        toast.success("ลบลายเซ็นแล้ว");
+                      }}
+                      className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--theme-neutral)]/15 text-[#ef4444] transition hover:bg-red-50"
+                    >
+                      <IconTrash className="h-4 w-4" stroke={1.75} />
+                    </button>
+                  )}
+                </div>
+                <p className="mt-2 text-[12px] text-[var(--theme-neutral)]/55">
+                  แนะนำพื้นหลังโปร่งใส (PNG) ขนาดไม่เกิน 2 MB
+                </p>
+              </Field>
+            </Row>
+
             {/* Theme — rich generator with presets, all tokens, and radius */}
             <Row title="ธีม" description="ปรับแต่งสีและรูปร่างของอินเทอร์เฟซ">
               <ThemeStudio />
+            </Row>
+
+            {/* Font family — previews each option in its own typeface */}
+            <Row title="แบบอักษร" description="เลือกฟอนต์ที่ใช้แสดงผลทั้งระบบ">
+              <div className="grid grid-cols-2 gap-2.5">
+                {FONT_OPTIONS.map((f) => {
+                  const active = draft.fontFamily === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => updateDraft("fontFamily", f.id)}
+                      style={{ fontFamily: f.stack }}
+                      className={[
+                        "flex flex-col items-start gap-0.5 rounded-[var(--theme-radius-field)] border px-3.5 py-2.5 text-left transition",
+                        active
+                          ? "border-[var(--theme-primary)] bg-[var(--theme-primary-soft)] ring-1 ring-[var(--theme-primary)]"
+                          : "border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] hover:bg-[var(--theme-primary-soft)]",
+                      ].join(" ")}
+                    >
+                      <span className="text-[14px] font-semibold text-[var(--theme-neutral)]">{f.label}</span>
+                      <span className="text-[13px] text-[var(--theme-neutral)]/55">สวัสดี Aa ก ข ค 123</span>
+                    </button>
+                  );
+                })}
+              </div>
             </Row>
 
             {/* Language & Region */}

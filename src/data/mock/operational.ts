@@ -54,6 +54,10 @@ const CLINICS = [
 
 const DOCTORS = ["นพ.ราอูล มันเมาะ", "พญ.สุภาวดี ปิยะรัตน์", "นพ.ธวัชชัย พงษ์สวัสดิ์", "พญ.อรพิน วงศ์ใหญ่", "นพ.กิตติ บุญทวี"];
 
+/** Selectable clinic + doctor names (for scheduling dropdowns). */
+export const CLINIC_NAMES: string[] = CLINICS.map((c) => c.name);
+export const DOCTOR_NAMES: string[] = DOCTORS;
+
 // Seeded RNG so values don't jitter between renders.
 function mulberry32(seed: number) {
   let s = seed;

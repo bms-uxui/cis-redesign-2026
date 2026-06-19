@@ -3113,14 +3113,17 @@ const SOUNDWAVE_MAX_PX = 44;
 export function Soundwave({
   levelRef: levelRefProp,
   barClassName,
+  bars = SOUNDWAVE_BARS,
 }: {
   levelRef?: { current: number };
   barClassName?: string;
+  /** number of bars — controls the wave's width */
+  bars?: number;
 } = {}) {
   const ctx = useDictationContext();
   const levelRef = levelRefProp ?? ctx.levelRef;
   const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
-  const historyRef = useRef<number[]>(new Array(SOUNDWAVE_BARS).fill(0));
+  const historyRef = useRef<number[]>(new Array(bars).fill(0));
 
   useEffect(() => {
     let raf = 0;
@@ -3137,10 +3140,10 @@ export function Soundwave({
       }
       frame += 1;
       const arr = historyRef.current;
-      for (let i = 0; i < SOUNDWAVE_BARS; i++) {
+      for (let i = 0; i < bars; i++) {
         const el = barRefs.current[i];
         if (!el) continue;
-        const mirrored = arr[Math.min(arr.length - 1, Math.abs(i - SOUNDWAVE_BARS / 2) * 2)];
+        const mirrored = arr[Math.min(arr.length - 1, Math.abs(i - bars / 2) * 2)];
         const px = SOUNDWAVE_MIN_PX + mirrored * (SOUNDWAVE_MAX_PX - SOUNDWAVE_MIN_PX);
         el.style.height = `${px}px`;
       }
@@ -3148,11 +3151,11 @@ export function Soundwave({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [levelRef]);
+  }, [levelRef, bars]);
 
   return (
     <div className="flex h-12 items-center gap-1" aria-hidden>
-      {Array.from({ length: SOUNDWAVE_BARS }).map((_, i) => (
+      {Array.from({ length: bars }).map((_, i) => (
         <span
           key={i}
           ref={(el) => {

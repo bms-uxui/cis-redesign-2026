@@ -6,8 +6,12 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { Theme as RadixTheme } from "@radix-ui/themes";
 import AppShell from "./components/AppShell";
 import { ThemeProvider as EhpThemeProvider } from "./contexts/ThemeContext";
+import { applyFont, loadFontId } from "./services/fontPrefs";
 import "./index.css";
 import "@radix-ui/themes/styles.css";
+
+// Apply the saved font before first paint so there's no flash of the default.
+applyFont(loadFontId());
 
 const muiTheme = createTheme({
   typography: {

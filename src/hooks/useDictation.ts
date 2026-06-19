@@ -237,14 +237,14 @@ export function useDictation(opts: UseDictationOptions = {}) {
   );
 
   const start = useCallback(
-    async (source: PcmSource = "mic", opts?: { seed?: DictationSegment[] }) => {
+    async (source: PcmSource = "mic", startOpts?: { seed?: DictationSegment[] }) => {
       if (status === "recording" || status === "requesting") return;
       setError(null);
       // `seed` lets a session CONTINUE from an earlier transcript ("บันทึกต่อ"):
       // the prior segments are committed up front so new audio appends to them
       // instead of replacing them.
-      const seed = opts?.seed?.length
-        ? opts.seed.map((s) => ({ speaker: s.speaker, text: s.text }))
+      const seed = startOpts?.seed?.length
+        ? startOpts.seed.map((s) => ({ speaker: s.speaker, text: s.text }))
         : [];
       committedRef.current = seed;
       pendingRef.current = null;
