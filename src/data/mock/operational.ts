@@ -54,6 +54,10 @@ const CLINICS = [
 
 const DOCTORS = ["นพ.ราอูล มันเมาะ", "พญ.สุภาวดี ปิยะรัตน์", "นพ.ธวัชชัย พงษ์สวัสดิ์", "พญ.อรพิน วงศ์ใหญ่", "นพ.กิตติ บุญทวี"];
 
+/** Selectable clinic + doctor names (for scheduling dropdowns). */
+export const CLINIC_NAMES: string[] = CLINICS.map((c) => c.name);
+export const DOCTOR_NAMES: string[] = DOCTORS;
+
 // Seeded RNG so values don't jitter between renders.
 function mulberry32(seed: number) {
   let s = seed;
@@ -144,7 +148,36 @@ function generateTodaysAppointments(): Appointment[] {
   return out;
 }
 
-export const TODAY_APPOINTMENTS: Appointment[] = generateTodaysAppointments();
+// Explicit walk-in OPD cases (the ordinary acute patients) so they always
+// appear on the doctor's schedule instead of relying on the random sampler.
+const ACUTE_WALKIN_HNS = ["00020340", "00020370", "00020400", "00020430", "00020460"];
+function acuteWalkIns(doctor: string): Appointment[] {
+  const today = isoToday();
+  const times = ["08:20", "08:40", "09:00", "09:20", "09:40"];
+  const statuses: AppointmentStatus[] = ["done", "in_progress", "checked_in", "scheduled", "scheduled"];
+  return ACUTE_WALKIN_HNS.map((hn, i) => {
+    const p = PATIENTS.find((x) => x.hn === hn);
+    const st = statuses[i];
+    return {
+      id: `apt-walkin-${i}`,
+      date: today,
+      time: times[i],
+      clinic: "OPD ทั่วไป",
+      doctor,
+      patientHN: hn,
+      patientName: p ? `${p.prefix}${p.firstName} ${p.lastName}` : hn,
+      type: "New" as const,
+      status: st,
+      waitMinutes: st === "done" || st === "in_progress" ? 15 : undefined,
+      durationMinutes: 20,
+    };
+  });
+}
+
+export const TODAY_APPOINTMENTS: Appointment[] = [
+  ...acuteWalkIns(DOCTORS[0]),
+  ...generateTodaysAppointments(),
+];
 
 // ── No-show history (last 30 days, per clinic per day) ────────────────────
 

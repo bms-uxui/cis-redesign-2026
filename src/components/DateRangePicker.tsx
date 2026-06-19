@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   IconCalendarWeek,
   IconChevronLeft,
@@ -45,9 +46,14 @@ interface Props {
   /** Initial range when uncontrolled. */
   defaultValue?: DateRange;
   className?: string;
+  /** "single" picks one day (start=end) and closes on the first click. */
+  mode?: "range" | "single";
+  /** Override the trigger button's look (size/shape/border) so it can match
+   *  surrounding form fields. When set, replaces the default pill styling. */
+  triggerClassName?: string;
 }
 
-export default function DateRangePicker({ value, onChange, defaultValue, className }: Props) {
+export default function DateRangePicker({ value, onChange, defaultValue, className, mode = "range", triggerClassName }: Props) {
   const [internal, setInternal] = useState<DateRange>(
     defaultValue ?? { start: null, end: null },
   );
@@ -59,12 +65,37 @@ export default function DateRangePicker({ value, onChange, defaultValue, classNa
   );
   const [hover, setHover] = useState<Date | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  // Popover rendered in a portal (escapes ancestor `overflow:hidden/auto`
+  // clipping, e.g. inside scrollable panels) and anchored to the trigger.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !rootRef.current) return;
+    const place = () => {
+      const r = rootRef.current!.getBoundingClientRect();
+      const W = 300; // single-month popover approx width
+      let left = r.right - W;
+      if (left < 8) left = 8;
+      if (left + W > window.innerWidth - 8) left = window.innerWidth - 8 - W;
+      setPos({ top: r.bottom + 8, left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
 
   // Close on outside click / Escape.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onDown);
@@ -80,22 +111,49 @@ export default function DateRangePicker({ value, onChange, defaultValue, classNa
     onChange?.(next);
   };
 
+  // In-progress selection, decoupled from the (possibly always-complete)
+  // controlled value so the 1st click can set a pending start without the
+  // parent immediately collapsing it back to a single day. Seeded on open.
+  const [draft, setDraft] = useState<DateRange>(range);
+  useEffect(() => {
+    if (open) setDraft(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const selectDay = (d: Date) => {
-    // Fresh start when nothing is pending or a full range already exists.
-    if (!range.start || (range.start && range.end)) {
-      commit({ start: d, end: null });
+    if (mode === "single") {
+      const next = { start: d, end: d };
+      setDraft(next);
+      commit(next);
+      setOpen(false);
       return;
     }
-    if (dayValue(d) < dayValue(range.start)) commit({ start: d, end: range.start });
-    else commit({ start: range.start, end: d });
+    // 1st click (or after a full range) → pending start only.
+    if (!draft.start || (draft.start && draft.end)) {
+      setDraft({ start: d, end: null });
+      return;
+    }
+    // 2nd click → complete the range, commit, close.
+    const next: DateRange =
+      dayValue(d) < dayValue(draft.start)
+        ? { start: d, end: draft.start }
+        : { start: draft.start, end: d };
+    setDraft(next);
+    commit(next);
+    setOpen(false);
   };
 
+  const shown = open ? draft : range;
   const triggerLabel =
-    range.start && range.end
-      ? `${formatThai(range.start)} - ${formatThai(range.end)}`
-      : range.start
-        ? `${formatThai(range.start)} - …`
-        : "เลือกช่วงวันที่";
+    mode === "single"
+      ? shown.start
+        ? formatThai(shown.start)
+        : "เลือกวันที่"
+      : shown.start && shown.end
+        ? `${formatThai(shown.start)} - ${formatThai(shown.end)}`
+        : shown.start
+          ? `${formatThai(shown.start)} - …`
+          : "เลือกช่วงวันที่";
 
   return (
     <div ref={rootRef} className={`relative ${className ?? ""}`}>
@@ -105,12 +163,20 @@ export default function DateRangePicker({ value, onChange, defaultValue, classNa
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className={[
-          "group flex h-12 w-full shrink-0 items-center gap-2.5 rounded-full border bg-[var(--theme-surface)] px-4 text-[var(--theme-neutral)] outline-none transition",
-          open
-            ? "border-[var(--theme-primary)] bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]"
-            : "border-[var(--theme-neutral)]/15 hover:border-[var(--theme-primary)] hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-primary)]",
-        ].join(" ")}
+        className={
+          triggerClassName
+            ? [
+                "group flex w-full shrink-0 items-center gap-2 outline-none transition",
+                triggerClassName,
+                open ? "border-[#3965e1]" : "",
+              ].join(" ")
+            : [
+                "group flex h-12 w-full shrink-0 items-center gap-2.5 rounded-full border bg-[var(--theme-surface)] px-4 text-[var(--theme-neutral)] outline-none transition",
+                open
+                  ? "border-[var(--theme-primary)] bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]"
+                  : "border-[var(--theme-neutral)]/15 hover:border-[var(--theme-primary)] hover:bg-[var(--theme-primary-soft)] hover:text-[var(--theme-primary)]",
+              ].join(" ")
+        }
       >
         <IconCalendarWeek
           className={[
@@ -131,31 +197,27 @@ export default function DateRangePicker({ value, onChange, defaultValue, classNa
         />
       </button>
 
-      {/* Popover */}
-      {open && (
+      {/* Popover — portalled to <body> so it isn't clipped by scroll panels */}
+      {open && pos && createPortal(
         <div
+          ref={popRef}
           role="dialog"
-          className="absolute right-0 top-[calc(100%+8px)] z-50 flex gap-6 rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)] p-4 shadow-[var(--theme-shadow-md)]"
+          style={{ position: "fixed", top: pos.top, left: pos.left }}
+          className="z-[1000] flex rounded-[var(--theme-radius-box)] border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)] p-4 shadow-[var(--theme-shadow-md)]"
         >
           <MonthGrid
             date={view}
-            range={range}
+            range={draft}
             hover={hover}
             onHover={setHover}
             onPick={selectDay}
             onPrev={() => setView((v) => addMonths(v, -1))}
-            showPrev
-          />
-          <MonthGrid
-            date={addMonths(view, 1)}
-            range={range}
-            hover={hover}
-            onHover={setHover}
-            onPick={selectDay}
             onNext={() => setView((v) => addMonths(v, 1))}
+            showPrev
             showNext
           />
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

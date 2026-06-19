@@ -2,6 +2,35 @@
 
 โปรเจกต์สำหรับนักออกแบบ — ติดตั้งครั้งเดียว พร้อมใช้งานทันที ไม่ต้องตั้งค่าอะไรเพิ่ม
 
+---
+
+## CIS 2026 — ฟีเจอร์ที่ทำแล้ว
+
+**ตารางเวรแพทย์ (schedule)**
+- [x] หน้า schedule = MUI X day calendar (คิวนัดวันนี้, คลิกการ์ดเข้าเคส `/opd/:hn`)
+- [x] Panel ซ้าย: Figma greeting banner (full-bleed) + คิวถัดไป + สรุปเคส AI + ผล Lab (ขยายเต็มสูง)
+
+**แผนการรักษา (OPD plan)**
+- [x] ใบรับรองแพทย์ structured (template, auto-fill, ลงลายเซ็น, log, ตัวเลือก "ไม่ออกใบ")
+- [x] นัดหมายอัตโนมัติ (AI เสนอช่วง → วันนัด + คลินิก/แพทย์/ประเภท dropdown)
+- [x] Lab master LOINC/TMLT (`searchLabs`, ไม่ free-text)
+- [x] Voice-edit ทุก section + AI-glow ไฮไลต์ส่วนที่แก้
+
+**Body map**
+- [x] แยก neck region, abdomen 9-ช่อง เส้นโก่งลงเส้นเดียว
+- [x] symptom callouts ลากได้
+
+**Component กลาง**
+- [x] DateRangePicker (portal popover, single + range, เดือนเดียว)
+- [x] Settings: อัปโหลดลายเซ็นแพทย์, เลือก font
+- [x] การ์ดสรุป/ใบรับรองซ้อนทับ + hover กางออก
+
+## ที่เหลือ (TODO)
+
+- [ ] update ฝั่งพยาบาลให้เท่าแพทย์
+- [ ] ER
+- [ ] Model อาการเจ็บป่วย: ชายด้านหลัง, หญิงหน้า/หลัง, เด็ก
+
 ## เริ่มต้นใช้งาน
 
 ```bash

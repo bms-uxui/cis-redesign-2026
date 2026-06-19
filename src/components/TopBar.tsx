@@ -11,8 +11,10 @@ import {
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconUser,
+  IconSparkles,
 } from "@tabler/icons-react";
 import { useTheme, THEME_PRESETS } from "../contexts/ThemeContext";
+import { useAiva } from "../contexts/AivaContext";
 import {
   Dropdown,
   DropdownTrigger,
@@ -44,6 +46,7 @@ export default function TopBar() {
   const { config: themeConfig, applyPreset, commit: commitTheme } = useTheme();
   const { logout } = useUser();
   const navigate = useNavigate();
+  const { openAiva } = useAiva();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   // ── Tab overflow ─────────────────────────────────────────────────────
@@ -257,8 +260,33 @@ export default function TopBar() {
         </Tooltip>
       </div>
 
-      {/* User pill — click to open the account menu */}
-      <div className="absolute right-[3px] top-1/2 -translate-y-1/2">
+      {/* Right actions — AI chat launcher + user pill */}
+      <div className="absolute right-[3px] top-1/2 flex -translate-y-1/2 items-center gap-2">
+        <Tooltip
+          content={
+            <span className="flex items-center gap-2">
+              ถามเมย์
+              <kbd className="inline-flex h-4 min-w-[20px] items-center justify-center rounded border border-white/20 px-1 font-mono text-[10px] font-semibold">
+                ⌘K
+              </kbd>
+            </span>
+          }
+          placement="bottom"
+          delay={200}
+          closeDelay={0}
+          classNames={TOOLTIP_CLASSES}
+        >
+          <button
+            type="button"
+            aria-label="ถามเมย์"
+            onClick={() => openAiva()}
+            className="flex h-8 cursor-pointer items-center gap-1 rounded-full bg-gradient-to-br from-[#5DB4F8] to-[#7556E2] px-3 text-white shadow-[0_3px_10px_-2px_rgba(117,86,226,0.4)] transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.04] hover:shadow-[0_5px_14px_-2px_rgba(117,86,226,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7556E2]/50"
+          >
+            <IconSparkles className="h-4 w-4 fill-white" stroke={1.5} />
+            <span className="text-[12px] font-semibold">ถามเมย์</span>
+          </button>
+        </Tooltip>
+
         <Dropdown
           placement="bottom-end"
           offset={8}

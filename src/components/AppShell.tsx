@@ -4,9 +4,10 @@ import { AivaProvider, useAiva } from "../contexts/AivaContext";
 import TopBar from "./TopBar";
 import Sidebar from "./Sidebar";
 import MenuPalette, { MenuPaletteHotkey } from "./MenuPalette";
-import MenuPaletteHint from "./MenuPaletteHint";
 import CustomizeSidebarModal from "./CustomizeSidebarModal";
 import TabsHost from "./TabsHost";
+import SelectionTTS from "./SelectionTTS";
+import OfflineOverlay from "./OfflineOverlay";
 import { DictationProvider } from "../contexts/DictationContext";
 import DictationIsland from "./DictationIsland";
 import { HeaderSlotProvider } from "../contexts/HeaderSlotContext";
@@ -106,8 +107,9 @@ function AppShellInner() {
 
       <MenuPalette />
       <MenuPaletteHotkey />
-      <MenuPaletteHint />
       <CustomizeSidebarModal />
+      <SelectionTTS />
+      <OfflineOverlay />
     </>
   );
 }
