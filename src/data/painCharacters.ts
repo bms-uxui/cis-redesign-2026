@@ -45,3 +45,16 @@ export function painCharactersFromText(text: string): string[] {
 export function painCharacterFromText(text: string): string {
   return painCharactersFromText(text)[0] ?? "dull";
 }
+
+/** Pull an NRS pain score (0–10) out of free text so the body-model severity
+ *  matches what the HPI narrative actually states. Returns null if none found. */
+export function severityFromText(text: string): number | null {
+  const clamp = (n: number) => Math.max(0, Math.min(10, n));
+  let m = text.match(/(\d{1,2})\s*\/\s*10\b/); // "6/10"
+  if (m) return clamp(parseInt(m[1], 10));
+  m = text.match(/ระดับ(?:ความรุนแรง)?\s*(?:อยู่ที่\s*)?(\d{1,2})/); // "ระดับ 6"
+  if (m) return clamp(parseInt(m[1], 10));
+  m = text.match(/(\d{1,2})\s*คะแนน/); // "6 คะแนน"
+  if (m) return clamp(parseInt(m[1], 10));
+  return null;
+}

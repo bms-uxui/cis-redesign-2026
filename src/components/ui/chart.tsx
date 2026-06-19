@@ -44,10 +44,30 @@ const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
   ({ id, className, children, config, ...props }, ref) => {
     const uniqueId = React.useId();
     const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`;
+    // Gate the ResponsiveContainer on a measured non-zero box so it never
+    // mounts at 0×0 (collapsed/animating/hidden parent) → silences the recharts
+    // "width(0) and height(0)" console spam.
+    const innerRef = React.useRef<HTMLDivElement>(null);
+    const [ready, setReady] = React.useState(false);
+    React.useEffect(() => {
+      const el = innerRef.current;
+      if (!el) return;
+      const ro = new ResizeObserver(() => setReady(el.clientWidth > 0 && el.clientHeight > 0));
+      ro.observe(el);
+      return () => ro.disconnect();
+    }, []);
+    const setRefs = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        innerRef.current = node;
+        if (typeof ref === "function") ref(node);
+        else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+      },
+      [ref],
+    );
     return (
       <ChartContext.Provider value={{ config }}>
         <div
-          ref={ref}
+          ref={setRefs}
           data-chart={chartId}
           className={cn(
             "flex aspect-video justify-center text-[length:var(--theme-text-xs)] [&_.recharts-cartesian-axis-tick_text]:fill-[var(--theme-neutral)]/55 [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-[var(--theme-neutral)]/10 [&_.recharts-tooltip-cursor]:stroke-[var(--theme-neutral)]/20 [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none",
@@ -56,7 +76,7 @@ const ChartContainer = React.forwardRef<HTMLDivElement, ChartContainerProps>(
           {...props}
         >
           <ChartStyle id={chartId} config={config} />
-          <RechartsPrimitive.ResponsiveContainer>{children}</RechartsPrimitive.ResponsiveContainer>
+          {ready && <RechartsPrimitive.ResponsiveContainer>{children}</RechartsPrimitive.ResponsiveContainer>}
         </div>
       </ChartContext.Provider>
     );

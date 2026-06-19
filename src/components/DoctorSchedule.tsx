@@ -17,7 +17,7 @@
  * count pill in their body. First event in the selected list is the
  * "active" one — it gets a white bg + a blue "ดูประวัติคนไข้" CTA.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useTabs } from "../contexts/TabsContext";
 import {
@@ -28,7 +28,8 @@ import {
   ModalHeader,
   Button,
 } from "@heroui/react";
-import { IconCheck, IconMicrophone, IconPlayerPlay, IconPlus } from "@tabler/icons-react";
+import { IconCheck, IconMicrophone, IconPlayerPlay, IconLoader2, IconChevronDown, IconCalendarEvent, IconCalendarClock } from "@tabler/icons-react";
+import DoctorRoster from "./DoctorRosterSchedule";
 import {
   PolarAngleAxis,
   RadialBar,
@@ -38,11 +39,18 @@ import {
 import { useSidebar } from "../contexts/SidebarContext";
 import { useUser } from "../contexts/UserContext";
 import { TODAY_APPOINTMENTS, type Appointment } from "../data/mock/operational";
+import { PATIENTS } from "../data/mock/patients";
+import {
+  useAiCaseReview,
+  HighlightedReview,
+  AbnormalLabsCard,
+  fmtThaiDate,
+  useScrollOverflow,
+} from "./PatientOPD";
+import SpeakButton from "./SpeakButton";
 import { useNurseHandoffs, handoffToAppointment } from "../data/nurseHandoff";
-import BANNER_OBJECT from "../assets/figma/doctor-banner-object.png";
-import BANNER_ORB from "../assets/figma/doctor-banner-13.png";
-import BANNER_CURVE from "../assets/figma/doctor-banner-curve.svg";
-import BANNER_BG_TRIANGLE from "../assets/figma/doctor-banner-bg.svg";
+import BANNER_FIG_ORB from "../assets/figma/banner-fig-orb.png";
+import BANNER_FIG_DESK from "../assets/figma/banner-fig-desk.png";
 
 // ── Date helpers ──────────────────────────────────────────────────────────
 
@@ -109,6 +117,9 @@ export default function DoctorSchedule() {
   const { openTab } = useTabs();
   const handoffs = useNurseHandoffs();
 
+  // Top-level view: patient appointments calendar vs doctor-roster management.
+  const [view, setView] = useState<"appointments" | "roster">("appointments");
+
   const myAppointments = useMemo(() => {
     const mine = [...handoffs.map(handoffToAppointment), ...TODAY_APPOINTMENTS].filter(
       (a) => a.doctor === user.name,
@@ -131,7 +142,7 @@ export default function DoctorSchedule() {
   // stays put and the calendar icon always returns here.
   const openPatient = (hn: string, consult = false) => {
     const name = myAppointments.find((a) => a.patientHN === hn)?.patientName ?? "ผู้ป่วย";
-    openTab(`/opd/${hn}${consult ? "?consult=1" : ""}`, { title: name });
+    openTab(`/opd/${hn}${consult ? "/consult" : ""}`, { title: name });
   };
 
   const today = new Date();
@@ -188,52 +199,23 @@ export default function DoctorSchedule() {
           railHidden ? "ml-4" : "ml-4 lg:ml-[296px]",
         ].join(" ")}
       >
-        {/* ── Main column ──────────────────────────────────────────── */}
-        <main className="flex min-w-0 min-h-0 flex-1 flex-col gap-4">
-          <HeroBanner doctorName={user.name} />
-
-          {/* Combined calendar — header row sits flush above the body row
-              so the selected column reads as one continuous tall tile.
-              `flex-1 min-h-0` lets the body row absorb the remaining
-              viewport height; only its event list scrolls. */}
-          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px]">
-            <CalendarHeaderRow
-              week={week}
-              selectedIdx={selectedIdx}
-              byDate={byDate}
-              onSelectDay={(i) => {
-                setSelectedIdx(i);
-                setHighlightedId(null);
-              }}
-            />
-            <CalendarBodyRow
-              week={week}
-              selectedIdx={selectedIdx}
-              byDate={byDate}
-              dayEvents={dayEvents}
-              effectiveHighlight={effectiveHighlight}
-              onSelectDay={(i) => {
-                setSelectedIdx(i);
-                setHighlightedId(null);
-              }}
-              onSelectEvent={(id) => setHighlightedId(id)}
-              onOpenDetail={(hn) => openPatient(hn)}
-            />
-          </section>
-        </main>
-
-        {/* ── Right rail ───────────────────────────────────────────── */}
-        <aside className="hidden w-[280px] min-h-0 shrink-0 flex-col gap-4 overflow-hidden xl:flex">
-          <DonutCaseCard
+        {/* ── Left rail — today overview ───────────────────────────── */}
+        <aside className="hidden w-[400px] min-h-0 shrink-0 flex-col overflow-hidden xl:flex">
+          <NextCasePanel
             doneCount={doneCount}
             pendingCount={pendingCount}
             total={totalToday}
             nextCase={nextCase}
             onOpenPatient={(hn) => openPatient(hn)}
           />
-
-          <WidgetsCard />
         </aside>
+
+        {/* ── Main column — doctor-roster scheduler ────────────────── */}
+        <main className="flex min-w-0 min-h-0 flex-1 flex-col gap-4">
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] bg-white">
+            <DoctorRoster appointments={todayList} onOpenCase={(hn) => openPatient(hn)} />
+          </section>
+        </main>
       </div>
 
       <AppointmentDetailModal
@@ -252,55 +234,85 @@ export default function DoctorSchedule() {
   );
 }
 
+// ── View switch (appointments ↔ roster) ────────────────────────────────────
+
+function ViewTabs({
+  value,
+  onChange,
+}: {
+  value: "appointments" | "roster";
+  onChange: (v: "appointments" | "roster") => void;
+}) {
+  const tabs = [
+    { key: "appointments" as const, label: "นัดผู้ป่วย", icon: IconCalendarEvent },
+    { key: "roster" as const, label: "จัดเวรแพทย์", icon: IconCalendarClock },
+  ];
+  return (
+    <div className="flex shrink-0 items-center gap-1 self-start rounded-full bg-white p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)]">
+      {tabs.map((t) => {
+        const active = value === t.key;
+        const Icon = t.icon;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => onChange(t.key)}
+            className={[
+              "flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-bold transition",
+              active ? "bg-[#21502c] text-white" : "text-black/45 hover:text-black/70",
+            ].join(" ")}
+          >
+            <Icon className="h-4 w-4" stroke={2} />
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Hero banner ───────────────────────────────────────────────────────────
 
+/** Time-of-day Thai greeting (เช้า / บ่าย / เย็น). */
+function greetingByHour(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "สวัสดีตอนเช้า";
+  if (h < 17) return "สวัสดีตอนบ่าย";
+  return "สวัสดีตอนเย็น";
+}
+
 function HeroBanner({ doctorName }: { doctorName: string }) {
+  // Figma 1480:3935 — green base, white top-left triangle, grass orb + desk
+  // illustration bottom-right, greeting/name/department text top-left.
   return (
-    <section
-      className="relative h-[120px] shrink-0 overflow-hidden rounded-[24px]"
-      style={{ background: "#21502c" }}
-    >
-      {/* White triangle overlay — covers most of the banner from the
-          top-left and tapers down, leaving the green base visible only
-          as a diagonal band on the bottom + right side. */}
-      <img
-        src={BANNER_BG_TRIANGLE}
-        alt=""
-        aria-hidden
-        className="pointer-events-none absolute left-0 top-0 h-[320px] w-[606px] select-none"
+    <section className="relative w-full shrink-0 overflow-hidden rounded-b-[24px] bg-[#21502c]">
+      {/* White overlay with a diagonal right edge — green base shows as a wedge
+          on the right (backing the illustration). Raise the bottom point (60%)
+          to push the green band further right. */}
+      <div
+        className="pointer-events-none absolute inset-0 bg-white"
+        style={{ clipPath: "polygon(0 0, 100% 0, 60% 100%, 0 100%)" }}
       />
-      {/* Decorative curved vector — extends past the banner top + bottom. */}
-      <img
-        src={BANNER_CURVE}
-        alt=""
-        aria-hidden
-        className="pointer-events-none absolute -top-16 left-0 h-[300px] w-[720px] select-none"
-      />
-      {/* Green orb — decorative backdrop behind the laptop on the right. */}
-      <img
-        src={BANNER_ORB}
-        alt=""
-        aria-hidden
-        className="pointer-events-none absolute top-1/2 right-8 h-[180px] w-[180px] -translate-y-1/2 select-none"
-      />
-      {/* Laptop illustration — anchored to the bottom edge so it hangs
-          out the banner. */}
-      <img
-        src={BANNER_OBJECT}
-        alt=""
-        aria-hidden
-        className="pointer-events-none absolute -bottom-8 right-12 h-[160px] w-auto select-none"
-      />
-      <div className="relative z-10 flex h-full flex-col justify-center gap-0.5 px-6">
-        <p className="text-[13px] font-medium text-[#1f1f1f]/85">
-          สวัสดี, {doctorName}
-        </p>
-        <p className="text-[20px] font-bold leading-tight text-[#1f1f1f]">
-          โรงพยาบาลทดสอบ BMS
-        </p>
-        <p className="text-[13px] text-[#1f1f1f]/70">
-          201 ประชาสัมพันธ์ สาขา BMS
-        </p>
+
+      {/* Grass orb + desk illustration — anchored top-right, scales to the
+          banner height (which is driven by the text). */}
+      <div className="pointer-events-none absolute aspect-square" style={{ right: "0%", bottom: "0%", height: "94%" }}>
+        {/* orb (cropped exactly as Figma) */}
+        <div className="absolute left-0 top-0 overflow-hidden" style={{ width: "91.03%", aspectRatio: "1" }}>
+          <img src={BANNER_FIG_ORB} alt="" className="absolute max-w-none select-none" style={{ left: "-42.86%", top: "-55.56%", width: "198.41%" }} />
+        </div>
+        {/* desk object */}
+        <div className="absolute overflow-hidden" style={{ left: "8.15%", top: "9.63%", right: 0, bottom: 0 }}>
+          <img src={BANNER_FIG_DESK} alt="" className="absolute inset-0 h-full w-full select-none" />
+        </div>
+      </div>
+
+      {/* greeting · doctor name (bold) · department — in flow so it drives the
+          banner height (no fixed aspect → stretches to the text). */}
+      <div className="relative z-10 flex flex-col gap-0.5 py-6 pl-6 text-[#1f1f1f]" style={{ width: "62%" }}>
+        <p className="text-[14px] font-medium">{greetingByHour()}</p>
+        <p className="text-[24px] font-bold leading-tight">{doctorName}</p>
+        <p className="text-[14px]">แผนกผู้ป่วยนอก OPD</p>
       </div>
     </section>
   );
@@ -768,7 +780,27 @@ function NextCaseRow({
 
 // ── Right rail — donut chart card ────────────────────────────────────────
 
-function DonutCaseCard({
+/** True once the ref'd element has a non-zero box. Gates recharts so it never
+ *  mounts at 0×0 (hidden/animating column) → silences the width(0)/height(0)
+ *  console spam. */
+function useHasSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setOk(el.clientWidth > 0 && el.clientHeight > 0));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, ok] as const;
+}
+
+/** Single combined rail panel: today's gauge + เคสถัดไป appointment, then the
+ *  next case's AI review (same hook/markup as the patient-detail card). The
+ *  duplicate next-case patient row inside the AI block is intentionally omitted
+ *  — the เคสถัดไป appointment above already identifies the patient. */
+function NextCasePanel({
   doneCount,
   pendingCount,
   total,
@@ -781,69 +813,102 @@ function DonutCaseCard({
   nextCase: Appointment | undefined;
   onOpenPatient: (hn: string) => void;
 }) {
-  // Half-gauge — recharts RadialBarChart from 180°→0° (top half),
-  // capped via PolarAngleAxis so the bar represents done/total as a
-  // proportion of the full half-circle.
-  const safeTotal = Math.max(1, doneCount + pendingCount);
-  const data = [{ name: "done", value: doneCount, fill: "#16a34a" }];
+  const { user } = useUser();
+
+  // Next case's AI review — identical hook + render to the detail panel.
+  const patient = useMemo(
+    () => (nextCase ? PATIENTS.find((p) => p.hn === nextCase.patientHN) : undefined),
+    [nextCase],
+  );
+  const review = useAiCaseReview(patient);
+  const abnormalLabs = patient ? patient.labs.filter((l) => l.abnormal).slice(0, 3) : [];
+  const sinceDate =
+    patient && patient.recentVisits.length ? fmtThaiDate(patient.recentVisits[patient.recentVisits.length - 1].date) : "";
+
+  const ov = useScrollOverflow<HTMLDivElement>();
 
   return (
-    <section className="flex flex-col items-center gap-4 rounded-[24px] bg-white p-4">
-      <div className="relative h-[120px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <RadialBarChart
-            cx="50%"
-            cy="95%"
-            innerRadius="120%"
-            outerRadius="150%"
-            startAngle={180}
-            endAngle={0}
-            data={data}
-            barSize={14}
-          >
-            <PolarAngleAxis
-              type="number"
-              domain={[0, safeTotal]}
-              angleAxisId={0}
-              tick={false}
-            />
-            <RadialBar
-              background={{ fill: "#ececec" }}
-              dataKey="value"
-              cornerRadius={8}
-              fill="#16a34a"
-            />
-          </RadialBarChart>
-        </ResponsiveContainer>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1">
-          <p className="text-[24px] font-bold leading-none text-[#0b66e4]">
-            {total} เคส
-          </p>
-          <p className="text-[14px] leading-none text-[#979797]">
-            คนไข้ของวันนี้
-          </p>
-        </div>
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px]">
+    <section
+      ref={ov.ref}
+      onScroll={ov.onScroll}
+      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-[24px] bg-white py-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
+    >
+      {/* greeting banner — full-bleed, flush to the panel's top/left/right */}
+      <div className="-mt-4">
+        <HeroBanner doctorName={user.name} />
       </div>
 
-      <div className="flex items-center gap-4">
-        <Legend dotColor="#16a34a" label={`ตรวจแล้ว (${doneCount})`} />
-        <Legend dotColor="#cccccc" label={`รอตรวจ (${pendingCount})`} />
-      </div>
-
-      <div className="flex w-full flex-col gap-2">
-        <p className="text-[14px] font-semibold text-black">เคสถัดไป</p>
+      {/* Next in queue — patient profile of the upcoming case */}
+      <div className="flex flex-col gap-2 px-4">
+        <p className="text-[14px] font-semibold text-black">คิวถัดไป</p>
         {nextCase ? (
-          <NextCaseRow
-            appointment={nextCase}
-            onOpenDetail={() => onOpenPatient(nextCase.patientHN)}
-          />
+          <NextCaseRow appointment={nextCase} onOpenDetail={() => onOpenPatient(nextCase.patientHN)} />
         ) : (
-          <div className="rounded-[16px] bg-[#f6f6f6] px-4 py-3 text-center text-[12px] text-black/55">
-            ไม่มีเคสถัดไป
-          </div>
+          <div className="rounded-[16px] bg-[#f6f6f6] px-4 py-3 text-center text-[12px] text-black/55">ไม่มีคิวถัดไป</div>
         )}
       </div>
+
+      {/* AI review of the next case — only when there's a known patient */}
+      {nextCase && patient && (
+        <>
+          <div className="flex flex-col gap-2">
+            {/* title + chip stacked (column is narrow) */}
+            <div className="flex flex-col gap-1.5 px-4">
+              <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-black/60">
+                สรุปเคสโดย AI
+                {review.loading && <IconLoader2 className="h-3.5 w-3.5 animate-spin" stroke={2} />}
+                {review.blurb && <SpeakButton getText={() => review.blurb} />}
+              </h3>
+              {sinceDate && (
+                <span className="inline-flex w-fit items-center rounded-[12px] bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/60">
+                  ข้อมูลจาก {sinceDate} ถึงปัจจุบัน
+                </span>
+              )}
+            </div>
+
+            <HighlightedReview
+              text={review.blurb}
+              highlights={review.highlights}
+              className="px-4 text-[14px] font-normal leading-relaxed text-black"
+            />
+
+            {/* Abnormal labs — shared gradient purple panel (Figma 1396-18849).
+                Direct child of the unpadded review column so w-full spans the
+                full panel edge-to-edge; flex-1 fills the gradient to the bottom. */}
+            <AbnormalLabsCard labs={abnormalLabs} className="-mb-4 grow shrink-0 rounded-b-none" />
+          </div>
+        </>
+      )}
     </section>
+      {/* bottom fade + scroll-down hint — only when more content below */}
+      <AnimatePresence>
+        {ov.canScrollDown && (
+          <>
+            <motion.div
+              key="fade"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-9 rounded-b-[24px] bg-gradient-to-t from-white/55 via-white/15 to-transparent"
+            />
+            <motion.button
+              key="chevron"
+              type="button"
+              onClick={() => ov.ref.current?.scrollBy({ top: 240, behavior: "smooth" })}
+              aria-label="เลื่อนลง"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: [0, 4, 0] }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ y: { repeat: Infinity, duration: 1.3, ease: "easeInOut" }, opacity: { duration: 0.2 } }}
+              className="absolute bottom-3 left-1/2 z-20 grid h-8 w-8 -translate-x-1/2 place-items-center rounded-full bg-white text-[#3965e1] shadow-[0_4px_14px_rgba(0,0,0,0.16)] transition hover:bg-slate-50"
+            >
+              <IconChevronDown className="h-5 w-5" stroke={2.2} />
+            </motion.button>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -860,29 +925,6 @@ function Legend({ dotColor, label }: { dotColor: string; label: string }) {
   );
 }
 
-// ── Right rail — widgets card ────────────────────────────────────────────
-
-function WidgetsCard() {
-  return (
-    <section className="flex min-h-0 flex-1 flex-col rounded-[24px] bg-white p-4">
-      <header className="mb-3 flex items-center justify-between">
-        <h2 className="text-[16px] font-bold text-black">วิดเจ็ตของฉัน</h2>
-        <button
-          type="button"
-          className="flex items-center gap-1 text-[14px] font-medium text-[#3965e1] hover:underline"
-        >
-          <IconPlus className="h-4 w-4" stroke={2} />
-          เพิ่ม
-        </button>
-      </header>
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-[12px] text-black/45">
-        <div className="h-2 w-32 rounded-full bg-[#d9d9d9]/50" aria-hidden />
-        <div className="h-2 w-24 rounded-full bg-[#d9d9d9]/50" aria-hidden />
-        <p className="mt-2">ยังไม่มีวิดเจ็ต — กด "เพิ่ม" เพื่อเลือก</p>
-      </div>
-    </section>
-  );
-}
 
 // ── Appointment detail modal ─────────────────────────────────────────────
 

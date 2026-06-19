@@ -7,6 +7,7 @@ import MenuPalette, { MenuPaletteHotkey } from "./MenuPalette";
 import CustomizeSidebarModal from "./CustomizeSidebarModal";
 import TabsHost from "./TabsHost";
 import SelectionTTS from "./SelectionTTS";
+import OfflineOverlay from "./OfflineOverlay";
 import { DictationProvider } from "../contexts/DictationContext";
 import DictationIsland from "./DictationIsland";
 import { HeaderSlotProvider } from "../contexts/HeaderSlotContext";
@@ -108,6 +109,7 @@ function AppShellInner() {
       <MenuPaletteHotkey />
       <CustomizeSidebarModal />
       <SelectionTTS />
+      <OfflineOverlay />
     </>
   );
 }

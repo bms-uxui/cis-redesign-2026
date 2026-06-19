@@ -11,6 +11,7 @@ import AutomationBuilder from "./Automation/Builder";
 import Dashboards from "./Dashboards";
 import DashboardView from "./Dashboards/View";
 import PatientOPD from "./PatientOPD";
+import DrNoteConsult from "./PatientOPD/DrNoteConsult";
 import PatientRegister from "./PatientRegister";
 
 /**
@@ -47,6 +48,7 @@ export default function TabsHost() {
               <Route path="/opd" element={<PatientOPD />} />
               <Route path="/opd/register" element={<PatientRegister />} />
               <Route path="/opd/:hn" element={<PatientOPD />} />
+              <Route path="/opd/:hn/consult" element={<DrNoteConsult />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/patient/new" element={<NewPatientByVoice />} />
               <Route path="/patient/new/manual" element={<NewPatientByVoice />} />
