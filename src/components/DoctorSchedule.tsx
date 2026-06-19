@@ -852,7 +852,7 @@ function NextCasePanel({
       {/* AI review of the next case — only when there's a known patient */}
       {nextCase && patient && (
         <>
-          <div className="flex flex-col gap-2">
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
             {/* title + chip stacked (column is narrow) */}
             <div className="flex flex-col gap-1.5 px-4">
               <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-black/60">
