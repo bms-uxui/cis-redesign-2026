@@ -29,10 +29,6 @@ interface SidebarRailProps {
   isPeeking?: boolean;
 }
 
-const RAIL_TOOLTIP_CLASSES = {
-  content:
-    "bg-[var(--theme-neutral)] text-white text-[length:var(--theme-text-xs)] font-medium px-2.5 py-1.5 rounded-lg shadow-[var(--theme-shadow-md)]",
-};
 
 /** Narrow icon column on the left of the sidebar — always white. */
 export default function SidebarRail({
@@ -69,7 +65,6 @@ export default function SidebarRail({
           delay={120}
           closeDelay={0}
           offset={12}
-          classNames={RAIL_TOOLTIP_CLASSES}
         >
           <button
             type="button"

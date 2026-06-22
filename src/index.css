@@ -264,6 +264,24 @@ button:disabled,
   }
 }
 
+/* Unify every HeroUI tooltip to one dark style (matches the "ถามเมย์" pill
+   tooltip) so the whole app is consistent. react-aria puts role="tooltip" on
+   the tooltip ROOT (data-slot="base"); the visible bubble is its child
+   data-slot="content" — so target that descendant (popovers/dialogs use
+   role="dialog", so they're untouched). One source of truth, no per-site
+   classNames. */
+[role="tooltip"] [data-slot="content"],
+[role="tooltip"][data-slot="content"] {
+  background-color: #1f1f1f !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 0.5rem !important;
+  padding: 0.375rem 0.625rem !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+}
+
 /* MUI X Event Calendar — give the day/week time grid more vertical room so
    closely-spaced appointments (15–20 min apart) don't visually collide. */
 .MuiEventCalendar-DayTimeGridContainer {

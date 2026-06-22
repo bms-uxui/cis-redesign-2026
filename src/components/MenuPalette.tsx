@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router";
-import { IconSearch, IconCornerDownLeft, IconSparkles } from "@tabler/icons-react";
+import { IconSearch, IconCornerDownLeft, IconSparkles, IconUser } from "@tabler/icons-react";
 import { useSidebar } from "../contexts/SidebarContext";
 import { useTabs } from "../contexts/TabsContext";
 import {
@@ -10,6 +10,19 @@ import {
   type MenuEntry,
 } from "./Sidebar/menuIndex";
 import { suggestMenuByLLM, type MenuSuggestion } from "../services/ai/menuSuggest";
+import { PATIENTS, type Patient } from "../data/mock/patients";
+
+/** Loose patient lookup by HN or Thai name (prefix/whitespace-insensitive). */
+function searchPatientsLocal(query: string, limit = 6): Patient[] {
+  const q = query.trim().replace(/^(นาย|นาง|นางสาว|ด\.ช\.|ด\.ญ\.|คุณ)/, "").replace(/\s+/g, "").toLowerCase();
+  if (!q) return [];
+  return PATIENTS.filter((p) => {
+    if (p.hn.includes(q) || p.citizenId.replace(/\D/g, "").includes(q)) return true;
+    const full1 = (p.firstName + p.lastName).replace(/\s+/g, "").toLowerCase();
+    const full2 = (p.lastName + p.firstName).replace(/\s+/g, "").toLowerCase();
+    return full1.includes(q) || full2.includes(q);
+  }).slice(0, limit);
+}
 
 const EASE_TV: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -105,10 +118,18 @@ export default function MenuPalette() {
   }, [aiSuggestions]);
   const localCount = results.length;
 
+  // Patient matches — only while typing. Navigable AFTER all menu rows, so the
+  // flat highlight index covers menus [0..combined.length) then patients.
+  const patientResults = useMemo<Patient[]>(
+    () => (query.trim() ? searchPatientsLocal(query) : []),
+    [query],
+  );
+  const totalLen = combined.length + patientResults.length;
+
   // Keep highlight in bounds when results shrink.
   useEffect(() => {
-    if (highlight >= combined.length) setHighlight(Math.max(0, combined.length - 1));
-  }, [combined.length, highlight]);
+    if (highlight >= totalLen) setHighlight(Math.max(0, totalLen - 1));
+  }, [totalLen, highlight]);
 
   const navigate = useNavigate();
   const { openTab } = useTabs();
@@ -126,17 +147,30 @@ export default function MenuPalette() {
     openMenu(entry.railKey, entry.childKey);
   };
 
+  const handleSelectPatient = (p: Patient) => {
+    closePalette();
+    const path = `/opd/${p.hn}`;
+    const title = `${p.prefix}${p.firstName} ${p.lastName}`;
+    openTab(path, { title });
+    navigate(path);
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHighlight((h) => Math.min(combined.length - 1, h + 1));
+      setHighlight((h) => Math.min(totalLen - 1, h + 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setHighlight((h) => Math.max(0, h - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const entry = combined[highlight];
-      if (entry) handleSelect(entry);
+      if (highlight < combined.length) {
+        const entry = combined[highlight];
+        if (entry) handleSelect(entry);
+      } else {
+        const p = patientResults[highlight - combined.length];
+        if (p) handleSelectPatient(p);
+      }
     } else if (e.key === "Escape") {
       e.preventDefault();
       closePalette();
@@ -273,7 +307,7 @@ export default function MenuPalette() {
 
               {/* Results / empty state */}
               <div className="max-h-[min(60vh,440px)] overflow-y-auto">
-                {combined.length === 0 && !aiLoading ? (
+                {totalLen === 0 && !aiLoading ? (
                   <EmptyState query={query} />
                 ) : (
                   <div className="py-2">
@@ -381,6 +415,26 @@ export default function MenuPalette() {
                           })}
                       </motion.div>
                     )}
+                    {patientResults.length > 0 && (
+                      <>
+                        <p className="mt-1 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--theme-neutral)]/45">
+                          ผู้ป่วย
+                        </p>
+                        {patientResults.map((p, i) => {
+                          const idx = combined.length + i;
+                          return (
+                            <PatientRow
+                              key={p.id}
+                              patient={p}
+                              highlighted={idx === highlight}
+                              query={query}
+                              onMouseEnter={() => setHighlight(idx)}
+                              onClick={() => handleSelectPatient(p)}
+                            />
+                          );
+                        })}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -400,7 +454,7 @@ export default function MenuPalette() {
                     <span>เปิด</span>
                   </span>
                 </div>
-                <span>{combined.length > 0 && `${combined.length} รายการ`}</span>
+                <span>{totalLen > 0 && `${totalLen} รายการ`}</span>
               </div>
             </div>
             </div>
@@ -464,8 +518,8 @@ function EmptyState({ query }: { query: string }) {
       </p>
       <p className="text-[length:var(--theme-text-xs)] text-[var(--theme-neutral)]/45">
         {query.trim()
-          ? "ลองคำอื่นหรือชื่อภาษาอังกฤษ"
-          : "เริ่มต้นด้วยชื่อเมนู เช่น Lab, ส่งตรวจ, ส่งต่อ"}
+          ? "ลองคำอื่น ชื่อภาษาอังกฤษ หรือ ชื่อ/HN ผู้ป่วย"
+          : "เริ่มต้นด้วยชื่อเมนู (เช่น Lab, ส่งตรวจ) หรือ ชื่อ/HN ผู้ป่วย"}
       </p>
     </div>
   );
@@ -507,6 +561,45 @@ function ResultRow({ entry, highlighted, query, onMouseEnter, onClick, reason }:
           className="h-3.5 w-3.5 shrink-0 text-[var(--theme-neutral)]/55"
           stroke={1.75}
         />
+      )}
+    </button>
+  );
+}
+
+interface PatientRowProps {
+  patient: Patient;
+  highlighted: boolean;
+  query: string;
+  onMouseEnter: () => void;
+  onClick: () => void;
+}
+
+function PatientRow({ patient, highlighted, query, onMouseEnter, onClick }: PatientRowProps) {
+  const name = `${patient.prefix}${patient.firstName} ${patient.lastName}`;
+  const sub = `HN ${patient.hn} · ${patient.age} ปี · ${patient.gender === "M" ? "ชาย" : "หญิง"}`;
+  return (
+    <button
+      type="button"
+      onMouseEnter={onMouseEnter}
+      onClick={onClick}
+      className={[
+        "flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors duration-150",
+        highlighted ? "bg-[var(--theme-primary-soft)]" : "bg-transparent",
+      ].join(" ")}
+    >
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]">
+        <IconUser className="h-4 w-4" stroke={1.75} />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="truncate text-[length:var(--theme-text-sm)] font-medium text-[var(--theme-neutral)]">
+          <HighlightedText text={name} query={query} />
+        </p>
+        <p className="truncate text-[length:var(--theme-text-xs)] text-[var(--theme-neutral)]/55">
+          <HighlightedText text={sub} query={query} />
+        </p>
+      </div>
+      {highlighted && (
+        <IconCornerDownLeft className="h-3.5 w-3.5 shrink-0 text-[var(--theme-neutral)]/55" stroke={1.75} />
       )}
     </button>
   );

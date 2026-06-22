@@ -26,10 +26,6 @@ import EHP_LOGO from "../../assets/figma/ehp-logo.png";
  * a "lock open" affordance pins it back to the persisted state.
  */
 
-const TOOLTIP_CLASSES = {
-  content:
-    "bg-[var(--theme-neutral)] text-white text-[length:var(--theme-text-xs)] font-medium px-2.5 py-1.5 rounded-lg shadow-[var(--theme-shadow-md)]",
-};
 
 export default function Sidebar() {
   const { openTab } = useTabs();
@@ -231,7 +227,6 @@ export default function Sidebar() {
             placement="bottom"
             delay={120}
             closeDelay={0}
-            classNames={TOOLTIP_CLASSES}
           >
             <button
               type="button"
@@ -334,7 +329,6 @@ export default function Sidebar() {
             placement="top"
             delay={200}
             closeDelay={0}
-            classNames={TOOLTIP_CLASSES}
           >
             <button
               type="button"
