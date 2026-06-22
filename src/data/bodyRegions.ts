@@ -8,6 +8,8 @@ export type BodyRegionId =
   | "head"
   | "neck"
   | "chest"
+  | "r-chest"
+  | "l-chest"
   | "r-hypochondriac"
   | "epigastric"
   | "l-hypochondriac"
@@ -105,8 +107,15 @@ export const BODY_REGIONS: BodyRegion[] = [
     shape: { kind: "ellipse", cx: 241, cy: 66, rx: 18, ry: 18 } },
   { id: "neck", labelTh: "คอ", labelEn: "Neck", group: "head-neck", view: "front",
     shape: { kind: "ellipse", cx: 216, cy: 106, rx: 18, ry: 18 } },
-  { id: "chest", labelTh: "ทรวงอก", labelEn: "Thorax", group: "trunk", view: "front",
-    shape: { kind: "ellipse", cx: 202, cy: 214, rx: 18, ry: 18 } },
+  // Central chest (sternal/mediastinal strip). Flanked by the two pectoral/
+  // breast regions below.
+  { id: "chest", labelTh: "กลางอก (sternum)", labelEn: "Sternal region", group: "trunk", view: "front",
+    shape: { kind: "ellipse", cx: 190, cy: 214, rx: 12, ry: 22 } },
+  // Pectoral / breast, one each side. Patient's right = viewer's left = low x.
+  { id: "r-chest", labelTh: "เต้านม/อกขวา", labelEn: "Right breast", group: "trunk", side: "R", view: "front",
+    shape: { kind: "ellipse", cx: 165, cy: 232, rx: 18, ry: 18 } },
+  { id: "l-chest", labelTh: "เต้านม/อกซ้าย", labelEn: "Left breast", group: "trunk", side: "L", view: "front",
+    shape: { kind: "ellipse", cx: 232, cy: 232, rx: 18, ry: 18 } },
   { id: "r-hypochondriac", labelTh: "ใต้ชายโครงขวา", labelEn: "Right hypochondriac", group: "trunk", side: "R", view: "front",
     shape: { kind: "ellipse", cx: 136, cy: 284, rx: 18, ry: 18 } },
   { id: "epigastric", labelTh: "ลิ้นปี่ (epigastric)", labelEn: "Epigastric", group: "trunk", view: "front",
