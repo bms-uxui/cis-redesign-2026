@@ -105,6 +105,7 @@ import {
   BODY_REGION_BY_ID,
   BODY_REGION_ENUM,
   BODY_VIEWBOX,
+  BODY_VIEWBOX_BACK,
   type BodyRegionId,
 } from "../../data/bodyRegions";
 import {
@@ -4292,6 +4293,20 @@ export function ModelPanel({
     return { vx: cx / BODY_VIEWBOX.width, vy: cy / BODY_VIEWBOX.height, scale: 1.85 };
   }, [highlights]);
 
+  // Dominant (strongest) highlighted region — used to auto-flip the figure to
+  // the side the symptom is on, so an AI-mapped back symptom (e.g. ปวดหลังส่วนล่าง
+  // → b-lower-back) is actually visible without the doctor toggling manually.
+  const dominantId = useMemo(() => {
+    const entries = Object.entries(highlights) as [BodyRegionId, number][];
+    if (!entries.length) return null;
+    return entries.reduce((m, e) => (e[1] > m[1] ? e : m))[0];
+  }, [highlights]);
+  useEffect(() => {
+    if (!dominantId) return;
+    const v = BODY_REGION_BY_ID[dominantId]?.view;
+    if (v) setView(v);
+  }, [dominantId]);
+
   const maxIntensity = Math.max(0, ...Object.values(highlights));
   // Severity from the HPI narrative wins (matches what's written); fall back to
   // the visit's recorded NRS, then a heat-derived estimate.
@@ -4328,8 +4343,13 @@ export function ModelPanel({
   const plot = symptomPlot ?? [];
   const annotating = recording === false && plot.length > 0;
   const annotations = useMemo<BodyAnnotation[]>(
-    () => (annotating ? plot.map((s) => ({ id: s.id, label: s.label, sub: s.cause, color: disp?.fg })) : []),
-    [annotating, plot, disp],
+    () =>
+      annotating
+        ? plot
+            .filter((s) => BODY_REGION_BY_ID[s.id]?.view === view)
+            .map((s) => ({ id: s.id, label: s.label, sub: s.cause, color: disp?.fg }))
+        : [],
+    [annotating, plot, disp, view],
   );
   // Live ZoomPan transform → drives the screen-space callout overlay so the
   // labels stay fully visible (and a constant size) at every zoom/pan.
@@ -4354,20 +4374,23 @@ export function ModelPanel({
             <ZoomPan
               className="flex h-full w-full items-center justify-center overflow-visible"
               focus={view === "front" && !annotating ? focus : null}
-              contentAspect={BODY_VIEWBOX.width / BODY_VIEWBOX.height}
+              contentAspect={
+                (view === "back" ? BODY_VIEWBOX_BACK.width : BODY_VIEWBOX.width) /
+                (view === "back" ? BODY_VIEWBOX_BACK.height : BODY_VIEWBOX.height)
+              }
               contentMaxHeight={annoMaxH}
               onTransform={setTf}
               apiRef={zoomApi}
             >
               <BodyMap
                 view={view}
-                selected={view === "front" ? selected : null}
-                onSelect={view === "front" ? (id) => setSelected((cur) => (cur === id ? null : id)) : undefined}
+                selected={selected}
+                onSelect={(id) => setSelected((cur) => (cur === id ? null : id))}
                 // Only tint the model when there's an actual localized symptom
                 // (same signal as the "ไม่มีอาการเฉพาะที่" label). Chronic-disease
                 // context alone (e.g. ความดันโลหิตสูง) must NOT colour the chest.
-                highlights={view === "front" && disp ? scaledHighlights : undefined}
-                highlightColor={view === "front" ? disp?.fg : undefined}
+                highlights={disp ? scaledHighlights : undefined}
+                highlightColor={disp?.fg}
                 photoRegions={view === "front" ? currentPhotoRegions : []}
                 onPhotoClick={setPhotoRegion}
                 className="h-full max-h-[560px]"
@@ -4384,13 +4407,16 @@ export function ModelPanel({
         <ZoomControls api={zoomApi} />
 
         {/* Symptom callouts — screen-space, always visible at any zoom/pan */}
-        {view === "front" && annotating && (
+        {annotating && annotations.length > 0 && (
           <SymptomCallouts
             items={annotations}
             tf={tf}
-            contentAspect={BODY_VIEWBOX.width / BODY_VIEWBOX.height}
+            contentAspect={
+              (view === "back" ? BODY_VIEWBOX_BACK.width : BODY_VIEWBOX.width) /
+              (view === "back" ? BODY_VIEWBOX_BACK.height : BODY_VIEWBOX.height)
+            }
             contentMaxHeight={annoMaxH}
-            vb={BODY_VIEWBOX}
+            vb={view === "back" ? BODY_VIEWBOX_BACK : BODY_VIEWBOX}
           />
         )}
       </div>

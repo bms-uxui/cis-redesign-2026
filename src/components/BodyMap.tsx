@@ -10,7 +10,12 @@ import {
 } from "../data/bodyRegions";
 import FRONT_FIGURE from "../assets/figma/body/adult-man-front.svg";
 import BACK_FIGURE from "../assets/figma/body/adult-man-back.svg";
-import { BODY_FRONT_REGION_PATHS, BODY_FRONT_ABDOMEN_CLIP } from "../assets/figma/body/frontParts";
+import {
+  BODY_FRONT_REGION_PATHS,
+  BODY_FRONT_ABDOMEN_CLIP,
+  BODY_FRONT_OCCLUDERS,
+} from "../assets/figma/body/frontParts";
+import { BODY_BACK_REGION_PATHS, BODY_BACK_OCCLUDERS } from "../assets/figma/body/backParts";
 
 /** The nine abdomen regions. */
 const ABDOMEN_IDS = new Set<BodyRegionId>([
@@ -28,6 +33,17 @@ const ABDOMEN_TINT: Partial<Record<BodyRegionId, string>> = {
   "r-hypochondriac": "#CFCFD4", "epigastric": "#BCBCC3", "l-hypochondriac": "#CFCFD4",
   "r-lumbar":        "#BCBCC3", "umbilical":  "#CFCFD4", "l-lumbar":        "#BCBCC3",
   "r-iliac":         "#CFCFD4", "hypogastric": "#BCBCC3", "l-iliac":        "#CFCFD4",
+};
+
+/** Back-trunk panels (Figma division). DEBUG: outlined so positioning can be
+ *  inspected; set to false to go back to the line-free tonal mosaic. */
+const BACK_PANEL_IDS = new Set<BodyRegionId>(["bul", "bur", "bll", "blc", "blr"]);
+const BACK_PANEL_DEBUG_OUTLINE = false;
+
+/** Shown as a tonal mosaic — green uppers, lavender lowers. */
+const BACK_TINT: Partial<Record<BodyRegionId, string>> = {
+  "bul": "#C4D2B2", "bur": "#B8C8A4",
+  "bll": "#D4BFD6", "blc": "#C8B2CB", "blr": "#D4BFD6",
 };
 
 /**
@@ -136,29 +152,45 @@ export default function BodyMap({
       >
         {/* Clip the 9 abdomen-grid cells to the abdomen vector so they stay
             inside the belly (no overflow onto the arms / outside the model). */}
-        {view === "front" && (
-          <defs>
+        <defs>
+          {view === "front" && (
             <clipPath id="bm-abdomen-clip">
               <path d={BODY_FRONT_ABDOMEN_CLIP} />
             </clipPath>
-          </defs>
-        )}
-
+          )}
+          {/* Some patches overlap a neighbour (e.g. the upper-arm patch dips
+              over the elbow patch; the thigh patch covers the groin/hip).
+              Subtract the neighbour's paths from this region with a clipPath
+              — full-canvas rect + the occluder subpaths under one even-odd
+              path, so the overlap is cut out of BOTH the fill AND the
+              pointer-hit area (a <mask> only hides the fill, leaving the
+              region still grabbing the hover). Both views. */}
+          {Object.entries(view === "back" ? BODY_BACK_OCCLUDERS : BODY_FRONT_OCCLUDERS).map(
+            ([id, occluders]) => {
+              const regionPaths = view === "back" ? BODY_BACK_REGION_PATHS : BODY_FRONT_REGION_PATHS;
+              const holes = occluders.flatMap((occId) => regionPaths[occId] ?? []).join(" ");
+              return (
+                <clipPath key={id} id={`bm-clip-${id}`} clipPathUnits="userSpaceOnUse">
+                  <path clipRule="evenodd" d={`M0 0H${vb.width}V${vb.height}H0Z ${holes}`} />
+                </clipPath>
+              );
+            },
+          )}
+        </defs>
         {/* Per-region fill of the ACTUAL figure vectors. A symptom highlight
             paints the real body-part path(s) (multiply blend tints the part);
-            hover / select paint a theme-primary wash. Front figure only — the
-            artwork is segmented per part. */}
-        {view === "front" &&
-          regions.map((region) => {
-            const paths = BODY_FRONT_REGION_PATHS[region.id];
+            hover / select paint a theme-primary wash. Both figures are
+            segmented per part (front + back colour patches). */}
+        {regions.map((region) => {
+            const paths = (view === "back" ? BODY_BACK_REGION_PATHS : BODY_FRONT_REGION_PATHS)[region.id];
             if (!paths || paths.length === 0) return null;
             const intensity = highlights?.[region.id] ?? 0;
             const isHeat = intensity > 0;
             const isSelected = selected === region.id;
             const isHovered = hovered === region.id;
-            // Abdomen cells carry a base tonal tint (checkerboard) so the
-            // 9-region grid shows as a mosaic, not drawn lines.
-            const abTint = ABDOMEN_TINT[region.id];
+            // Abdomen (front) + back-trunk grid cells carry a base tonal tint
+            // (checkerboard) so the grid shows as a mosaic, not drawn lines.
+            const abTint = view === "back" ? BACK_TINT[region.id] : ABDOMEN_TINT[region.id];
             const fill = isHeat
               ? (highlightColor ?? heatColor(intensity))
               : !isSelected && !isHovered && abTint
@@ -171,12 +203,21 @@ export default function BodyMap({
                 : isHovered
                   ? 0.2
                   : 0;
-            const abOutline = ABDOMEN_IDS.has(region.id);
+            // Abdomen cells get a faint outline; back panels are line-free
+            // unless the debug flag is on (to inspect positioning).
+            const backDebug = BACK_PANEL_DEBUG_OUTLINE && BACK_PANEL_IDS.has(region.id);
+            const abOutline = ABDOMEN_IDS.has(region.id) || backDebug;
             return (
               <g
                 key={region.id}
                 className={interactive ? "cursor-pointer" : ""}
-                clipPath={ABDOMEN_IDS.has(region.id) ? "url(#bm-abdomen-clip)" : undefined}
+                clipPath={
+                  ABDOMEN_IDS.has(region.id)
+                    ? "url(#bm-abdomen-clip)"
+                    : (view === "back" ? BODY_BACK_OCCLUDERS : BODY_FRONT_OCCLUDERS)[region.id]
+                      ? `url(#bm-clip-${region.id})`
+                      : undefined
+                }
                 style={{ mixBlendMode: isHeat ? "multiply" : "normal" }}
                 onClick={interactive ? () => onSelect?.(region.id, region) : undefined}
                 onMouseEnter={interactive ? () => setHovered(region.id) : undefined}
@@ -191,10 +232,10 @@ export default function BodyMap({
                     style={{
                       fill,
                       fillOpacity,
-                      // darker shade of the abdomen's own lavender (#CFC1D9)
-                      stroke: abOutline ? "#C4C4C9" : undefined,
-                      strokeWidth: abOutline ? 0.4 : undefined,
-                      strokeOpacity: abOutline ? 0.5 : undefined,
+                      // back-panel debug = bright red; abdomen = faint grey
+                      stroke: backDebug ? "#e11d48" : abOutline ? "#C4C4C9" : undefined,
+                      strokeWidth: backDebug ? 1.4 : abOutline ? 0.4 : undefined,
+                      strokeOpacity: backDebug ? 0.95 : abOutline ? 0.5 : undefined,
                       vectorEffect: abOutline ? "non-scaling-stroke" : undefined,
                       pointerEvents: "all",
                       transition: "fill-opacity 250ms ease, fill 250ms ease",
