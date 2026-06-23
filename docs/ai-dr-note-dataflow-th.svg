@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1340 820" font-family="-apple-system, Segoe UI, Sukhumvit Set, Thonburi, sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a93a0"/></marker>
+    <marker id="arC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#d9a521"/></marker>
+    <marker id="arL" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#28a35a"/></marker>
+    <style>
+      .title{font-size:24px;font-weight:800;fill:#111827}
+      .sub{font-size:14px;fill:#6b7280}
+      .h{font-size:16px;font-weight:800}
+      .d{font-size:12.5px;fill:#475569}
+      .num{font-size:14px;font-weight:800;fill:#fff}
+      .lbl{font-size:14px;font-weight:800;fill:#6b7280}
+      .pill{font-size:12px;font-weight:700;fill:#8a6d12}
+      .flow{stroke:#8a93a0;stroke-width:2.2;fill:none}
+      .ctx{stroke:#d9a521;stroke-width:1.8;fill:none;stroke-dasharray:5 4}
+      .loop{stroke:#28a35a;stroke-width:1.8;fill:none;stroke-dasharray:6 4}
+      .code{font-family:"SF Mono",Menlo,monospace;font-size:11px;fill:#1f3a2e}
+    </style>
+  </defs>
+
+  <rect width="1340" height="820" fill="#f7f8fa"/>
+  <text x="40" y="42" class="title">AI Dr. Note — ข้อมูลถูกส่งต่อและประมวลผลอย่างไร</text>
+  <text x="40" y="66" class="sub">ตามรอยข้อมูล: เสียง → ข้อความ → สรุปด้วย AI → แผนการรักษา → บันทึก   (ป้ายเหลือง = ข้อมูลที่ไหลบนลูกศร)</text>
+
+  <!-- ===== helper: card = w270 h84 ; rows y=104/292/480 ; cols x=40/360/680/1000 ===== -->
+
+  <!-- ROW 1 : capture (left -> right) -->
+  <g>
+    <rect x="40" y="104" width="270" height="84" rx="14" fill="#fff" stroke="#2f7bf6" stroke-width="2"/>
+    <circle cx="66" cy="130" r="14" fill="#2f7bf6"/><text x="66" y="135" text-anchor="middle" class="num">1</text>
+    <text x="90" y="135" class="h" fill="#1b4a99">ไมค์ / แท็บ</text>
+    <text x="58" y="170" class="d">รับเสียงการสนทนาหมอ–คนไข้</text>
+
+    <rect x="360" y="104" width="270" height="84" rx="14" fill="#fff" stroke="#2f7bf6" stroke-width="2"/>
+    <circle cx="386" cy="130" r="14" fill="#2f7bf6"/><text x="386" y="135" text-anchor="middle" class="num">2</text>
+    <text x="410" y="135" class="h" fill="#1b4a99">ตัวอัดเสียง</text>
+    <text x="378" y="170" class="d">ตัดเป็นก้อนเสียงสั้น ๆ ต่อเนื่อง</text>
+
+    <rect x="680" y="104" width="270" height="84" rx="14" fill="#fff" stroke="#28a35a" stroke-width="2"/>
+    <circle cx="706" cy="130" r="14" fill="#28a35a"/><text x="706" y="135" text-anchor="middle" class="num">3</text>
+    <text x="730" y="135" class="h" fill="#1c6b3c">ถอดเสียง (ASR)</text>
+    <text x="698" y="170" class="d">แปลงเสียงพูด → ข้อความ</text>
+
+    <rect x="1000" y="104" width="270" height="84" rx="14" fill="#fff" stroke="#28a35a" stroke-width="2"/>
+    <circle cx="1026" cy="130" r="14" fill="#28a35a"/><text x="1026" y="135" text-anchor="middle" class="num">4</text>
+    <text x="1050" y="135" class="h" fill="#1c6b3c">แยกผู้พูด (AI)</text>
+    <text x="1018" y="170" class="d">ระบุว่าเป็นหมอหรือคนไข้</text>
+  </g>
+
+  <!-- ROW 2 : process (right -> left) -->
+  <g>
+    <rect x="1000" y="292" width="270" height="84" rx="14" fill="#fff" stroke="#7b8794" stroke-width="2"/>
+    <circle cx="1026" cy="318" r="14" fill="#7b8794"/><text x="1026" y="323" text-anchor="middle" class="num">5</text>
+    <text x="1050" y="323" class="h" fill="#3f4954">บทสนทนาสะสม</text>
+    <text x="1018" y="358" class="d">เก็บรวมไว้ (กันรีเฟรชหาย)</text>
+
+    <rect x="680" y="292" width="270" height="84" rx="14" fill="#fff" stroke="#28a35a" stroke-width="2"/>
+    <circle cx="706" cy="318" r="14" fill="#28a35a"/><text x="706" y="323" text-anchor="middle" class="num">6</text>
+    <text x="730" y="323" class="h" fill="#1c6b3c">AI สกัดข้อมูล (LLM)</text>
+    <text x="698" y="358" class="d">สรุป อาการ · ประวัติ · ยา</text>
+
+    <rect x="360" y="292" width="270" height="84" rx="14" fill="#fff" stroke="#2f7bf6" stroke-width="2"/>
+    <circle cx="386" cy="318" r="14" fill="#2f7bf6"/><text x="386" y="323" text-anchor="middle" class="num">7</text>
+    <text x="410" y="323" class="h" fill="#1b4a99">อัปเดตหน้าจอสด</text>
+    <text x="378" y="358" class="d">แสดงสรุป + ปักจุดบนรูปร่างกาย</text>
+  </g>
+
+  <!-- ROW 3 : after stop (left -> right) + EHR context -->
+  <g>
+    <rect x="40" y="480" width="270" height="84" rx="14" fill="#fff" stroke="#28a35a" stroke-width="2"/>
+    <circle cx="66" cy="506" r="14" fill="#28a35a"/><text x="66" y="511" text-anchor="middle" class="num">8</text>
+    <text x="90" y="511" class="h" fill="#1c6b3c">วินิจฉัย ICD-10</text>
+    <text x="58" y="546" class="d">ค้นรหัสโรค (ฐานกลาง → ในเครื่อง)</text>
+
+    <rect x="360" y="480" width="270" height="84" rx="14" fill="#fff" stroke="#28a35a" stroke-width="2"/>
+    <circle cx="386" cy="506" r="14" fill="#28a35a"/><text x="386" y="511" text-anchor="middle" class="num">9</text>
+    <text x="410" y="511" class="h" fill="#1c6b3c">ร่างแผนการรักษา (AI)</text>
+    <text x="378" y="546" class="d">ยา · แล็บ · ใบรับรอง · นัด</text>
+
+    <rect x="680" y="480" width="270" height="84" rx="14" fill="#fff" stroke="#7b8794" stroke-width="2"/>
+    <circle cx="706" cy="506" r="14" fill="#7b8794"/><text x="700" y="511" text-anchor="middle" class="num">10</text>
+    <text x="730" y="511" class="h" fill="#3f4954">บันทึกเข้าแฟ้ม</text>
+    <text x="698" y="546" class="d">เก็บ Dr.Note + แผน เข้าระบบ</text>
+
+    <rect x="1000" y="480" width="270" height="84" rx="14" fill="#fff8e6" stroke="#e6c34a" stroke-width="2"/>
+    <text x="1018" y="508" class="h" fill="#8a6d12">ข้อมูลคนไข้ (EHR)</text>
+    <text x="1018" y="530" class="d" fill="#6b5410">ประวัติ · ยาเดิม · ผลแล็บ · นัด</text>
+    <text x="1018" y="552" class="d" fill="#6b5410">ส่งให้ AI เป็น “บริบท”</text>
+  </g>
+
+  <!-- ===== FLOW ARROWS + DATA PILLS ===== -->
+  <!-- row1 chain -->
+  <path class="flow" d="M310 146 H360" marker-end="url(#ar)"/>
+  <path class="flow" d="M630 146 H680" marker-end="url(#ar)"/>
+  <path class="flow" d="M950 146 H1000" marker-end="url(#ar)"/>
+  <!-- row1 -> row2 -->
+  <path class="flow" d="M1135 188 V292" marker-end="url(#ar)"/>
+  <!-- row2 chain (leftward) -->
+  <path class="flow" d="M1000 334 H950" marker-end="url(#ar)"/>
+  <path class="flow" d="M680 334 H630" marker-end="url(#ar)"/>
+  <!-- realtime loop 7 -> 5 -->
+  <path class="loop" d="M495 292 C 560 250, 1070 250, 1135 292" marker-end="url(#arL)"/>
+  <text x="815" y="244" text-anchor="middle" class="pill" fill="#1c6b3c">วนซ้ำทุกไม่กี่วินาทีขณะอัดเสียง (เรียลไทม์)</text>
+  <!-- row2 -> row3 : when doctor presses finish -->
+  <path class="flow" d="M430 376 V428 H175 V480" marker-end="url(#ar)"/>
+  <!-- row3 chain -->
+  <path class="flow" d="M310 522 H360" marker-end="url(#ar)"/>
+  <path class="flow" d="M630 522 H680" marker-end="url(#ar)"/>
+
+  <!-- context arrows from EHR -->
+  <path class="ctx" d="M1135 480 V410 H815 V376" marker-end="url(#arC)"/>
+  <path class="ctx" d="M1000 522 H630" marker-end="url(#arC)"/>
+
+  <!-- ===== DATA PILLS (yellow) on arrows ===== -->
+  <g>
+    <rect x="288" y="116" width="94" height="22" rx="11" fill="#fff3cf" stroke="#e6c34a"/><text x="335" y="131" text-anchor="middle" class="pill">คลื่นเสียง</text>
+    <rect x="588" y="116" width="134" height="22" rx="11" fill="#fff3cf" stroke="#e6c34a"/><text x="655" y="131" text-anchor="middle" class="pill">ไฟล์เสียง WAV (ก้อน)</text>
+    <rect x="912" y="116" width="126" height="22" rx="11" fill="#fff3cf" stroke="#e6c34a"/><text x="975" y="131" text-anchor="middle" class="pill">ข้อความดิบ (ยังไม่รู้ผู้พูด)</text>
+    <rect x="1060" y="228" width="200" height="22" rx="11" fill="#fff3cf" stroke="#e6c34a"/><text x="1160" y="243" text-anchor="middle" class="pill">บทสนทนา {ผู้พูด, ข้อความ}</text>
+    <rect x="912" y="356" width="146" height="22" rx="11" fill="#fff3cf" stroke="#e6c34a"/><text x="985" y="371" text-anchor="middle" class="pill">บทสนทนาทั้งหมด</text>
+    <rect x="596" y="356" width="160" height="22" rx="11" fill="#fff3cf" stroke="#e6c34a"/><text x="676" y="371" text-anchor="middle" class="pill">JSON สรุป {อาการ, ยา}</text>
+    <rect x="56" y="436" width="172" height="22" rx="11" fill="#fff3cf" stroke="#e6c34a"/><text x="142" y="451" text-anchor="middle" class="pill">เมื่อหมอกด “จบ / สรุป”</text>
+    <rect x="304" y="500" width="116" height="22" rx="11" fill="#fff3cf" stroke="#e6c34a"/><text x="362" y="515" text-anchor="middle" class="pill">รหัสโรค ICD-10</text>
+    <rect x="612" y="500" width="146" height="22" rx="11" fill="#fff3cf" stroke="#e6c34a"/><text x="685" y="515" text-anchor="middle" class="pill">แผนการรักษา (JSON)</text>
+  </g>
+
+  <!-- ===== HOW LLM PROCESSES (callout) ===== -->
+  <rect x="996" y="292" width="0" height="0"/>
+  <text x="40" y="612" class="lbl">ตัวอย่างข้อมูลจริงที่ส่งต่อในแต่ละขั้น (AI ทำงานโดย: คำสั่ง + บทสนทนา + บริบทคนไข้ → ได้ผลเป็น JSON ที่ระบบนำไปใช้ต่อทันที)</text>
+  <g>
+    <rect x="40" y="624" width="400" height="150" rx="12" fill="#eef7f0" stroke="#28a35a"/>
+    <text x="58" y="650" class="h" fill="#1c6b3c">① หลังแยกผู้พูด (ขั้น 4)</text>
+    <text x="58" y="676" class="code">[</text>
+    <text x="72" y="694" class="code">{ "speaker": 2, "text": "ปวดหัวมา 3 วัน" },</text>
+    <text x="72" y="712" class="code">{ "speaker": 1, "text": "มีไข้ร่วมไหม" },</text>
+    <text x="72" y="730" class="code">{ "speaker": 2, "text": "มีไข้ต่ำ ๆ ตอนเย็น" }</text>
+    <text x="58" y="748" class="code">]</text>
+
+    <rect x="468" y="624" width="400" height="150" rx="12" fill="#eef7f0" stroke="#28a35a"/>
+    <text x="486" y="650" class="h" fill="#1c6b3c">② หลัง AI สกัด (ขั้น 6)</text>
+    <text x="486" y="676" class="code">{</text>
+    <text x="500" y="694" class="code">"cc": "ปวดศีรษะ 3 วัน",</text>
+    <text x="500" y="712" class="code">"hpi": "ปวดตื้อ มีไข้ต่ำตอนเย็น...",</text>
+    <text x="500" y="730" class="code">"meds": ["พาราเซตามอล"]</text>
+    <text x="486" y="748" class="code">}</text>
+
+    <rect x="896" y="624" width="404" height="150" rx="12" fill="#eef7f0" stroke="#28a35a"/>
+    <text x="914" y="650" class="h" fill="#1c6b3c">③ ร่างแผน (ขั้น 9)</text>
+    <text x="914" y="676" class="code">{</text>
+    <text x="928" y="694" class="code">"medications": [{ "name": "Paracetamol",</text>
+    <text x="942" y="712" class="code">"usage": "1x3 pc", "qty": "500 mg" }],</text>
+    <text x="928" y="730" class="code">"labs": [], "appointmentDays": 7</text>
+    <text x="914" y="748" class="code">}</text>
+  </g>
+
+  <!-- legend strip -->
+  <g transform="translate(40,792)">
+    <line x1="0" y1="0" x2="34" y2="0" class="flow"/><text x="42" y="4" class="d">การไหลของข้อมูล</text>
+    <line x1="200" y1="0" x2="234" y2="0" class="loop"/><text x="242" y="4" class="d">วนซ้ำเรียลไทม์</text>
+    <line x1="380" y1="0" x2="414" y2="0" class="ctx"/><text x="422" y="4" class="d">บริบทคนไข้เข้า prompt</text>
+    <rect x="610" y="-9" width="20" height="16" rx="8" fill="#fff3cf" stroke="#e6c34a"/><text x="638" y="4" class="d">รูปแบบข้อมูลบนลูกศร</text>
+  </g>
+</svg>

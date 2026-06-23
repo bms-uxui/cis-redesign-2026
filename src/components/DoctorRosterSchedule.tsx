@@ -7,6 +7,7 @@ import type {
   SchedulerEventColor,
 } from "@mui/x-scheduler/models";
 import type { Appointment, AppointmentStatus } from "../data/mock/operational";
+import { useTheme } from "../contexts/ThemeContext";
 
 /**
  * Today's patient-appointment queue on the MUI X Event Calendar
@@ -17,17 +18,39 @@ import type { Appointment, AppointmentStatus } from "../data/mock/operational";
  * MIT (community plan) — no licence key, unlike Syncfusion.
  */
 
-// "Neutral vibes" — soft grey MUI theme, mirroring the docs demo palette.
-const neutralTheme = createTheme({
-  palette: {
-    primary: { main: "#3f3f46" }, // zinc-700
-    background: { default: "#fafafa", paper: "#ffffff" },
-    divider: "rgba(0,0,0,0.08)",
-    text: { primary: "#27272a", secondary: "#71717a" },
-  },
-  shape: { borderRadius: 12 },
-  typography: { fontFamily: "inherit" },
-});
+/** Relative luminance of a hex colour (0 = black, 1 = white). */
+function hexLuminance(hex: string): number {
+  const m = hex.replace("#", "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return 1;
+  const [r, g, b] = [m[1], m[2], m[3]].map((h) => parseInt(h, 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Build a MUI theme that mirrors the app's current colour tokens so the
+ *  scheduler follows light/dark with the rest of the chrome. */
+function useSchedulerTheme() {
+  const { colors } = useTheme();
+  return useMemo(() => {
+    // ThemeProvider sets data-mode on <html>; trust it, fall back to luminance.
+    const domMode =
+      typeof document !== "undefined" ? document.documentElement.dataset.mode : undefined;
+    const dark = domMode ? domMode === "dark" : hexLuminance(colors.base) < 0.5;
+    return createTheme({
+      palette: {
+        mode: dark ? "dark" : "light",
+        primary: { main: colors.primary },
+        background: { default: colors.base, paper: colors.surface },
+        divider: dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
+        text: {
+          primary: colors.neutral,
+          secondary: dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.55)",
+        },
+      },
+      shape: { borderRadius: 12 },
+      typography: { fontFamily: "inherit" },
+    });
+  }, [colors]);
+}
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const localISO = (dt: Date) =>
@@ -88,6 +111,7 @@ export default function DoctorRosterSchedule({
   /** Open a patient's case (consult) when their appointment card is clicked. */
   onOpenCase?: (hn: string) => void;
 }) {
+  const muiTheme = useSchedulerTheme();
   const initial = useMemo<SchedulerEvent[]>(() => {
     const slots = Math.floor((WORK_END - WORK_START) / 60); // hours available
     const sorted = [...appointments]
@@ -186,7 +210,7 @@ export default function DoctorRosterSchedule({
   }, [events]);
 
   return (
-    <ThemeProvider theme={neutralTheme}>
+    <ThemeProvider theme={muiTheme}>
       <div ref={rootRef} className="h-full min-h-0 w-full overflow-hidden p-4 sm:p-5">
         <EventCalendar
           events={events}

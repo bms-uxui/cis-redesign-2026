@@ -25,7 +25,7 @@ export const FONT_OPTIONS: FontOption[] = [
   { id: "noto-thai-looped", label: "Noto Sans Thai Looped", stack: `"Noto Sans Thai Looped", ${THAI_FALLBACK}` },
 ];
 
-export const DEFAULT_FONT_ID = "sukhumvit";
+export const DEFAULT_FONT_ID = "sarabun";
 
 export function fontStack(id: string): string {
   return (FONT_OPTIONS.find((f) => f.id === id) ?? FONT_OPTIONS[0]).stack;

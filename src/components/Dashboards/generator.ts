@@ -22,7 +22,12 @@ import type { Dashboard, WidgetKind, WidgetOutput } from "./types";
 // supports which kind, the compatibility text in the prompt, the validator
 // sets) is derived from `DataSourceDef.outputs` in catalog.ts.
 
-const KIND_TO_OUTPUT: Record<Exclude<WidgetKind, "info">, WidgetOutput> = {
+/** Widget kinds that are self-contained (own chrome, fetch a single patient by
+ *  HN) — they take no data source, like "info". */
+const PATIENT_KINDS: WidgetKind[] = ["patient-card", "patient-lab-trend"];
+
+type DataKind = Exclude<WidgetKind, "info" | "patient-card" | "patient-lab-trend">;
+const KIND_TO_OUTPUT: Record<DataKind, WidgetOutput> = {
   kpi: "kpi",
   "line-chart": "points",
   "bar-chart": "points",
@@ -46,13 +51,14 @@ const layoutSchema = z.object({
 
 const widgetSchema = z.object({
   id: z.string(),
-  kind: z.enum(["kpi", "line-chart", "bar-chart", "table", "info"]),
+  kind: z.enum(["kpi", "line-chart", "bar-chart", "table", "info", "patient-card", "patient-lab-trend"]),
   title: z.string(),
   source: z.enum(["", ...sourceIds] as [string, ...string[]]),
   groupBy: z.string().optional(),
   metric: z.string().optional(),
   filters: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   message: z.string().optional(),
+  props: z.record(z.string(), z.unknown()).optional(),
   layout: layoutSchema,
 });
 
@@ -149,7 +155,7 @@ function buildSystemPrompt(): string {
   // Compatibility lines built from `DataSourceDef.outputs`. Single source of
   // truth — adding a source to catalog.ts updates the prompt automatically.
   const compatLines = (
-    Object.entries(KIND_TO_OUTPUT) as [Exclude<WidgetKind, "info">, WidgetOutput][]
+    Object.entries(KIND_TO_OUTPUT) as [DataKind, WidgetOutput][]
   )
     .map(([kind, out]) => `- ${kind}: ${sourcesFor(out).join(", ")}`)
     .join("\n");
@@ -169,15 +175,19 @@ The user writes a natural-language prompt (Thai or English). Your output is vali
 # Widget schema
 {
   "id": string,                  // unique per dashboard (w1, w2, ...)
-  "kind": "kpi" | "line-chart" | "bar-chart" | "table" | "info",
+  "kind": "kpi" | "line-chart" | "bar-chart" | "table" | "info" | "patient-card" | "patient-lab-trend",
   "title": string,
-  "source": string,              // data source id (empty string only when kind="info")
+  "source": string,              // data source id (empty string for kind="info"|"patient-card"|"patient-lab-trend")
   "groupBy"?: string,
   "metric"?: string,
   "filters"?: { ... },
   "message"?: string,            // REQUIRED when kind="info"
+  "props"?: { "hn": string },    // REQUIRED for "patient-card"/"patient-lab-trend" — the patient's HN
   "layout": { "col": 1|2|3|4, "row": number, "w": 1|2|3|4, "h": number }
 }
+
+# Patient cards (generative UI)
+- "patient-card" and "patient-lab-trend" focus on ONE specific patient. Set source="" and props.hn to that patient's HN (e.g. "00014077"). Use them when the prompt names/identifies a single patient (e.g. "แดชบอร์ดของคนไข้ HN 00014077", "สรุปผู้ป่วยรายนี้ + กราฟผลแลป"). For cohorts/aggregates use the data-source kinds instead.
 
 # Widget kinds
 ${widgets}
@@ -302,11 +312,18 @@ function postValidate(d: GeneratedDashboard): string[] {
         errors.push(`widget[${i}] info widget needs "message" string`);
       return;
     }
+    if (PATIENT_KINDS.includes(w.kind)) {
+      if (!w.props?.hn || typeof w.props.hn !== "string")
+        errors.push(`widget[${i}] kind="${w.kind}" needs props.hn (the patient's HN string)`);
+      if (w.layout.col + w.layout.w - 1 > 4)
+        errors.push(`widget[${i}] overflows grid (col=${w.layout.col}, w=${w.layout.w})`);
+      return;
+    }
     if (!w.source) {
       errors.push(`widget[${i}] missing source`);
       return;
     }
-    const required = KIND_TO_OUTPUT[w.kind];
+    const required = KIND_TO_OUTPUT[w.kind as DataKind];
     const available = SOURCE_OUTPUTS.get(w.source);
     if (!available?.has(required))
       errors.push(

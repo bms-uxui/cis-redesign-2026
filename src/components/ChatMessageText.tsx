@@ -1,4 +1,6 @@
 import { Fragment, type ReactNode } from "react";
+import PatientProfileCard from "./PatientProfileCard";
+import LabTrendCard from "./LabTrendCard";
 
 /**
  * Lightweight chat markdown renderer — enough for Mae's replies without
@@ -19,6 +21,9 @@ interface ChatMessageTextProps {
 const BULLET_RE = /^\s*[-*•]\s+(.*)$/;
 const ORDERED_RE = /^\s*\d+[.)]\s+(.*)$/;
 const QUOTE_RE = /^\s*>\s?(.*)$/;
+/** Generative-UI directives on their own line render a React card. */
+const PATIENT_CARD_RE = /^\s*::patient\s+([A-Za-z0-9]+)::\s*$/;
+const LAB_CHART_RE = /^\s*::labs\s+([A-Za-z0-9]+)::\s*$/;
 /** A table separator like `|---|:--:|` (the 2nd line of a GFM table). */
 const TABLE_SEP_RE = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 
@@ -75,6 +80,23 @@ function renderBlocks(text: string, onNavigate?: (p: string) => void): ReactNode
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
+
+    // Generative-UI directive → render a React card instead of text.
+    const card = raw.match(PATIENT_CARD_RE);
+    if (card) {
+      flushPara();
+      flushList();
+      blocks.push(<PatientProfileCard key={`pc${key++}`} hn={card[1]} onNavigate={onNavigate} />);
+      continue;
+    }
+    const labChart = raw.match(LAB_CHART_RE);
+    if (labChart) {
+      flushPara();
+      flushList();
+      blocks.push(<LabTrendCard key={`lc${key++}`} hn={labChart[1]} />);
+      continue;
+    }
+
     const bullet = raw.match(BULLET_RE);
     const ordered = raw.match(ORDERED_RE);
     const quote = raw.match(QUOTE_RE);

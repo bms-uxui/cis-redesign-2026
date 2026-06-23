@@ -685,7 +685,7 @@ export default function ERRegister() {
         ].join(" ")}
       >
         {/* ── Stepper + actions bar (Figma 1431:3835) ───────────────────── */}
-        <div className="flex h-[50px] shrink-0 items-center justify-between rounded-2xl border border-[#dadada] bg-white p-2">
+        <div className="flex h-[50px] shrink-0 items-center justify-between rounded-2xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-2">
           <div className="flex min-w-px flex-1 items-center gap-1">
             <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#3eaf3f] px-4 py-2 text-[14px] font-medium text-white">
               <IconCircleCheck className="h-4 w-4" stroke={2} />
@@ -709,7 +709,7 @@ export default function ERRegister() {
             <IconChevronRight className="h-4 w-4 text-[var(--theme-neutral)]/40" stroke={2} />
             <span
               className={`rounded-xl px-4 py-2 text-[14px] font-medium ${
-                review ? "bg-[var(--theme-primary)]/10 text-[var(--theme-primary)]" : "text-black/50"
+                review ? "bg-[var(--theme-primary)]/10 text-[var(--theme-primary)]" : "text-[var(--theme-neutral)]/50"
               }`}
             >
               ตรวจสอบข้อมูล
@@ -721,7 +721,7 @@ export default function ERRegister() {
                 <button
                   type="button"
                   onClick={() => setReview(false)}
-                  className="rounded-full px-4 py-2 text-[14px] font-medium text-black transition hover:bg-[var(--theme-neutral)]/8"
+                  className="rounded-full px-4 py-2 text-[14px] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-neutral)]/8"
                 >
                   กลับไปแก้ไข
                 </button>
@@ -739,7 +739,7 @@ export default function ERRegister() {
                 <button
                   type="button"
                   onClick={() => navigate("/patient/new")}
-                  className="w-[124px] rounded-full px-4 py-2 text-[14px] font-medium text-black transition hover:bg-[var(--theme-neutral)]/8"
+                  className="w-[124px] rounded-full px-4 py-2 text-[14px] font-medium text-[var(--theme-neutral)] transition hover:bg-[var(--theme-neutral)]/8"
                 >
                   ยกเลิก
                 </button>
@@ -771,7 +771,7 @@ export default function ERRegister() {
                     type="checkbox"
                     checked={form.unknownIdentity}
                     onChange={(e) => set("unknownIdentity", e.target.checked)}
-                    className="peer h-[18px] w-[18px] cursor-pointer appearance-none rounded-[5px] border-2 border-white bg-transparent transition checked:bg-white"
+                    className="peer h-[18px] w-[18px] cursor-pointer appearance-none rounded-[5px] border-2 border-white bg-transparent transition checked:bg-[var(--theme-surface)]"
                   />
                   <IconCheck
                     className="pointer-events-none absolute h-3 w-3 text-[var(--theme-primary)] opacity-0 peer-checked:opacity-100"
@@ -785,7 +785,7 @@ export default function ERRegister() {
                   type="button"
                   disabled={form.unknownIdentity}
                   onClick={() => setScanning(true)}
-                  className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-[14px] text-black transition enabled:hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-full bg-[var(--theme-surface)] px-3 py-2 text-[14px] text-[var(--theme-neutral)] transition enabled:hover:bg-[var(--theme-neutral)]/10 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <IconCreditCard className="h-5 w-5" stroke={1.75} />
                   สแกนบัตรประชาชน
@@ -794,7 +794,7 @@ export default function ERRegister() {
                   type="button"
                   disabled={form.unknownIdentity}
                   onClick={() => setCapturing(true)}
-                  className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-[14px] text-black transition enabled:hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-full bg-[var(--theme-surface)] px-3 py-2 text-[14px] text-[var(--theme-neutral)] transition enabled:hover:bg-[var(--theme-neutral)]/10 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <IconCamera className="h-5 w-5" stroke={1.75} />
                   ถ่ายภาพบัตรประชาชน
@@ -804,7 +804,7 @@ export default function ERRegister() {
                   disabled={form.unknownIdentity}
                   onClick={() => setSearching(true)}
                   aria-label="ค้นหาผู้ป่วย"
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-black transition enabled:hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--theme-surface)] text-[var(--theme-neutral)] transition enabled:hover:bg-[var(--theme-neutral)]/10 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <IconSearch className="h-5 w-5" stroke={1.75} />
                 </button>
@@ -812,7 +812,7 @@ export default function ERRegister() {
             </div>
 
             {/* White form panel */}
-            <div className="min-h-0 flex-1 overflow-y-auto rounded-t-3xl bg-white">
+            <div className="min-h-0 flex-1 overflow-y-auto rounded-t-3xl bg-[var(--theme-surface)]">
               {/* Form sections — collapsible cards (Figma OPD-style) */}
               <div className="flex flex-col gap-4 p-6">
                 {/* 1. Patient identity — unknown walk-ins get a minimal HN + เพศ
@@ -856,7 +856,7 @@ export default function ERRegister() {
             </div>
 
             {/* Sticky bottom bar — speech-to-text dictation for chief complaint */}
-            <div className="flex items-center gap-3 border-t border-[var(--theme-neutral)]/10 bg-white px-6 py-4">
+            <div className="flex items-center gap-3 border-t border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] px-6 py-4">
               <button
                 type="button"
                 onClick={() => setConfirmReset(true)}
@@ -883,7 +883,7 @@ export default function ERRegister() {
           </div>
 
           {/* RIGHT — body map (OPD-style full-height panel) */}
-          <div ref={boxRef} className="relative flex h-full min-h-0 w-[381px] shrink-0 flex-col overflow-hidden rounded-3xl bg-white p-5">
+          <div ref={boxRef} className="relative flex h-full min-h-0 w-[381px] shrink-0 flex-col overflow-hidden rounded-3xl bg-[var(--theme-surface)] p-5">
             {/* Body model = panel background. The zoomed figure overflows freely
                 but is clipped to this card; white fades blend it under the UI. */}
             <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
@@ -944,13 +944,13 @@ export default function ERRegister() {
                         />
                       </span>
                       {selectedId === p.id && (
-                        <span className="absolute left-5 top-1/2 flex -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-lg bg-white px-2 py-1 shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
+                        <span className="absolute left-5 top-1/2 flex -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-lg bg-[var(--theme-surface)] px-2 py-1 shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
                           <IconFlame className="h-4 w-4 text-[#ff383c]" stroke={2} />
                           <span className="text-left leading-tight">
                             <span className="block text-[13px] font-bold text-[#ff383c]">
                               {p.location ?? p.type}
                             </span>
-                            <span className="block text-[11px] text-black/60">
+                            <span className="block text-[11px] text-[var(--theme-neutral)]/60">
                               {p.location ? `${p.type} · ` : ""}ระดับ {p.severity}/10
                             </span>
                           </span>
@@ -962,16 +962,16 @@ export default function ERRegister() {
               </div>
 
               {/* Faded edges so the model blends beneath the floating UI */}
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-32 rounded-t-3xl bg-gradient-to-b from-white via-white/80 to-transparent" />
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-28 rounded-b-3xl bg-gradient-to-t from-white via-white/85 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-32 rounded-t-3xl bg-gradient-to-b from-[var(--theme-surface)] via-[var(--theme-surface)]/80 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-28 rounded-b-3xl bg-gradient-to-t from-[var(--theme-surface)] via-[var(--theme-surface)]/85 to-transparent" />
 
               {/* Zoom controls — bottom-right */}
-              <div className="absolute bottom-2 right-2 z-[2] flex flex-col gap-1 rounded-full bg-white/90 p-1 shadow-[0_2px_8px_rgba(0,0,0,0.1)] ring-1 ring-black/5 backdrop-blur-sm">
+              <div className="absolute bottom-2 right-2 z-[2] flex flex-col gap-1 rounded-full bg-[var(--theme-surface)]/90 p-1 shadow-[0_2px_8px_rgba(0,0,0,0.1)] ring-1 ring-[var(--theme-neutral)]/15 backdrop-blur-sm">
                 <button
                   type="button"
                   onClick={() => zoomAt(1.25)}
                   disabled={tf.scale >= 3}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--theme-neutral)]/70 transition hover:bg-black/5 hover:text-[var(--theme-neutral)] disabled:opacity-30"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--theme-neutral)]/70 transition hover:bg-[var(--theme-neutral)]/10 hover:text-[var(--theme-neutral)] disabled:opacity-30"
                   aria-label="ขยาย"
                 >
                   <IconPlus className="h-4 w-4" stroke={2} />
@@ -980,7 +980,7 @@ export default function ERRegister() {
                   type="button"
                   onClick={() => zoomAt(1 / 1.25)}
                   disabled={tf.scale <= 1}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--theme-neutral)]/70 transition hover:bg-black/5 hover:text-[var(--theme-neutral)] disabled:opacity-30"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--theme-neutral)]/70 transition hover:bg-[var(--theme-neutral)]/10 hover:text-[var(--theme-neutral)] disabled:opacity-30"
                   aria-label="ย่อ"
                 >
                   <IconMinus className="h-4 w-4" stroke={2} />
@@ -989,7 +989,7 @@ export default function ERRegister() {
                   type="button"
                   onClick={resetZoom}
                   disabled={tf.scale === 1 && tf.x === 0 && tf.y === 0}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--theme-neutral)]/70 transition hover:bg-black/5 hover:text-[var(--theme-neutral)] disabled:opacity-30"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--theme-neutral)]/70 transition hover:bg-[var(--theme-neutral)]/10 hover:text-[var(--theme-neutral)] disabled:opacity-30"
                   aria-label="รีเซ็ตซูม"
                 >
                   <IconZoomReset className="h-4 w-4" stroke={2} />
@@ -1020,7 +1020,7 @@ export default function ERRegister() {
                         : "ไม่มีอาการเฉพาะที่"}
                   </p>
                   {selected && (
-                    <p className="text-[11px] text-black/50">
+                    <p className="text-[11px] text-[var(--theme-neutral)]/50">
                       {selected.type} · ระดับ {selected.severity}/10
                     </p>
                   )}
@@ -1030,7 +1030,7 @@ export default function ERRegister() {
               {/* Bottom floating — selected-point editor + front/back pill */}
               <div className="relative z-10 mt-auto flex flex-col items-center gap-3 pt-3">
                 {selected && (
-                  <div className="flex w-full flex-col gap-3 rounded-2xl border border-[var(--theme-neutral)]/15 bg-white/95 p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-sm">
+                  <div className="flex w-full flex-col gap-3 rounded-2xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)]/95 p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-[13px] font-semibold text-[var(--theme-neutral)]">
                         {selected.location ?? "จุดที่เลือก"}
@@ -1079,7 +1079,7 @@ export default function ERRegister() {
                 )}
 
                 {/* Front / back pill */}
-                <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+                <div className="flex items-center gap-1 rounded-full bg-[var(--theme-surface)] p-1 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
                   {(["front", "back"] as Side[]).map((s) => {
                     const active = side === s;
                     const Icon = s === "front" ? IconUser : IconUserScan;
@@ -1090,14 +1090,11 @@ export default function ERRegister() {
                         onClick={() => selectSide(s)}
                         className={[
                           "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-bold transition",
-                          active ? "bg-[#f2f2f2] text-[#22202a]" : "text-black/45",
+                          active ? "bg-[var(--theme-neutral)]/12 text-[var(--theme-neutral)]" : "text-[var(--theme-neutral)]/45",
                         ].join(" ")}
                       >
-                        <Icon
-                          className="h-4 w-4"
-                          stroke={2}
-                          style={{ color: active ? "#22202a" : "#9ca3af" }}
-                        />
+                        <Icon className="h-4 w-4" stroke={2} />
+
                         {s === "front" ? "หน้า" : "หลัง"}
                       </button>
                     );
@@ -1181,7 +1178,7 @@ export default function ERRegister() {
           onClick={() => setConfirmReset(false)}
         >
           <div
-            className="flex w-full max-w-[360px] flex-col items-center gap-4 rounded-3xl bg-white p-6 text-center shadow-[var(--theme-shadow-md)]"
+            className="flex w-full max-w-[360px] flex-col items-center gap-4 rounded-3xl bg-[var(--theme-surface)] p-6 text-center shadow-[var(--theme-shadow-md)]"
             onClick={(e) => e.stopPropagation()}
           >
             <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#ff383c]/10 text-[#ff383c]">
@@ -1308,7 +1305,7 @@ function ReviewView({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       {/* Doctor assignment — nurse picks the responsible ER physician here */}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-3xl border border-[var(--theme-neutral)]/12 bg-white px-6 py-4">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-3xl border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)] px-6 py-4">
         <div className="flex items-center gap-2 text-[14px] font-bold text-[var(--theme-neutral)]">
           <IconUser className="h-5 w-5 text-[var(--theme-primary)]" stroke={2} />
           แพทย์ผู้รับผิดชอบ (ER)
@@ -1338,7 +1335,7 @@ function ReviewView({
       {/* Three equal-width summary columns */}
       <div className="flex min-h-0 flex-1 items-stretch gap-4">
       {/* LEFT — field summary */}
-      <div className="min-w-px flex-1 overflow-y-auto rounded-3xl border border-[var(--theme-neutral)]/12 bg-white p-6">
+      <div className="min-w-px flex-1 overflow-y-auto rounded-3xl border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)] p-6">
         <div className="flex flex-col gap-4">
           <ReviewCard title="ข้อมูลผู้ป่วย" icon={IconUser}>
             <RevRow label="HN" value={v(form.hn)} />
@@ -1388,7 +1385,7 @@ function ReviewView({
       </div>
 
       {/* MIDDLE — body-map points summary */}
-      <div className="min-w-px flex-1 overflow-y-auto rounded-3xl border border-[var(--theme-neutral)]/12 bg-white p-6">
+      <div className="min-w-px flex-1 overflow-y-auto rounded-3xl border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)] p-6">
         <h3 className="mb-3 text-[15px] font-bold text-[var(--theme-neutral)]">
           ตำแหน่งอาการ ({points.length} จุด)
         </h3>
@@ -1405,7 +1402,7 @@ function ReviewView({
                   <p className="text-[13px] font-semibold text-[var(--theme-neutral)]">
                     {p.location ?? "ตำแหน่งบนร่างกาย"} · {p.side === "front" ? "ด้านหน้า" : "ด้านหลัง"}
                   </p>
-                  <p className="text-[11px] text-black/55">
+                  <p className="text-[11px] text-[var(--theme-neutral)]/55">
                     {p.type} · ระดับ {p.severity}/10
                   </p>
                 </div>
@@ -1484,7 +1481,7 @@ function ReviewCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-[var(--theme-neutral)]/12 bg-white">
+    <section className="rounded-2xl border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)]">
       <div className="flex items-center gap-2.5 border-b border-[var(--theme-neutral)]/8 px-4 py-3">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center text-[var(--theme-primary)]">
           <Icon className="h-5 w-5" stroke={2} />
@@ -1577,12 +1574,12 @@ function PatientSearchModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[76vh] w-full max-w-[700px] flex-col gap-4 rounded-3xl bg-white p-6 shadow-[var(--theme-shadow-md)]"
+        className="flex max-h-[76vh] w-full max-w-[700px] flex-col gap-4 rounded-3xl bg-[var(--theme-surface)] p-6 shadow-[var(--theme-shadow-md)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search row — matches the app's global search bar style */}
         <div className="flex items-center gap-3">
-          <div className="flex flex-1 items-center gap-2 rounded-full border border-[var(--theme-neutral)]/20 bg-white py-1.5 pl-5 pr-1.5 transition hover:border-[var(--theme-primary)]/40 focus-within:border-[var(--theme-primary)] focus-within:ring-4 focus-within:ring-[var(--theme-primary)]/15">
+          <div className="flex flex-1 items-center gap-2 rounded-full border border-[var(--theme-neutral)]/20 bg-[var(--theme-surface)] py-1.5 pl-5 pr-1.5 transition hover:border-[var(--theme-primary)]/40 focus-within:border-[var(--theme-primary)] focus-within:ring-4 focus-within:ring-[var(--theme-primary)]/15">
             <input
               autoFocus
               value={q}
@@ -1630,13 +1627,13 @@ function PatientSearchModal({
                   className="h-10 w-10 shrink-0 rounded-full bg-[var(--theme-neutral)]/10 object-cover"
                 />
                 <span className="flex min-w-px flex-1 flex-col gap-1">
-                  <span className="text-[16px] text-black/80">
+                  <span className="text-[16px] text-[var(--theme-neutral)]/80">
                     {p.prefix}
                     {p.firstName} {p.lastName}
                   </span>
-                  <span className="text-[12px] text-black/80">{p.citizenId}</span>
+                  <span className="text-[12px] text-[var(--theme-neutral)]/80">{p.citizenId}</span>
                 </span>
-                <span className="shrink-0 text-[16px] text-black/80">HN : {p.hn}</span>
+                <span className="shrink-0 text-[16px] text-[var(--theme-neutral)]/80">HN : {p.hn}</span>
               </button>
             ))
           )}
@@ -1648,7 +1645,7 @@ function PatientSearchModal({
 
 // ── Shared field primitives ────────────────────────────────────────────────
 const INPUT_CLS =
-  "h-10 w-full rounded-xl border border-[var(--theme-neutral)]/20 bg-white px-3 text-[14px] text-[var(--theme-neutral)] outline-none transition focus:border-[var(--theme-primary)] placeholder:text-[var(--theme-neutral)]/40";
+  "h-10 w-full rounded-xl border border-[var(--theme-neutral)]/20 bg-[var(--theme-surface)] px-3 text-[14px] text-[var(--theme-neutral)] outline-none transition focus:border-[var(--theme-primary)] placeholder:text-[var(--theme-neutral)]/40";
 
 interface SelectOption {
   value: string;
@@ -1702,7 +1699,7 @@ function FormSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         className={[
-          "flex w-full items-center justify-between gap-2 bg-white outline-none transition border",
+          "flex w-full items-center justify-between gap-2 bg-[var(--theme-surface)] outline-none transition border",
           open ? "border-[var(--theme-primary)]" : "border-[var(--theme-neutral)]/20",
           triggerClassName,
         ].join(" ")}
@@ -1718,7 +1715,7 @@ function FormSelect({
       {open && (
         <div
           role="listbox"
-          className={`absolute left-0 right-0 z-30 overflow-hidden rounded-2xl border border-[var(--theme-neutral)]/10 bg-white py-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.14)] ${dropUp ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]"}`}
+          className={`absolute left-0 right-0 z-30 overflow-hidden rounded-2xl border border-[var(--theme-neutral)]/10 bg-[var(--theme-surface)] py-1.5 shadow-[0_8px_28px_rgba(0,0,0,0.14)] ${dropUp ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]"}`}
         >
           {options.map((o) => {
             const active = o.value === value;
@@ -1796,7 +1793,7 @@ function SectionCard({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="rounded-2xl border border-[var(--theme-neutral)]/12 bg-white">
+    <section className="rounded-2xl border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)]">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -1836,7 +1833,7 @@ function HNInput({
   onGenerate: () => void;
 }) {
   return (
-    <div className="flex h-10 items-center gap-1.5 rounded-xl border border-[var(--theme-neutral)]/20 bg-white pl-3 pr-1 transition focus-within:border-[var(--theme-primary)]">
+    <div className="flex h-10 items-center gap-1.5 rounded-xl border border-[var(--theme-neutral)]/20 bg-[var(--theme-surface)] pl-3 pr-1 transition focus-within:border-[var(--theme-primary)]">
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -2078,9 +2075,9 @@ function EmergencySection({ form, set }: SectionProps) {
                     aria-label={`Triage ${t.level} — ${t.label}`}
                     aria-pressed={active}
                     className={[
-                      "flex h-12 w-12 items-center justify-center rounded-full text-[22px] font-bold text-black outline-none transition",
+                      "flex h-12 w-12 items-center justify-center rounded-full text-[22px] font-bold text-[var(--theme-neutral)] outline-none transition",
                       active
-                        ? "bg-white shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
+                        ? "bg-[var(--theme-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.18)]"
                         : "hover:bg-white/25",
                     ].join(" ")}
                   >

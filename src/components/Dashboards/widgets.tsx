@@ -20,6 +20,8 @@ import {
 } from "recharts";
 import type { Widget } from "./types";
 import { queryDataSource } from "./catalog";
+import PatientProfileCard from "../PatientProfileCard";
+import LabTrendCard from "../LabTrendCard";
 import {
   Card,
   CardContent,
@@ -57,6 +59,26 @@ export default function WidgetRenderer({ widget }: { widget: Widget }) {
       }),
     [widget.source, widget.groupBy, widget.metric, widget.filters],
   );
+
+  // Generative-UI cards are self-contained (own chrome + self-fetch by HN), so
+  // they render full-bleed without the outer KPI/chart card wrapper.
+  if (widget.kind === "patient-card" || widget.kind === "patient-lab-trend") {
+    const hn = String(widget.props?.hn ?? "");
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28, ease: EASE_TV }}
+        className="h-full w-full overflow-auto"
+      >
+        {widget.kind === "patient-card" ? (
+          <PatientProfileCard hn={hn} />
+        ) : (
+          <LabTrendCard hn={hn} />
+        )}
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

@@ -54,6 +54,18 @@ export const WIDGET_KINDS: { id: WidgetKind; label: string; description: string 
   { id: "line-chart", label: "Line Chart", description: "Time series — value over time" },
   { id: "bar-chart", label: "Bar Chart", description: "Categorical — value per category" },
   { id: "table", label: "Table", description: "List of records with columns" },
+  {
+    id: "patient-card",
+    label: "Patient Card",
+    description:
+      "Profile summary card for ONE specific patient (name, age, blood type, diagnoses, allergies). Set the patient's HN in props.hn; no data source needed.",
+  },
+  {
+    id: "patient-lab-trend",
+    label: "Patient Lab Trend",
+    description:
+      "12-month lab-trend line chart (HbA1c, FBS, LDL, Creatinine…) for ONE specific patient. Set the patient's HN in props.hn; no data source needed.",
+  },
 ];
 
 export const DATA_SOURCES: DataSourceDef[] = [

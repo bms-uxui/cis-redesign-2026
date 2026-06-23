@@ -60,7 +60,7 @@
    public fallback if Google Sans fails to load.
    ============================================ */
 @theme {
-  --font-sans: var(--app-font, "Sukhumvit Set", "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif);
+  --font-sans: var(--app-font, "Sarabun", "Sukhumvit Set", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif);
 
   /* Design Tokens - Customize these! */
   --color-primary: #4285F4;
@@ -84,7 +84,7 @@ body {
 }
 
 body {
-  font-family: var(--app-font, "Sukhumvit Set", "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif);
+  font-family: var(--app-font, "Sarabun", "Sukhumvit Set", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--theme-base);
@@ -116,7 +116,7 @@ button:disabled,
    Falls back to the Sukhumvit stack until --app-font is set. */
 *,
 .radix-themes {
-  font-family: var(--app-font, "Sukhumvit Set", "Google Sans", "Roboto", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif) !important;
+  font-family: var(--app-font, "Sarabun", "Sukhumvit Set", "Noto Sans Thai Looped", "Helvetica Neue", Arial, sans-serif) !important;
 }
 
 /* Override Radix Themes `--color-background` (its default `white` or a stray
@@ -356,3 +356,28 @@ button:disabled,
   from { stroke-dashoffset: 1; }
   to   { stroke-dashoffset: 0; }
 }
+
+/* MUI X Scheduler — force text/labels onto the theme neutral in dark mode so
+   the month label, day numbers and resource names stay legible. Coloured event
+   chips / checkboxes set their own colour and are unaffected. */
+html[data-mode="dark"] .MuiEventCalendar-root {
+  color: var(--theme-neutral);
+}
+html[data-mode="dark"] .MuiEventCalendar-root [class*="Label"],
+html[data-mode="dark"] .MuiEventCalendar-root [class*="WeekdayCell"],
+html[data-mode="dark"] .MuiEventCalendar-root [class*="DayButton"],
+html[data-mode="dark"] .MuiEventCalendar-root [class*="DayNumber"],
+html[data-mode="dark"] .MuiEventCalendar-root [class*="DayName"],
+html[data-mode="dark"] .MuiEventCalendar-root [class*="TimeAxisText"],
+html[data-mode="dark"] .MuiEventCalendar-root [class*="resourcesTreeItemLabel"] {
+  color: var(--theme-neutral);
+}
+
+/* AI case-summary highlight text — colour per category, with a lighter tint in
+   dark mode so it stays legible over the translucent marker. */
+.hl-symptom  { color: #1e3a8a; }
+.hl-severity { color: #991b1b; }
+.hl-allergy  { color: #92400e; }
+html[data-mode="dark"] .hl-symptom  { color: #93c5fd; }
+html[data-mode="dark"] .hl-severity { color: #fca5a5; }
+html[data-mode="dark"] .hl-allergy  { color: #fcd34d; }

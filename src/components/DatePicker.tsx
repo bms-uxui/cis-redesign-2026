@@ -92,7 +92,7 @@ export default function DatePicker({
         aria-haspopup="dialog"
         aria-expanded={open}
         className={[
-          "flex w-full items-center gap-2 bg-white outline-none transition border",
+          "flex w-full items-center gap-2 bg-[var(--theme-surface)] outline-none transition border",
           open ? "border-[var(--theme-primary)]" : "border-[var(--theme-neutral)]/20",
           triggerClassName ?? "h-10 rounded-xl px-3 text-[14px]",
         ].join(" ")}

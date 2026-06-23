@@ -27,6 +27,10 @@ import {
   IconForms,
   IconShieldCheck,
   IconAlertCircle,
+  IconInfoCircle,
+  IconMapPin,
+  IconArrowBackUp,
+  IconTrash,
 } from "@tabler/icons-react";
 import {
   Accordion,
@@ -72,6 +76,25 @@ import { upsertPatient } from "../services/supabase/patients";
 import { stashFreshSave } from "../data/freshSaveHandoff";
 import { pushNurseHandoff, useNurseHandoffs } from "../data/nurseHandoff";
 import DoctorCalendar from "./DoctorCalendar";
+import BodyMap from "./BodyMap";
+import {
+  useSymptomMapOnce,
+  useTranscriptBodyRegions,
+  useLiveSymptomPlot,
+  evaluateHistoryFromTranscript,
+  ZoomPan,
+  ZoomControls,
+  PinForm,
+  type HistoryEval,
+  type PainMarker,
+  type ZoomApi,
+} from "./PatientOPD";
+import {
+  BODY_REGION_BY_ID,
+  BODY_VIEWBOX,
+  BODY_VIEWBOX_BACK,
+  type BodyRegionId,
+} from "../data/bodyRegions";
 import type { Patient, BloodGroup, Gender, Rh } from "../types";
 import AI_DOCTOR from "../assets/figma/ai-mascot-notepad.png";
 import GARUDA_EMBLEM from "../assets/figma/garuda-emblem.svg";
@@ -253,6 +276,21 @@ export default function NewPatientByVoice() {
     }
   }, [phase, vitalsSeen]);
 
+  // Auto-generate the OPD case summary on entering the review step (like the
+  // ER flow) — once, and only when there's a transcript to summarise.
+  const autoGenRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "review") {
+      autoGenRef.current = false;
+      return;
+    }
+    const hasTranscript = segments.some((s) => s.text.trim().length > 0);
+    if (hasTranscript && !generated && !generating && !autoGenRef.current) {
+      autoGenRef.current = true;
+      void handleGenerateNote();
+    }
+  }, [phase, segments, generated, generating, handleGenerateNote]);
+
   // Live clinical-topic extraction (Figma 996:1456) — drives the center
   // summary tab. OLD CARTS topics surface as the patient is interviewed.
   const { topics, inFlight: topicInFlight } = useSymptomTopicsFromLLM(segments, isRecording);
@@ -261,6 +299,35 @@ export default function NewPatientByVoice() {
   const { hpi } = useHpiNarrativeFromLLM(segments, isRecording);
   // Live medication extraction (interview) + the scanned patient's EHR meds.
   const { meds: interviewMeds } = useMedsFromLLM(segments, isRecording);
+
+  // Review step → map the interview symptoms onto the body (heat + plot) once.
+  const reviewTranscript = useMemo(
+    () => segments.map((s) => s.text).join(" ").trim(),
+    [segments],
+  );
+  const { highlights: bodyHighlights, plot: bodyPlot } = useSymptomMapOnce(
+    reviewTranscript,
+    phase === "review",
+  );
+  // Live pain map while recording the history (บันทึกประวัติ step): heat from
+  // the transcript + curated symptom phrases (summary labels, like the doctor).
+  const liveBodyRegions = useTranscriptBodyRegions(reviewTranscript, isRecording);
+  const liveBodyPlot = useLiveSymptomPlot(reviewTranscript, isRecording);
+  const [bodyView, setBodyView] = useState<"front" | "back">("front");
+
+  // History-taking assessment — AI rates completeness + suggests follow-ups.
+  const [evalLoading, setEvalLoading] = useState(false);
+  const [evalData, setEvalData] = useState<HistoryEval | null>(null);
+  const [evalOpen, setEvalOpen] = useState(false);
+  const runHistoryEval = useCallback(async () => {
+    if (evalLoading) return;
+    setEvalLoading(true);
+    setEvalOpen(true);
+    const cc = topics[0]?.title ?? hpi ?? "";
+    const result = await evaluateHistoryFromTranscript(reviewTranscript, cc);
+    setEvalData(result);
+    setEvalLoading(false);
+  }, [evalLoading, topics, hpi, reviewTranscript]);
   const ehr = useMemo(
     () => ehrForCid(extracted?.data?.["patient.cid"]),
     [extracted],
@@ -737,7 +804,7 @@ export default function NewPatientByVoice() {
                   control) and the conversation card on the right. Patient
                   identity now lives as a collapsible header inside the
                   conversation card. */}
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 portrait:flex portrait:flex-col portrait:snap-y portrait:snap-mandatory portrait:overflow-y-auto lg:grid-cols-[minmax(400px,454px)_minmax(0,1fr)]">
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 portrait:flex portrait:flex-col portrait:snap-y portrait:snap-mandatory portrait:overflow-y-auto lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)_minmax(240px,300px)]">
                 <RecordingPanel
                   isRecording={isRecording}
                   started={segments.length > 0}
@@ -747,23 +814,54 @@ export default function NewPatientByVoice() {
                   onTabAudio={handleTabAudio}
                   onAudioFile={handleAudioFile}
                 />
-                <ConversationCard
-                  patientName={patientInfo.fullName || "ผู้ป่วยใหม่"}
-                  patientInfo={patientInfo}
-                  portraitUrl={portraitUrl}
-                  infoOpen={!idCardCollapsed}
-                  onToggleInfo={() => setIdCardCollapsed((v) => !v)}
-                  vitals={vitalsValues}
-                  onVitalsSave={setVitalsValues}
-                  topics={topics}
-                  hpi={hpi}
-                  ehr={ehr}
-                  interviewMeds={interviewMeds}
-                  segments={segments}
-                  isRecording={isRecording}
-                  tab={centerTab}
-                  onTabChange={setCenterTab}
-                />
+                <div className="relative min-h-0">
+                  <ConversationCard
+                    patientName={patientInfo.fullName || "ผู้ป่วยใหม่"}
+                    patientInfo={patientInfo}
+                    portraitUrl={portraitUrl}
+                    infoOpen={!idCardCollapsed}
+                    onToggleInfo={() => setIdCardCollapsed((v) => !v)}
+                    vitals={vitalsValues}
+                    onVitalsSave={setVitalsValues}
+                    topics={topics}
+                    hpi={hpi}
+                    ehr={ehr}
+                    interviewMeds={interviewMeds}
+                    segments={segments}
+                    isRecording={isRecording}
+                    tab={centerTab}
+                    onTabChange={setCenterTab}
+                  />
+                  {/* History-taking assessment — floats over the centre panel,
+                      available only after recording stops. */}
+                  {!isRecording && segments.some((s) => s.text.trim().length > 0) && (
+                    <motion.button
+                      type="button"
+                      initial={{ opacity: 0, y: 14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ type: "spring", stiffness: 420, damping: 30 }}
+                      onClick={runHistoryEval}
+                      disabled={evalLoading}
+                      className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#3965e1] px-5 py-2.5 text-[14px] font-bold text-white shadow-[0_6px_20px_rgba(57,101,225,0.4)] transition hover:brightness-110 disabled:opacity-60"
+                    >
+                      {evalLoading ? (
+                        <IconLoader2 className="h-4 w-4 animate-spin" stroke={2} />
+                      ) : (
+                        <IconSparkles className="h-4 w-4" stroke={2} />
+                      )}
+                      ประเมินการซักประวัติ
+                    </motion.button>
+                  )}
+                </div>
+                {/* Live pain map — lights up as symptoms are mentioned. */}
+                <div className="hidden h-full min-h-0 lg:block">
+                  <BodyReviewCard
+                    highlights={liveBodyRegions}
+                    plot={liveBodyPlot}
+                    view={bodyView}
+                    onViewChange={setBodyView}
+                  />
+                </div>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -788,51 +886,6 @@ export default function NewPatientByVoice() {
               transition={{ duration: 0.45, ease: EASE_TV }}
               className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto"
             >
-              {/* Compact action bar — single row with status, generate
-                  CTA, and re-analyze / edit-description controls. */}
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--theme-primary)]/20 bg-[var(--theme-primary-soft)] px-4 py-2.5">
-                <div className="flex items-center gap-2.5">
-                  <img src={AI_DOCTOR} alt="" className="h-8 w-auto object-contain" />
-                  <p className="text-[13px] text-[var(--theme-neutral)]">
-                    เมย์กรอกได้{" "}
-                    <strong className="text-[var(--theme-primary)]">
-                      {populatedCount.filled}/{populatedCount.total}
-                    </strong>{" "}
-                    ฟิลด์
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {segments.some((s) => s.text.trim().length > 0) && (
-                    <Button
-                      color="primary"
-                      className="bg-[#1ebfbf] text-white"
-                      size="sm"
-                      radius="full"
-                      isLoading={generating}
-                      startContent={!generating && <IconSparkles className="h-4 w-4" />}
-                      onPress={handleGenerateNote}
-                    >
-                      สร้าง OPD Note
-                    </Button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleReExtract}
-                    className="flex items-center gap-1.5 rounded-full border border-[var(--theme-primary)]/20 bg-[var(--theme-surface)] px-3 py-1.5 text-xs font-medium text-[var(--theme-primary)] hover:bg-[var(--theme-primary-soft)]"
-                  >
-                    <IconRefresh className="h-3.5 w-3.5" stroke={2} />
-                    วิเคราะห์ใหม่
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleEditDescription}
-                    className="rounded-full border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-3 py-1.5 text-xs font-medium text-[var(--theme-neutral)]/65 hover:bg-[var(--theme-primary-soft)]"
-                  >
-                    แก้คำอธิบาย
-                  </button>
-                </div>
-              </div>
-
               <ForwardToDoctorPicker
                 doctor={forwardDoctor}
                 clinic={forwardClinic}
@@ -842,26 +895,41 @@ export default function NewPatientByVoice() {
                 onClinicChange={setForwardClinic}
               />
 
-              {/* Main 2-col grid. Form left (fills), right column stacks
-                  the doctor calendar on top + OPD note panel (when
-                  generated) below — so on the same screen the nurse sees
-                  patient data, the doctor's day, AND the AI draft note. */}
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_440px]">
-                <PatientReviewForm
-                  initialData={extracted.data ?? {}}
-                  onApply={(data) =>
-                    handleA2UIAction({ action: "apply_all", data, source: "review_form" })
-                  }
-                  onDiscard={() =>
-                    handleA2UIAction({ action: "discard", data: {}, source: "review_form" })
-                  }
+              {/* ER-style review: 3 columns — read-only patient summary (left),
+                  body map of the mapped symptoms (middle), AI OPD note (right). */}
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3">
+                <ReviewSummary data={extracted.data ?? {}} />
+
+                <BodyReviewCard
+                  highlights={bodyHighlights}
+                  plot={bodyPlot}
+                  view={bodyView}
+                  onViewChange={setBodyView}
                 />
-                <div className="flex min-h-0 flex-col gap-4">
-                  <div className="min-h-[320px] flex-1">
-                    <DoctorTodaySchedule doctor={forwardDoctor} clinic={forwardClinic} />
-                  </div>
-                  {(generating || generated) && (
+
+                <div className="min-h-0 overflow-y-auto rounded-3xl border border-[var(--theme-primary)]/25 bg-[var(--theme-primary)]/[0.03] p-5">
+                  {generating || generated ? (
                     <GeneratedNotePanel generated={generated} generating={generating} />
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+                      <img src={AI_DOCTOR} alt="" className="h-12 w-auto object-contain opacity-90" />
+                      <p className="text-[13px] text-[var(--theme-neutral)]/60">
+                        ให้เมย์สรุปแผนเบื้องต้นสำหรับแพทย์จากการซักประวัติ
+                      </p>
+                      {segments.some((s) => s.text.trim().length > 0) && (
+                        <Button
+                          color="primary"
+                          className="bg-[#1ebfbf] text-white"
+                          size="sm"
+                          radius="full"
+                          isLoading={generating}
+                          startContent={!generating && <IconSparkles className="h-4 w-4" />}
+                          onPress={handleGenerateNote}
+                        >
+                          สร้าง OPD Note
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -871,6 +939,62 @@ export default function NewPatientByVoice() {
         </div>
 
       </main>
+
+      {/* History-taking assessment result */}
+      <Modal isOpen={evalOpen} onOpenChange={setEvalOpen} size="lg" scrollBehavior="inside">
+        <ModalContent className="bg-[var(--theme-surface)] text-[var(--theme-neutral)]">
+          <ModalHeader className="flex items-center gap-2 text-[var(--theme-neutral)]">
+            <IconSparkles className="h-5 w-5 text-[#3965e1]" stroke={2} />
+            ประเมินการซักประวัติ
+          </ModalHeader>
+          <ModalBody className="pb-2">
+            {evalLoading && !evalData ? (
+              <div className="flex items-center gap-2 py-6 text-[13px] text-[var(--theme-neutral)]/60">
+                <IconLoader2 className="h-4 w-4 animate-spin text-[#3965e1]" stroke={2} />
+                เมย์กำลังประเมิน…
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {evalData?.assessment && (
+                  <div className="flex items-start gap-2 rounded-[12px] bg-[#3965e1]/[0.06] px-3 py-2.5">
+                    <IconInfoCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#3965e1]" stroke={2} />
+                    <p className="text-[13px] font-medium leading-relaxed text-[var(--theme-neutral)]">
+                      {evalData.assessment}
+                    </p>
+                  </div>
+                )}
+                {evalData && evalData.questions.length > 0 ? (
+                  <ul className="flex flex-col gap-2">
+                    {evalData.questions.map((q, i) => (
+                      <li
+                        key={i}
+                        className="flex items-start gap-2.5 rounded-[12px] bg-[var(--theme-neutral)]/[0.06] px-3 py-2.5"
+                      >
+                        <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#3965e1] text-[11px] font-bold text-white">
+                          {i + 1}
+                        </span>
+                        <p className="text-[14px] leading-relaxed text-[var(--theme-neutral)]">{q}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  evalData && (
+                    <div className="flex items-center gap-2 rounded-[12px] bg-[#1f9d52]/[0.08] px-3 py-2.5">
+                      <IconCheck className="h-5 w-5 shrink-0 text-[#1f9d52]" stroke={2.5} />
+                      <p className="text-[14px] font-semibold text-[#1f9d52]">ซักประวัติครบถ้วนแล้ว</p>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button color="primary" radius="full" onPress={() => setEvalOpen(false)}>
+              ซักประวัติต่อ
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       {/* Vital signs modal — pops once when the doctor first lands on the
           input phase. Both ข้าม and บันทึก close it. */}
@@ -1223,6 +1347,209 @@ const REVIEW_CLINICAL: FieldDef[] = [
   { key: "patient.note", label: "หมายเหตุ", multiline: true, span: 3 },
 ];
 
+// ── ER-style read-only review pieces ─────────────────────────────────────────
+
+function RevRow({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <div className={wide ? "flex flex-col gap-0.5" : "flex items-baseline justify-between gap-3"}>
+      <span className="shrink-0 text-[12px] text-[var(--theme-neutral)]/55">{label}</span>
+      <span
+        className={`text-[13px] font-medium text-[var(--theme-neutral)] ${wide ? "" : "text-right"}`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ReviewCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-[var(--theme-neutral)]/10 p-4">
+      <h3 className="mb-2.5 text-[14px] font-bold text-[var(--theme-neutral)]">{title}</h3>
+      <div className="flex flex-col gap-1.5">{children}</div>
+    </section>
+  );
+}
+
+/** Read-only patient summary (left review column), matching the ER layout. */
+function ReviewSummary({ data }: { data: Record<string, string> }) {
+  const v = (k: string) => {
+    const s = data[k];
+    return s && String(s).trim() ? String(s) : "—";
+  };
+  return (
+    <div className="min-h-0 overflow-y-auto rounded-3xl border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)] p-5">
+      <div className="flex flex-col gap-4">
+        <ReviewCard title="ข้อมูลทั่วไป">
+          {REVIEW_GENERAL.map((f) => (
+            <RevRow key={f.key} label={f.label} value={v(f.key)} wide={f.span === 3} />
+          ))}
+        </ReviewCard>
+        <ReviewCard title="ข้อมูลทางคลินิก">
+          {REVIEW_CLINICAL.map((f) => (
+            <RevRow key={f.key} label={f.label} value={v(f.key)} wide={f.span === 3} />
+          ))}
+        </ReviewCard>
+      </div>
+    </div>
+  );
+}
+
+/** Middle review column — the interview symptoms mapped onto the body. */
+function BodyReviewCard({
+  highlights,
+  plot,
+  view,
+  onViewChange,
+}: {
+  highlights: Partial<Record<BodyRegionId, number>>;
+  plot: { id: BodyRegionId; label: string; cause?: string }[];
+  view: "front" | "back";
+  onViewChange: (v: "front" | "back") => void;
+}) {
+  // Doctor-placed pain markers (tap to add) + AI symptom labels on the body.
+  const [drawMode, setDrawMode] = useState(false);
+  const [painMarkers, setPainMarkers] = useState<PainMarker[]>([]);
+  const [pendingPin, setPendingPin] = useState<{
+    x: number;
+    y: number;
+    view: "front" | "back";
+    regionId?: BodyRegionId;
+  } | null>(null);
+  const seq = useRef(0);
+  const zoomApi = useRef<ZoomApi | null>(null);
+  const vb = view === "back" ? BODY_VIEWBOX_BACK : BODY_VIEWBOX;
+  const markersThisView = painMarkers.filter((m) => m.view === view).length;
+
+  // AI symptom phrases → on-body label markers (like the doctor's callouts).
+  const aiMarkers = plot
+    .filter((p) => BODY_REGION_BY_ID[p.id]?.view === view)
+    .map((p) => {
+      const s = BODY_REGION_BY_ID[p.id].shape;
+      const x = s.kind === "ellipse" ? s.cx : s.x + s.w / 2;
+      const y = s.kind === "ellipse" ? s.cy : s.y + s.h / 2;
+      return { id: `ai-${p.id}`, view, x, y, label: p.label, color: "#e23d2e" };
+    });
+  const userMarkers = painMarkers
+    .filter((m) => m.view === view)
+    .map((m) => ({ id: m.id, view: m.view, x: m.x, y: m.y, label: m.label, color: m.color }));
+
+  return (
+    <div className="flex h-full min-h-[460px] flex-col overflow-hidden rounded-3xl border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)] p-5 lg:min-h-0">
+      <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
+        <h3 className="text-[15px] font-bold text-[var(--theme-neutral)]">
+          ตำแหน่งอาการ ({plot.length + markersThisView} จุด)
+        </h3>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setDrawMode((d) => !d);
+              setPendingPin(null);
+            }}
+            title="แตะตำแหน่งบนร่างกายเพื่อระบุอาการ"
+            className={[
+              "flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[12px] font-bold shadow-sm ring-1 transition",
+              drawMode
+                ? "bg-[#e23d2e] text-white ring-[#e23d2e]"
+                : "bg-[var(--theme-surface)] text-[var(--theme-neutral)] ring-[var(--theme-neutral)]/15",
+            ].join(" ")}
+          >
+            <IconMapPin className="h-4 w-4" stroke={2} />
+            ระบุจุด
+          </button>
+          {markersThisView > 0 && (
+            <>
+              <button
+                type="button"
+                title="ย้อนกลับ"
+                onClick={() =>
+                  setPainMarkers((cur) => {
+                    const last = cur.map((m) => m.view).lastIndexOf(view);
+                    return last < 0 ? cur : cur.filter((_, i) => i !== last);
+                  })
+                }
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--theme-surface)] text-[var(--theme-neutral)]/45 shadow-sm ring-1 ring-[var(--theme-neutral)]/15 transition hover:text-[var(--theme-neutral)]"
+              >
+                <IconArrowBackUp className="h-4 w-4" stroke={2} />
+              </button>
+              <button
+                type="button"
+                title="ลบจุดทั้งหมด"
+                onClick={() => setPainMarkers((cur) => cur.filter((m) => m.view !== view))}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--theme-surface)] text-[var(--theme-neutral)]/45 shadow-sm ring-1 ring-[var(--theme-neutral)]/15 transition hover:text-[#e23d2e]"
+              >
+                <IconTrash className="h-4 w-4" stroke={2} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+      {/* zoom/pan + tap-to-pin, copied from the doctor's model panel. The
+          front/back toggle floats at the bottom-centre. */}
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        <ZoomPan
+          className="flex h-full w-full items-center justify-center overflow-visible"
+          contentAspect={vb.width / vb.height}
+          apiRef={zoomApi}
+        >
+          <BodyMap
+            view={view}
+            highlights={highlights}
+            highlightColor="#e23d2e"
+            markers={[...aiMarkers, ...userMarkers]}
+            drawMode={drawMode}
+            onAddPoint={(x, y, regionId) => setPendingPin({ x, y, view, regionId })}
+            onMarkerClick={(id) => setPainMarkers((cur) => cur.filter((m) => m.id !== id))}
+            className="h-full max-h-full"
+          />
+        </ZoomPan>
+        <ZoomControls api={zoomApi} />
+        <div className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-[var(--theme-surface)]/95 p-1 shadow-[0_2px_8px_rgba(0,0,0,0.12)] ring-1 ring-[var(--theme-neutral)]/15 backdrop-blur">
+          {(["front", "back"] as const).map((vv) => (
+            <button
+              key={vv}
+              type="button"
+              onClick={() => onViewChange(vv)}
+              className={[
+                "rounded-full px-3.5 py-1 text-[12px] font-semibold transition",
+                view === vv
+                  ? "bg-[var(--theme-neutral)]/12 text-[var(--theme-neutral)]"
+                  : "text-[var(--theme-neutral)]/45",
+              ].join(" ")}
+            >
+              {vv === "front" ? "หน้า" : "หลัง"}
+            </button>
+          ))}
+        </div>
+        {pendingPin && (
+          <PinForm
+            regionLabel={pendingPin.regionId ? BODY_REGION_BY_ID[pendingPin.regionId]?.labelTh : undefined}
+            onCancel={() => setPendingPin(null)}
+            onSave={(char, severity, note) => {
+              setPainMarkers((cur) => [
+                ...cur,
+                {
+                  id: `pin-${seq.current++}`,
+                  view: pendingPin.view,
+                  x: pendingPin.x,
+                  y: pendingPin.y,
+                  label: `${char.label} ${severity}/10${note ? ` · ${note}` : ""}`,
+                  color: char.fg,
+                  characterId: char.id,
+                  severity,
+                  note,
+                },
+              ]);
+              setPendingPin(null);
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PatientReviewForm({
   initialData,
   onApply,
@@ -1443,15 +1770,19 @@ function ForwardToDoctorPicker({
       <span className="text-[13px] font-semibold text-[var(--theme-neutral)]">
         ส่งต่อให้แพทย์
       </span>
-      <Dropdown>
+      <Dropdown classNames={{ content: "bg-[var(--theme-surface)] ring-1 ring-[var(--theme-neutral)]/15" }}>
         <DropdownTrigger>
-          <Button variant="flat" className="font-medium">
+          <Button variant="flat" className="bg-[var(--theme-neutral)]/10 font-medium text-[var(--theme-neutral)] data-[hover=true]:bg-[var(--theme-neutral)]/15">
             {doctor}
             <IconChevronDown className="h-3.5 w-3.5" stroke={2} />
           </Button>
         </DropdownTrigger>
         <DropdownMenu
           aria-label="เลือกแพทย์"
+          itemClasses={{
+            base: "data-[hover=true]:bg-[var(--theme-neutral)]/10 data-[hover=true]:!text-[var(--theme-neutral)] data-[selected=true]:bg-[var(--theme-neutral)]/10 data-[selected=true]:!text-[var(--theme-neutral)] data-[selectable=true]:focus:bg-[var(--theme-neutral)]/10 data-[selectable=true]:focus:!text-[var(--theme-neutral)]",
+            title: "text-[var(--theme-neutral)]",
+          }}
           onAction={(key) => onDoctorChange(String(key))}
           selectedKeys={new Set([doctor])}
           selectionMode="single"
@@ -1463,15 +1794,19 @@ function ForwardToDoctorPicker({
       </Dropdown>
       <span className="text-[12px] text-[var(--theme-neutral)]/55">·</span>
       <span className="text-[13px] font-semibold text-[var(--theme-neutral)]">คลินิก</span>
-      <Dropdown>
+      <Dropdown classNames={{ content: "bg-[var(--theme-surface)] ring-1 ring-[var(--theme-neutral)]/15" }}>
         <DropdownTrigger>
-          <Button variant="flat" className="font-medium">
+          <Button variant="flat" className="bg-[var(--theme-neutral)]/10 font-medium text-[var(--theme-neutral)] data-[hover=true]:bg-[var(--theme-neutral)]/15">
             {clinic}
             <IconChevronDown className="h-3.5 w-3.5" stroke={2} />
           </Button>
         </DropdownTrigger>
         <DropdownMenu
           aria-label="เลือกคลินิก"
+          itemClasses={{
+            base: "data-[hover=true]:bg-[var(--theme-neutral)]/10 data-[hover=true]:!text-[var(--theme-neutral)] data-[selected=true]:bg-[var(--theme-neutral)]/10 data-[selected=true]:!text-[var(--theme-neutral)] data-[selectable=true]:focus:bg-[var(--theme-neutral)]/10 data-[selectable=true]:focus:!text-[var(--theme-neutral)]",
+            title: "text-[var(--theme-neutral)]",
+          }}
           onAction={(key) => onClinicChange(String(key))}
           selectedKeys={new Set([clinic])}
           selectionMode="single"
@@ -2434,9 +2769,9 @@ function StepperBar({ onCancel, onNext, nextEnabled, isExtracting, phase }: Step
     <div className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-2">
       <div className="flex min-w-0 flex-1 items-center gap-1">
         <StepPill state={stateOf(0)} label="ลงทะเบียน" />
-        <IconChevronRight className="h-4 w-4 shrink-0 text-neutral-300" stroke={2} />
+        <IconChevronRight className="h-4 w-4 shrink-0 text-[var(--theme-neutral)]/30" stroke={2} />
         <StepPill state={stateOf(1)} label="บันทึกประวัติ" />
-        <IconChevronRight className="h-4 w-4 shrink-0 text-neutral-300" stroke={2} />
+        <IconChevronRight className="h-4 w-4 shrink-0 text-[var(--theme-neutral)]/30" stroke={2} />
         <StepPill state={stateOf(2)} label="ตรวจสอบข้อมูล" />
       </div>
       <div className="flex items-center gap-4">
@@ -2475,13 +2810,13 @@ function StepPill({ state, label }: { state: "done" | "current" | "upcoming"; la
   }
   if (state === "current") {
     return (
-      <span className="inline-flex items-center rounded-xl bg-[#3965e1]/10 px-4 py-2 text-sm font-medium text-[#3965e1]">
+      <span className="inline-flex items-center rounded-xl bg-[#3965e1]/15 px-4 py-2 text-sm font-medium text-[#3965e1]">
         {label}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium text-black opacity-50">
+    <span className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium text-[var(--theme-neutral)]/45">
       {label}
     </span>
   );
@@ -2525,7 +2860,10 @@ function AudioSourceDropdown({
 }) {
   const lg = variant === "lg";
   return (
-    <Dropdown placement="top">
+    <Dropdown
+      placement="top"
+      classNames={{ content: "bg-[var(--theme-surface)] ring-1 ring-[var(--theme-neutral)]/15" }}
+    >
       <DropdownTrigger>
         <button
           type="button"
@@ -2541,6 +2879,7 @@ function AudioSourceDropdown({
       </DropdownTrigger>
       <DropdownMenu
         aria-label="แหล่งเสียง"
+        itemClasses={{ base: "data-[hover=true]:bg-[var(--theme-neutral)]/10 data-[hover=true]:!text-[var(--theme-neutral)] data-[selected=true]:bg-[var(--theme-neutral)]/10 data-[selected=true]:!text-[var(--theme-neutral)] data-[selectable=true]:focus:bg-[var(--theme-neutral)]/10 data-[selectable=true]:focus:!text-[var(--theme-neutral)]", title: "text-[var(--theme-neutral)]", description: "text-[var(--theme-neutral)]/55" }}
         onAction={(key) => {
           if (key === "tab") onTabAudio();
           else if (key === "file") onAudioFile();
@@ -2688,7 +3027,7 @@ export function ConversationCard({
         focusedKeyRef.current = field;
       }}
       inputMode="decimal"
-      className={`${width} rounded-md border border-[var(--theme-neutral)]/25 bg-white px-2 py-0.5 text-right text-[14px] text-[var(--theme-neutral)] outline-none focus:border-[#3965e1]`}
+      className={`${width} rounded-md border border-[var(--theme-neutral)]/25 bg-transparent px-2 py-0.5 text-right text-[14px] text-[var(--theme-neutral)] outline-none focus:border-[#3965e1]`}
     />
   );
 
@@ -2742,7 +3081,7 @@ export function ConversationCard({
                     <button
                       type="button"
                       onClick={editing ? saveEditing : startEditing}
-                      className="inline-flex items-center gap-2 rounded-lg border border-[#d9d9d9] bg-white px-3 py-1.5 text-[16px] font-bold text-[#3965e1] transition hover:bg-[#3965e1]/5"
+                      className="inline-flex items-center gap-2 rounded-lg border border-[var(--theme-neutral)]/20 bg-[var(--theme-surface)] px-3 py-1.5 text-[16px] font-bold text-[#3965e1] transition hover:bg-[#3965e1]/5"
                     >
                       {editing ? (
                         <IconCheck className="h-5 w-5" stroke={2.2} />
@@ -2804,8 +3143,8 @@ export function ConversationCard({
 
       {/* Title + tab control (Figma 1377:4448) — workspace title/subtitle on
           the left, summary / form / transcript tabs on the right. */}
-      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--theme-neutral)]/15 p-4">
-        <div className="flex flex-1 flex-col gap-2">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-[var(--theme-neutral)]/15 p-4 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
+        <div className="flex flex-col gap-1 xl:flex-1 xl:gap-2">
           <h2 className="text-[16px] font-bold text-[var(--theme-neutral)]">
             บทสนทนากับผู้ป่วย
           </h2>
@@ -2897,7 +3236,7 @@ export function RecordingPanel({
   onAudioFile: () => void;
 }) {
   return (
-    <aside className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-14 overflow-y-auto rounded-3xl border border-[var(--theme-neutral)]/15 bg-white p-6 portrait:h-auto portrait:shrink-0 portrait:snap-start">
+    <aside className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-14 overflow-y-auto rounded-3xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-6 portrait:h-auto portrait:shrink-0 portrait:snap-start">
       {/* Concentric circles wrapping the Dr. Note mascot (1377:4436) —
           the rings breathe with the live mic level while recording. */}
       <MascotRings isRecording={isRecording} />
@@ -3062,7 +3401,10 @@ function RecordControl({
         {isRecording ? "หยุดการบันทึก" : "เริ่มบันทึก"}
       </button>
       {!isRecording && (
-        <Dropdown placement="top-end">
+        <Dropdown
+          placement="top-end"
+          classNames={{ content: "bg-[var(--theme-surface)] ring-1 ring-[var(--theme-neutral)]/15" }}
+        >
           <DropdownTrigger>
             <button
               type="button"
@@ -3074,6 +3416,7 @@ function RecordControl({
           </DropdownTrigger>
           <DropdownMenu
             aria-label="แหล่งเสียง"
+            itemClasses={{ base: "data-[hover=true]:bg-[var(--theme-neutral)]/10 data-[hover=true]:!text-[var(--theme-neutral)] data-[selected=true]:bg-[var(--theme-neutral)]/10 data-[selected=true]:!text-[var(--theme-neutral)] data-[selectable=true]:focus:bg-[var(--theme-neutral)]/10 data-[selectable=true]:focus:!text-[var(--theme-neutral)]", title: "text-[var(--theme-neutral)]", description: "text-[var(--theme-neutral)]/55" }}
             onAction={(key) => {
               if (key === "mic") onToggleRecord();
               else if (key === "tab") onTabAudio();
@@ -3236,17 +3579,6 @@ function ScrollArea({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Interview self-evaluation seeds (would be produced by the LLM once the
-// transcript is complete — mirrors AppointReady's report evaluation).
-const SUMMARY_HELPFUL_SEED = [
-  "บันทึกอาการสำคัญและคำบรรยายจากผู้ป่วยครบถ้วน",
-  "มีการระบุระยะเวลาและลักษณะของอาการ",
-];
-const SUMMARY_GAPS_SEED = [
-  "ประวัติแพ้ยา / อาหาร",
-  "ประวัติโรคประจำตัวและยาที่ใช้ประจำ",
-  "สัญญาณชีพ (อุณหภูมิ / ความดัน / ชีพจร)",
-];
 
 function SummaryTab({
   topics,
@@ -3265,10 +3597,15 @@ function SummaryTab({
   // most once every ~1.2s so the list grows calmly even when the model
   // emits a burst on a single tick.
   const visible = useThrottledReveal(topics, 1200);
-  const [evalOpen, setEvalOpen] = useState(false);
 
   const hasEhr = ehr.history.length > 0 || ehr.meds.length > 0;
-  if (topics.length === 0 && !hpi && !hasEhr && interviewMeds.length === 0 && !isRecording) {
+  const hasAny = topics.length > 0 || !!hpi || hasEhr || interviewMeds.length > 0;
+  // Once the template has shown real data (or a recording has started), keep it
+  // mounted — after the nurse stops recording the latest summary stays put
+  // instead of collapsing back to the empty state.
+  const seenRef = useRef(false);
+  if (hasAny || isRecording) seenRef.current = true;
+  if (!hasAny && !isRecording && !seenRef.current) {
     return (
       <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[var(--theme-neutral)]/40">
         ยังไม่มีอาการสำคัญที่สรุปได้
@@ -3285,17 +3622,19 @@ function SummaryTab({
     <div className="flex flex-col gap-4">
       {/* Summary sections — each a soft-blue card with a white chip header
           (Figma 1377:4711 / 1377:4721). */}
-      <SummarySection icon={IconAlertCircle} label="Primary concern">
+      <SummarySection icon={IconAlertCircle} label="อาการสำคัญ">
         {primary ? (
           <p className="text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
             {primary.title}
           </p>
-        ) : (
+        ) : isRecording ? (
           <ReportLineSkeleton />
+        ) : (
+          <p className="text-[13px] text-[var(--theme-neutral)]/45">—</p>
         )}
       </SummarySection>
 
-      <SummarySection icon={IconNote} label="History of Present Illness (HPI)">
+      <SummarySection icon={IconNote} label="อาการเจ็บป่วยปัจจุบัน (HPI)">
         {hpi ? (
           <HpiDiffText text={hpi} />
         ) : isRecording ? (
@@ -3305,7 +3644,7 @@ function SummaryTab({
         )}
       </SummarySection>
 
-      <SummarySection icon={IconStethoscope} label="Relevant Medical History (from EHR)">
+      <SummarySection icon={IconStethoscope} label="ประวัติการเจ็บป่วย">
         {ehr.history.length > 0 ? (
           <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
             {ehr.history.map((h, i) => (
@@ -3322,7 +3661,7 @@ function SummaryTab({
         )}
       </SummarySection>
 
-      <SummarySection icon={IconNote} label="Medications (from EHR and interview)">
+      <SummarySection icon={IconNote} label="ประวัติการใช้ยา">
         {ehr.meds.length > 0 || interviewMeds.length > 0 ? (
           <ul className="flex flex-col gap-1 text-[14px] leading-relaxed text-[var(--theme-neutral)]/85">
             {ehr.meds.map((m, i) => (
@@ -3351,66 +3690,6 @@ function SummaryTab({
         )}
       </SummarySection>
 
-      {/* Report evaluation — collapsible */}
-      <div className="px-1">
-          <button
-            type="button"
-            onClick={() => setEvalOpen((v) => !v)}
-            className="flex items-center gap-1 rounded-full bg-[#ddd6fe] px-3 py-1.5 text-[12px] font-medium text-[#6d28d9] transition hover:bg-[#c4b5fd]"
-          >
-            <IconChevronDown
-              className={`h-3.5 w-3.5 transition-transform ${evalOpen ? "rotate-180" : ""}`}
-              stroke={2}
-            />
-            View Report Evaluation
-          </button>
-
-          {evalOpen && (
-            <div className="mt-3 flex flex-col gap-3">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[12px] font-semibold text-[var(--theme-success)]">
-                  ข้อมูลที่ได้ (helpful facts)
-                </span>
-                <ul className="flex flex-col gap-1">
-                  {SUMMARY_HELPFUL_SEED.map((f, i) => (
-                    <li
-                      key={i}
-                      className="flex gap-1.5 text-[12px] leading-snug text-[var(--theme-neutral)]/80"
-                    >
-                      <IconCheck
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--theme-success)]"
-                        stroke={2}
-                      />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[12px] font-semibold text-[var(--theme-warning)]">
-                  ยังไม่ได้ถาม แต่ควรถามเพิ่ม
-                </span>
-                <ul className="flex flex-col gap-1">
-                  {SUMMARY_GAPS_SEED.map((g, i) => (
-                    <li
-                      key={i}
-                      className="flex gap-1.5 text-[12px] leading-snug text-[var(--theme-neutral)]/80"
-                    >
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--theme-warning)]" />
-                      <span>{g}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-
-          <p className="mt-4 text-center text-[14px] font-bold tracking-[0.4em] text-[var(--theme-neutral)]/35">
-            ***
-          </p>
-        </div>
-
       {/* Disclaimer */}
       <div className="flex gap-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-3">
         <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" stroke={1.75} />
@@ -3435,9 +3714,9 @@ function SummarySection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-4 rounded-3xl bg-[#f5f7fd] p-4">
+    <div className="flex flex-col gap-4 rounded-3xl bg-[var(--theme-primary)]/[0.06] p-4">
       <div className="flex items-center">
-        <div className="inline-flex items-center gap-2 rounded-lg bg-white px-2 py-1">
+        <div className="inline-flex items-center gap-2 rounded-lg bg-[var(--theme-surface)] px-2 py-1">
           <Icon className="h-4 w-4 text-[var(--theme-primary)]" stroke={1.75} />
           <span className="text-[14px] font-medium text-[var(--theme-neutral)]">{label}</span>
         </div>
@@ -3780,7 +4059,7 @@ function TranscriptTab({
             )
           }
           onPress={() => (isEditing ? handleSaveDraft() : setIsEditing(true))}
-          className="text-[13px]"
+          className="border-[var(--theme-neutral)]/25 text-[13px] text-[var(--theme-neutral)]"
         >
           {isEditing ? "บันทึก" : "แก้ไข"}
         </Button>
@@ -3995,7 +4274,7 @@ function OldCartsTab() {
             )
           }
           onPress={() => (isEditing ? handleSave() : setIsEditing(true))}
-          className="text-[13px]"
+          className="border-[var(--theme-neutral)]/25 text-[13px] text-[var(--theme-neutral)]"
         >
           {isEditing ? "บันทึก" : "แก้ไข"}
         </Button>
@@ -4018,7 +4297,7 @@ function OldCartsTab() {
                   isReadOnly={!isEditing}
                   minRows={2}
                   variant="bordered"
-                  classNames={{ inputWrapper: "bg-[var(--theme-surface)]" }}
+                  classNames={{ inputWrapper: "bg-[var(--theme-surface)] border-[var(--theme-neutral)]/15", label: "!text-[var(--theme-neutral)]/55", input: "!text-[var(--theme-neutral)] placeholder:!text-[var(--theme-neutral)]/40" }}
                 />
               ) : (
                 <Input
@@ -4028,7 +4307,7 @@ function OldCartsTab() {
                   onValueChange={(v) => update(field.key, v)}
                   isReadOnly={!isEditing}
                   variant="bordered"
-                  classNames={{ inputWrapper: "bg-[var(--theme-surface)]" }}
+                  classNames={{ inputWrapper: "bg-[var(--theme-surface)] border-[var(--theme-neutral)]/15", label: "!text-[var(--theme-neutral)]/55", input: "!text-[var(--theme-neutral)] placeholder:!text-[var(--theme-neutral)]/40" }}
                 />
               )}
             </div>
@@ -4674,7 +4953,7 @@ function PatientIdCard({
   // conversation workspace gets the full width.
   if (collapsed) {
     return (
-      <aside className="flex h-full min-h-0 flex-col items-center gap-3 overflow-hidden rounded-3xl border border-[var(--theme-neutral)]/15 bg-white p-2">
+      <aside className="flex h-full min-h-0 flex-col items-center gap-3 overflow-hidden rounded-3xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-2">
         <button
           type="button"
           onClick={onToggle}
@@ -4704,7 +4983,7 @@ function PatientIdCard({
     { label: "ส่วนสูง", value: info.height || "—" },
   ];
   return (
-    <aside className="flex h-full min-h-0 flex-col items-start justify-between gap-4 overflow-y-auto rounded-3xl border border-[var(--theme-neutral)]/15 bg-white p-4">
+    <aside className="flex h-full min-h-0 flex-col items-start justify-between gap-4 overflow-y-auto rounded-3xl border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-4">
       <div className="flex w-full flex-col gap-4">
         <div className="flex w-full items-center justify-between">
           <span className="text-[13px] font-semibold text-[var(--theme-neutral)]/55">

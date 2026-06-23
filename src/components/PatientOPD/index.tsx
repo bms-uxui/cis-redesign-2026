@@ -482,6 +482,55 @@ export interface SymptomPlotItem {
 /** After the Dr.Note recording stops, summarise the history into a few key
  *  symptom callouts (region + short phrase) to plot on the body — NOT one line
  *  per mapped region. Re-extracts once each time recording stops. */
+/** LIVE curated symptom plot — re-runs every few seconds WHILE recording (the
+ *  nurse intake body map), returning {region, label} phrases (not just region
+ *  names). Holds its last result between ticks. */
+export function useLiveSymptomPlot(transcript: string, isRecording: boolean): SymptomPlotItem[] {
+  const [items, setItems] = useState<SymptomPlotItem[]>([]);
+  const txRef = useRef(transcript);
+  txRef.current = transcript;
+  const lastRef = useRef("");
+
+  useEffect(() => {
+    if (!isRecording) return;
+    let cancelled = false;
+    const tick = async () => {
+      const tx = txRef.current.trim();
+      if (tx.length < 12 || tx === lastRef.current) return;
+      lastRef.current = tx;
+      try {
+        const res = await chatJSON<{ items?: { region?: string; label?: string; cause?: string }[] }>(
+          [
+            { role: "system", content: SYMPTOM_PLOT_SYSTEM },
+            { role: "user", content: `บทสนทนาการซักประวัติ (กำลังดำเนินอยู่):\n${tx}` },
+          ],
+          { temperature: 0.1, maxTokens: 500, fast: true },
+        );
+        if (cancelled) return;
+        const out: SymptomPlotItem[] = (res.items ?? [])
+          .filter((it) => it.region && it.region in BODY_REGION_BY_ID && it.label)
+          .slice(0, 4)
+          .map((it) => ({
+            id: it.region as BodyRegionId,
+            label: String(it.label),
+            cause: it.cause ? String(it.cause).trim() || undefined : undefined,
+          }));
+        setItems(out);
+      } catch {
+        // silent — next tick retries
+      }
+    };
+    tick();
+    const interval = window.setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isRecording]);
+
+  return items;
+}
+
 export function useSymptomPlot(transcript: string, isRecording: boolean): SymptomPlotItem[] {
   const [items, setItems] = useState<SymptomPlotItem[]>([]);
   const txRef = useRef(transcript);
@@ -525,6 +574,74 @@ export function useSymptomPlot(transcript: string, isRecording: boolean): Sympto
   }, [isRecording]);
 
   return items;
+}
+
+/** One-shot symptom mapping for a FINISHED transcript (e.g. the patient-new
+ *  review step, which has no live recording loop). Fetches the heat regions +
+ *  the curated plot once when `active` flips true, reusing the same prompts as
+ *  the live hooks. */
+export function useSymptomMapOnce(
+  transcript: string,
+  active: boolean,
+): { highlights: Partial<Record<BodyRegionId, number>>; plot: SymptomPlotItem[]; loading: boolean } {
+  const [state, setState] = useState<{
+    highlights: Partial<Record<BodyRegionId, number>>;
+    plot: SymptomPlotItem[];
+    loading: boolean;
+  }>({ highlights: {}, plot: [], loading: false });
+  const doneRef = useRef("");
+
+  useEffect(() => {
+    const tx = transcript.trim();
+    if (!active || tx.length < 12 || doneRef.current === tx) return;
+    doneRef.current = tx;
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true }));
+    (async () => {
+      try {
+        const [reg, plot] = await Promise.all([
+          chatJSON<{ regions?: { id?: string; intensity?: number }[] }>(
+            [
+              { role: "system", content: BODY_ANALYSIS_SYSTEM },
+              { role: "user", content: `บทสนทนาการซักประวัติ:\n${tx}` },
+            ],
+            { temperature: 0.1, maxTokens: 400, fast: true },
+          ),
+          chatJSON<{ items?: { region?: string; label?: string; cause?: string }[] }>(
+            [
+              { role: "system", content: SYMPTOM_PLOT_SYSTEM },
+              { role: "user", content: `บทสนทนาการซักประวัติ:\n${tx}` },
+            ],
+            { temperature: 0.1, maxTokens: 500, fast: true },
+          ),
+        ]);
+        if (cancelled) return;
+        const highlights: Partial<Record<BodyRegionId, number>> = {};
+        for (const r of reg.regions ?? []) {
+          if (r.id && r.id in BODY_REGION_BY_ID) {
+            const v = typeof r.intensity === "number" ? r.intensity : 0.6;
+            highlights[r.id as BodyRegionId] = Math.max(0.2, Math.min(1, v));
+          }
+        }
+        const items: SymptomPlotItem[] = (plot.items ?? [])
+          .filter((it) => it.region && it.region in BODY_REGION_BY_ID && it.label)
+          .slice(0, 4)
+          .map((it) => ({
+            id: it.region as BodyRegionId,
+            label: String(it.label),
+            cause: it.cause ? String(it.cause).trim() || undefined : undefined,
+          }));
+        setState({ highlights, plot: items, loading: false });
+      } catch {
+        if (!cancelled) setState((s) => ({ ...s, loading: false }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [transcript, active]);
+
+  return state;
 }
 
 const PAST_HISTORY_SYSTEM =
@@ -720,7 +837,7 @@ function HpiHlControls({ ai, show, onToggle }: { ai: boolean; show: boolean; onT
           type="button"
           onClick={onToggle}
           aria-label={show ? "ซ่อนไฮไลต์" : "แสดงไฮไลต์"}
-          className="grid h-6 w-6 place-items-center rounded-md text-black/40 transition-colors hover:bg-black/5 hover:text-black/70"
+          className="grid h-6 w-6 place-items-center rounded-md text-[var(--theme-neutral)]/40 transition-colors hover:bg-[var(--theme-neutral)]/10 hover:text-[var(--theme-neutral)]/70"
         >
           {show ? <IconEyeOff className="h-4 w-4" stroke={2} /> : <IconEye className="h-4 w-4" stroke={2} />}
         </button>
@@ -988,13 +1105,13 @@ export const FLAG_LABEL: Record<"high" | "low" | "abn", string> = {
  *  overview and the schedule next-case summary. Renders nothing when empty. */
 export function AbnormalLabsCard({ labs, className = "" }: { labs: Patient["labs"]; className?: string }) {
   return (
-    <div className={`relative w-full overflow-hidden rounded-[24px] bg-gradient-to-b from-white to-[#f2eaff] p-4 ${className}`}>
+    <div className={`relative w-full overflow-hidden rounded-[24px] bg-[var(--theme-surface)] p-4 ${className}`}>
       {/* decorative 3D marker — sits BEHIND the value cards (z-0) */}
       <img src={LAB_ABNORMAL_ICON} alt="" className="pointer-events-none absolute right-3 top-2 z-0 h-14 w-14 select-none" />
       <div className="relative z-10 flex flex-col gap-2">
-        <p className="text-[14px] font-semibold text-black/60">ผล Lab ผิดปกติ</p>
+        <p className="text-[14px] font-semibold text-[var(--theme-neutral)]/60">ผล Lab ผิดปกติ</p>
         {!labs.length && (
-          <p className="rounded-[16px] bg-white/60 px-4 py-2.5 text-[13px] text-black/45">ไม่พบผลแลปที่ผิดปกติ</p>
+          <p className="rounded-[16px] bg-[var(--theme-neutral)]/[0.06] px-4 py-2.5 text-[13px] text-[var(--theme-neutral)]/45">ไม่พบผลแลปที่ผิดปกติ</p>
         )}
         {labs.map((l) => {
           const flag = labFlag(l);
@@ -1048,6 +1165,17 @@ export default function PatientOPD() {
   // Transcript panel can expand over the model column while recording
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const modelHidden = activeStep >= 1 && transcriptExpanded;
+  // Body-model column is narrower on tablet (lg) so the wider about panel fits.
+  const [isXl, setIsXl] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1280px)").matches : true,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1280px)");
+    const on = () => setIsXl(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  const modelWidth = isXl ? 380 : 300;
   // AI treatment-plan draft, generated on the finish button (loading lives there)
   const [planDraft, setPlanDraft] = useState<TreatmentPlan | null>(null);
   // Encounter diagnoses (ICD-10) — entered at วางแผน, flow into lab/cert/claim
@@ -1086,7 +1214,7 @@ export default function PatientOPD() {
   const info = conditionFor(patient);
 
   return (
-    <div className="h-screen w-full overflow-hidden bg-[#f4f4f4]">
+    <div className="h-screen w-full overflow-hidden bg-[var(--theme-base)]">
       <div className="h-16 shrink-0" aria-hidden />
       <div
         className={[
@@ -1095,17 +1223,17 @@ export default function PatientOPD() {
         ].join(" ")}
       >
         {/* ── Stepper bar ──────────────────────────────────────────── */}
-        <div className="flex shrink-0 items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 rounded-2xl bg-[var(--theme-surface)] px-5 py-3">
           <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
               onClick={() => navigate("/schedule")}
-              className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-[12px] font-semibold text-[var(--theme-neutral)]/60 transition hover:bg-black/[0.04] hover:text-[var(--theme-neutral)]"
+              className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-[12px] font-semibold text-[var(--theme-neutral)]/60 transition hover:bg-[var(--theme-neutral)]/[0.06] hover:text-[var(--theme-neutral)]"
             >
               <IconChevronLeft className="h-4 w-4" stroke={2} />
               ตารางแพทย์
             </button>
-            <span className="h-5 w-px shrink-0 bg-black/10" />
+            <span className="h-5 w-px shrink-0 bg-[var(--theme-neutral)]/12" />
             <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
               {STEPS.map((s, i) => (
               <div key={s} className="flex items-center gap-1.5">
@@ -1149,7 +1277,7 @@ export default function PatientOPD() {
           {/* LEFT — about patient (stacked cards). `relative` + AboutPanel
               `absolute inset-0` pins the panel to this box's exact height so its
               inner scroll area is bounded (flex-grow height was unreliable). */}
-          <div className="relative hidden w-[400px] shrink-0 overflow-hidden xl:mr-4 xl:block">
+          <div className="relative hidden w-[320px] shrink-0 overflow-hidden lg:mr-4 lg:block xl:w-[400px]">
             <AboutPanel patient={patient} encounterDx={diagnoses} />
           </div>
 
@@ -1212,12 +1340,12 @@ export default function PatientOPD() {
               <motion.div
                 key="model"
                 initial={{ width: 0, marginLeft: 0, opacity: 0 }}
-                animate={{ width: 380, marginLeft: 16, opacity: 1 }}
+                animate={{ width: modelWidth, marginLeft: 16, opacity: 1 }}
                 exit={{ width: 0, marginLeft: 0, opacity: 0 }}
                 transition={{ duration: 0.38, ease: [0.32, 0.72, 0, 1] }}
                 className="hidden h-full shrink-0 overflow-hidden lg:block"
               >
-                <div className="h-full w-[380px]">
+                <div className="h-full" style={{ width: modelWidth }}>
                   <ModelPanel patient={patient} info={info} liveFindings={liveFindings} liveRegions={liveRegions} liveHpi={hpi} recording={isRecording} symptomPlot={symptomPlot} />
                 </div>
               </motion.div>
@@ -1264,7 +1392,7 @@ function ScreeningPanel({
       : "ยังไม่มีบันทึกการซักประวัติจากพยาบาล";
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] bg-white">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] bg-[var(--theme-surface)]">
       {/* Dr.Note mascot — sits behind the content (content reads on top) */}
       <img
         src={DRNOTE_ROBOT}
@@ -1277,8 +1405,8 @@ function ScreeningPanel({
       />
       <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto p-6 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-[16px] font-bold text-[#22202a]">การคัดกรองจากพยาบาล</h2>
-          <span className="shrink-0 rounded-[12px] bg-black/5 px-3 py-1 text-[13px] font-semibold text-black/60">
+          <h2 className="text-[16px] font-bold text-[var(--theme-neutral)]">การคัดกรองจากพยาบาล</h2>
+          <span className="shrink-0 rounded-[12px] bg-[var(--theme-neutral)]/10 px-3 py-1 text-[13px] font-semibold text-[var(--theme-neutral)]/60">
             พว. นิรนาม ยามว่าง
           </span>
         </div>
@@ -1290,9 +1418,9 @@ function ScreeningPanel({
             defaultExpandedKeys={["symptoms"]}
             className="gap-3 px-0"
             itemClasses={{
-              base: "bg-white border border-[var(--theme-neutral)]/12 shadow-none rounded-[16px] px-4",
+              base: "bg-[var(--theme-surface)] border border-[var(--theme-neutral)]/12 shadow-none rounded-[16px] px-4",
               trigger: "py-3 gap-3",
-              title: "text-[15px] font-semibold text-[#22202a]",
+              title: "text-[15px] font-semibold text-[var(--theme-neutral)]",
               content: "pb-3 pt-0",
             }}
           >
@@ -1302,7 +1430,7 @@ function ScreeningPanel({
               disableIndicatorAnimation
               indicator={({ isOpen }) => (
                 <IconChevronDown
-                  className={`h-5 w-5 text-black/40 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                  className={`h-5 w-5 text-[var(--theme-neutral)]/40 transition-transform ${isOpen ? "rotate-180" : ""}`}
                   stroke={2}
                 />
               )}
@@ -1310,7 +1438,7 @@ function ScreeningPanel({
               title={
                 <span>
                   Vital Signs{" "}
-                  <span className="text-[12px] font-medium text-black/45">
+                  <span className="text-[12px] font-medium text-[var(--theme-neutral)]/45">
                     (ค่าปกติ {normalCount}/{ranged.length})
                   </span>
                 </span>
@@ -1320,11 +1448,11 @@ function ScreeningPanel({
                 {checks.map((c) => (
                   <div
                     key={c.label}
-                    className={["rounded-[12px] px-3 py-2", c.normal ? "bg-black/[0.03]" : "bg-[#ff383c]/[0.08]"].join(" ")}
+                    className={["rounded-[12px] px-3 py-2", c.normal ? "bg-[var(--theme-neutral)]/[0.05]" : "bg-[#ff383c]/[0.08]"].join(" ")}
                   >
-                    <p className="text-[11px] font-medium text-black/55">{c.label}</p>
-                    <p className={`mt-0.5 text-[14px] font-bold tabular-nums ${c.normal ? "text-[#22202a]" : "text-[#ff383c]"}`}>
-                      {c.value} <span className="text-[10px] font-medium text-black/40">{c.unit}</span>
+                    <p className="text-[11px] font-medium text-[var(--theme-neutral)]/55">{c.label}</p>
+                    <p className={`mt-0.5 text-[14px] font-bold tabular-nums ${c.normal ? "text-[var(--theme-neutral)]" : "text-[#ff383c]"}`}>
+                      {c.value} <span className="text-[10px] font-medium text-[var(--theme-neutral)]/40">{c.unit}</span>
                     </p>
                   </div>
                 ))}
@@ -1337,7 +1465,7 @@ function ScreeningPanel({
               disableIndicatorAnimation
               indicator={({ isOpen }) => (
                 <IconChevronDown
-                  className={`h-5 w-5 text-black/40 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                  className={`h-5 w-5 text-[var(--theme-neutral)]/40 transition-transform ${isOpen ? "rotate-180" : ""}`}
                   stroke={2}
                 />
               )}
@@ -1351,12 +1479,12 @@ function ScreeningPanel({
             >
               <div className="flex flex-col gap-4">
                 <div>
-                  <p className="text-[13px] font-semibold text-black/60">อาการสำคัญ</p>
-                  <p className="mt-2 text-[14px] font-normal text-[#22202a]">{cc}</p>
+                  <p className="text-[13px] font-semibold text-[var(--theme-neutral)]/60">อาการสำคัญ</p>
+                  <p className="mt-2 text-[14px] font-normal text-[var(--theme-neutral)]">{cc}</p>
                 </div>
                 <div>
-                  <p className="text-[13px] font-semibold text-black/60">อาการเจ็บป่วยปัจจุบัน (HPI)</p>
-                  <p className="mt-2 text-[14px] font-normal leading-relaxed text-[#22202a]">{hpi}</p>
+                  <p className="text-[13px] font-semibold text-[var(--theme-neutral)]/60">อาการเจ็บป่วยปัจจุบัน (HPI)</p>
+                  <p className="mt-2 text-[14px] font-normal leading-relaxed text-[var(--theme-neutral)]">{hpi}</p>
                 </div>
               </div>
             </AccordionItem>
@@ -1365,7 +1493,7 @@ function ScreeningPanel({
       </div>
 
       {/* Sticky footer — start recording the history right from screening */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 rounded-b-[24px] bg-gradient-to-b from-transparent via-white/85 to-white px-4 pb-4 pt-10">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 rounded-b-[24px] bg-gradient-to-b from-transparent via-[var(--theme-surface)]/85 to-[var(--theme-surface)] px-4 pb-4 pt-10">
         <div className="pointer-events-auto relative flex gap-2">
           <Tooltip content="จดบันทึกด้วยตัวเอง" placement="top" delay={200} closeDelay={0}>
           <button
@@ -1388,8 +1516,8 @@ function ScreeningPanel({
               <IconChevronDown className={`h-4 w-4 transition-transform ${srcMenuOpen ? "rotate-180" : ""}`} stroke={2.5} />
             </button>
             {srcMenuOpen && (
-              <div className="absolute bottom-full left-0 right-0 z-30 mb-2 rounded-2xl border border-black/5 bg-white p-1.5 shadow-[0_-8px_28px_rgba(0,0,0,0.16)]">
-                <p className="px-2 py-1 text-[11px] font-semibold text-black/45">เลือกแหล่งที่มาของเสียง</p>
+              <div className="absolute bottom-full left-0 right-0 z-30 mb-2 rounded-2xl border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)] p-1.5 shadow-[0_-8px_28px_rgba(0,0,0,0.16)]">
+                <p className="px-2 py-1 text-[11px] font-semibold text-[var(--theme-neutral)]/45">เลือกแหล่งที่มาของเสียง</p>
                 {([
                   { key: "mic", label: "ไมโครโฟน", Icon: IconMicrophone },
                   { key: "tab", label: "เสียงจากแท็บ/ระบบ", Icon: IconDeviceDesktop },
@@ -1401,7 +1529,7 @@ function ScreeningPanel({
                       setSrcMenuOpen(false);
                       onStart(key);
                     }}
-                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[13px] text-[#22202a] transition hover:bg-[#3965e1]/[0.06]"
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[13px] text-[var(--theme-neutral)] transition hover:bg-[#3965e1]/[0.06]"
                   >
                     <Icon className="h-4 w-4 shrink-0 text-[#3965e1]" stroke={2} />
                     {label}
@@ -1496,8 +1624,8 @@ function TxSection({
   return (
     <div className={`flex flex-col gap-2 border-b border-[#bebdbd] pb-3 pt-3 ${className}`}>
       <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 shrink-0 text-[#22202a]" />
-        <h3 className="text-[16px] font-bold text-[#22202a]">{title}</h3>
+        <Icon className="h-4 w-4 shrink-0 text-[var(--theme-neutral)]" />
+        <h3 className="text-[16px] font-bold text-[var(--theme-neutral)]">{title}</h3>
         {speak && <SpeakButton getText={speak} />}
         {accessory && <div className="ml-auto">{accessory}</div>}
       </div>
@@ -1509,7 +1637,7 @@ function TxSection({
 /** Tiny source tag (EHR vs interview) — mirrors the patient/new report format. */
 function SourceBadge({ source }: { source: "ehr" | "interview" }) {
   return source === "ehr" ? (
-    <span className="mt-0.5 shrink-0 rounded bg-black/10 px-1 text-[10px] font-semibold text-black/45">EHR</span>
+    <span className="mt-0.5 shrink-0 rounded bg-[var(--theme-neutral)]/12 px-1 text-[10px] font-semibold text-[var(--theme-neutral)]/45">EHR</span>
   ) : (
     <span className="mt-0.5 shrink-0 rounded bg-[#3965e1]/10 px-1 text-[10px] font-semibold text-[#3965e1]">ซักประวัติ</span>
   );
@@ -1598,7 +1726,7 @@ function DrNoteRecordingPanel({
           container so the audio-source dropdown isn't covered by it */}
       <div className="relative z-20 flex h-[72px] shrink-0 items-center justify-between gap-2 pl-[124px]">
         <div className="flex flex-1 flex-col items-start gap-1">
-          <Soundwave levelRef={levelRef} barClassName="bg-white" bars={13} />
+          <Soundwave levelRef={levelRef} barClassName="bg-[var(--theme-surface)]" bars={13} />
           {isRecording ? (
             <ListeningCaption tone="white" />
           ) : (
@@ -1626,7 +1754,7 @@ function DrNoteRecordingPanel({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.16 }}
-                    className="absolute right-0 top-[calc(100%+6px)] z-30 w-52 overflow-hidden rounded-[14px] bg-white p-1 shadow-[0_10px_30px_rgba(0,0,0,0.18)]"
+                    className="absolute right-0 top-[calc(100%+6px)] z-30 w-52 overflow-hidden rounded-[14px] bg-[var(--theme-surface)] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.18)]"
                   >
                     {([
                       { key: "mic", label: "ไมโครโฟน", desc: "เสียงในห้องตรวจ", Icon: IconMicrophone },
@@ -1636,12 +1764,12 @@ function DrNoteRecordingPanel({
                         key={o.key}
                         type="button"
                         onClick={() => void switchSource(o.key)}
-                        className={`flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition hover:bg-black/[0.04] ${src === o.key ? "bg-[#3965e1]/[0.06]" : ""}`}
+                        className={`flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition hover:bg-[var(--theme-neutral)]/[0.06] ${src === o.key ? "bg-[#3965e1]/[0.06]" : ""}`}
                       >
-                        <o.Icon className={`h-5 w-5 shrink-0 ${src === o.key ? "text-[#3965e1]" : "text-black/45"}`} stroke={2} />
+                        <o.Icon className={`h-5 w-5 shrink-0 ${src === o.key ? "text-[#3965e1]" : "text-[var(--theme-neutral)]/45"}`} stroke={2} />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-[13px] font-bold text-[#22202a]">{o.label}</span>
-                          <span className="block text-[11px] text-black/45">{o.desc}</span>
+                          <span className="block text-[13px] font-bold text-[var(--theme-neutral)]">{o.label}</span>
+                          <span className="block text-[11px] text-[var(--theme-neutral)]/45">{o.desc}</span>
                         </span>
                         {src === o.key && <IconCheck className="h-4 w-4 shrink-0 text-[#3965e1]" stroke={2.4} />}
                       </button>
@@ -1655,7 +1783,7 @@ function DrNoteRecordingPanel({
           <button
             type="button"
             onClick={isRecording ? () => void stopSession() : resume}
-            className="flex h-12 shrink-0 items-center gap-2 rounded-[16px] bg-white px-5 text-[14px] font-bold text-[#3965e1] transition hover:bg-slate-100"
+            className="flex h-12 shrink-0 items-center gap-2 rounded-[16px] bg-[var(--theme-surface)] px-5 text-[14px] font-bold text-[#3965e1] transition hover:bg-slate-100"
           >
             {isRecording ? (
               <>
@@ -1677,7 +1805,7 @@ function DrNoteRecordingPanel({
             type="button"
             onClick={onToggleExpand}
             aria-label={expanded ? "ย่อ transcript" : "ขยาย transcript เต็มพื้นที่"}
-            className="flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-l-[16px] bg-white text-[#3965e1] transition hover:bg-slate-100"
+            className="flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-l-[16px] bg-[var(--theme-surface)] text-[#3965e1] transition hover:bg-slate-100"
           >
             {expanded ? (
               <IconLayoutSidebarRightCollapse className="h-5 w-5" stroke={2} />
@@ -1696,9 +1824,9 @@ function DrNoteRecordingPanel({
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: "spring", stiffness: 240, damping: 28, mass: 0.9, opacity: { duration: 0.3 } }}
         style={{ willChange: "transform, opacity" }}
-        className="relative z-10 mt-2 flex min-h-0 flex-1 flex-col rounded-[24px] bg-white p-3"
+        className="relative z-10 mt-2 flex min-h-0 flex-1 flex-col rounded-[24px] bg-[var(--theme-surface)] p-3"
       >
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[16px] bg-white px-1 pb-24 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[16px] bg-[var(--theme-surface)] px-1 pb-24 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
           {/* อาการสำคัญ */}
           <TxSection
             icon={ChiefIcon}
@@ -1709,7 +1837,7 @@ function DrNoteRecordingPanel({
             {primaryText ? (
               <HpiDiffText text={primaryText} />
             ) : (
-              <p className="text-[13px] text-black/45">{isRecording ? "กำลังฟังเพื่อสรุปอาการสำคัญ…" : "—"}</p>
+              <p className="text-[13px] text-[var(--theme-neutral)]/45">{isRecording ? "กำลังฟังเพื่อสรุปอาการสำคัญ…" : "—"}</p>
             )}
           </TxSection>
           {/* HPI — highlight controls sit in the title row when active */}
@@ -1733,13 +1861,13 @@ function DrNoteRecordingPanel({
                       ai={hpiAnn.ai}
                       show={hpiShow}
                       hideControls
-                      className="text-[14px] leading-relaxed text-[#22202a]"
+                      className="text-[14px] leading-relaxed text-[var(--theme-neutral)]"
                     />
                   ) : (
                     <HpiDiffText text={hpi} />
                   )
                 ) : (
-                  <p className="text-[13px] text-black/45">กำลังเรียบเรียงประวัติการเจ็บป่วยปัจจุบัน…</p>
+                  <p className="text-[13px] text-[var(--theme-neutral)]/45">กำลังเรียบเรียงประวัติการเจ็บป่วยปัจจุบัน…</p>
                 )}
               </TxSection>
             );
@@ -1755,7 +1883,7 @@ function DrNoteRecordingPanel({
             }
           >
             {ehrHistory.length > 0 || pastHistory.length > 0 ? (
-              <ul className="flex flex-col gap-1.5 text-[14px] leading-relaxed text-[#22202a]">
+              <ul className="flex flex-col gap-1.5 text-[14px] leading-relaxed text-[var(--theme-neutral)]">
                 {ehrHistory.map((h, i) => (
                   <li key={`e${i}`} className="flex items-start gap-2">
                     <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-black/25" />
@@ -1772,7 +1900,7 @@ function DrNoteRecordingPanel({
                 ))}
               </ul>
             ) : (
-              <p className="text-[13px] text-black/45">{isRecording ? "กำลังฟังประวัติการเจ็บป่วยในอดีต…" : "ไม่มีข้อมูล"}</p>
+              <p className="text-[13px] text-[var(--theme-neutral)]/45">{isRecording ? "กำลังฟังประวัติการเจ็บป่วยในอดีต…" : "ไม่มีข้อมูล"}</p>
             )}
           </TxSection>
           {/* ประวัติการใช้ยา — EHR + ซักประวัติ */}
@@ -1786,7 +1914,7 @@ function DrNoteRecordingPanel({
             }
           >
             {ehrMeds.length > 0 || meds.length > 0 ? (
-              <ul className="flex flex-col gap-1.5 text-[14px] leading-relaxed text-[#22202a]">
+              <ul className="flex flex-col gap-1.5 text-[14px] leading-relaxed text-[var(--theme-neutral)]">
                 {ehrMeds.map((m, i) => (
                   <li key={`e${i}`} className="flex items-start gap-2">
                     <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-black/25" />
@@ -1803,7 +1931,7 @@ function DrNoteRecordingPanel({
                 ))}
               </ul>
             ) : (
-              <p className="text-[13px] text-black/45">{isRecording ? "กำลังประมวลผลรายการยา…" : "ไม่มีข้อมูล"}</p>
+              <p className="text-[13px] text-[var(--theme-neutral)]/45">{isRecording ? "กำลังประมวลผลรายการยา…" : "ไม่มีข้อมูล"}</p>
             )}
           </TxSection>
         </div>
@@ -1820,7 +1948,7 @@ function DrNoteRecordingPanel({
             <div className="absolute inset-0 backdrop-blur-[2px] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_35%)] [mask-image:linear-gradient(to_bottom,transparent_0%,black_35%)]" />
             <div className="absolute inset-0 backdrop-blur-[6px] [-webkit-mask-image:linear-gradient(to_bottom,transparent_35%,black_70%)] [mask-image:linear-gradient(to_bottom,transparent_35%,black_70%)]" />
             <div className="absolute inset-0 backdrop-blur-[12px] [-webkit-mask-image:linear-gradient(to_bottom,transparent_70%,black_100%)] [mask-image:linear-gradient(to_bottom,transparent_70%,black_100%)]" />
-            <div className="absolute inset-0 bg-gradient-to-b from-white/0 via-white/70 to-white" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[var(--theme-surface)]/0 via-[var(--theme-surface)]/70 to-[var(--theme-surface)]" />
           </div>
           {/* Evaluate the history → suggest follow-up questions (only when paused) */}
           {!isRecording && (
@@ -1841,7 +1969,7 @@ function DrNoteRecordingPanel({
                 setEvalOpen(true);
                 setEvalLoading(false);
               }}
-              className="pointer-events-auto relative z-10 flex shrink-0 items-center justify-center rounded-[16px] bg-[#f1f5ff] px-4 text-[#3965e1] transition-colors hover:bg-[#e3ebff] disabled:cursor-not-allowed disabled:opacity-60"
+              className="pointer-events-auto relative z-10 flex shrink-0 items-center justify-center rounded-[16px] bg-[var(--theme-primary)]/10 px-4 text-[#3965e1] transition-colors hover:bg-[var(--theme-primary)]/15 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {evalLoading ? (
                 <IconLoader2 className="h-6 w-6 animate-spin" stroke={2} />
@@ -1890,10 +2018,10 @@ function DrNoteRecordingPanel({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 14 }}
               transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-              className="absolute inset-0 z-40 flex flex-col rounded-[24px] bg-white p-3"
+              className="absolute inset-0 z-40 flex flex-col rounded-[24px] bg-[var(--theme-surface)] p-3"
             >
               <div className="flex shrink-0 items-center justify-between gap-2 pb-2">
-                <h3 className="flex items-center gap-1.5 text-[15px] font-bold text-[#22202a]">
+                <h3 className="flex items-center gap-1.5 text-[15px] font-bold text-[var(--theme-neutral)]">
                   <IconSparkles className="h-5 w-5 text-[#3965e1]" stroke={2} />
                   แนะนำคำถามเพิ่มเติม
                 </h3>
@@ -1901,7 +2029,7 @@ function DrNoteRecordingPanel({
                   type="button"
                   onClick={() => setEvalOpen(false)}
                   aria-label="ปิด"
-                  className="grid h-9 w-9 place-items-center rounded-full text-black/55 transition hover:bg-black/5"
+                  className="grid h-9 w-9 place-items-center rounded-full text-[var(--theme-neutral)]/55 transition hover:bg-[var(--theme-neutral)]/10"
                 >
                   <IconX className="h-5 w-5" stroke={2} />
                 </button>
@@ -1910,17 +2038,17 @@ function DrNoteRecordingPanel({
                 {evalData.assessment && (
                   <div className="flex items-start gap-2 rounded-[12px] bg-[#3965e1]/[0.06] px-3 py-2.5">
                     <IconInfoCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#3965e1]" stroke={2} />
-                    <p className="text-[13px] font-medium leading-relaxed text-[#22202a]">{evalData.assessment}</p>
+                    <p className="text-[13px] font-medium leading-relaxed text-[var(--theme-neutral)]">{evalData.assessment}</p>
                   </div>
                 )}
                 {evalData.questions.length > 0 ? (
                   <ul className="flex flex-col gap-2">
                     {evalData.questions.map((q, i) => (
-                      <li key={i} className="flex items-start gap-2.5 rounded-[12px] bg-[#f7f7f8] px-3 py-2.5">
+                      <li key={i} className="flex items-start gap-2.5 rounded-[12px] bg-[var(--theme-neutral)]/[0.06] px-3 py-2.5">
                         <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#3965e1] text-[11px] font-bold text-white">
                           {i + 1}
                         </span>
-                        <p className="text-[14px] leading-relaxed text-[#22202a]">{q}</p>
+                        <p className="text-[14px] leading-relaxed text-[var(--theme-neutral)]">{q}</p>
                       </li>
                     ))}
                   </ul>
@@ -2304,13 +2432,27 @@ async function aiSuggestDiagnoses(patient: Patient, transcript: TranscriptData):
 
 /** Evaluates the history taken so far and suggests follow-up questions to close
  *  the gaps (OPQRST completeness, red-flag screening, relevant ROS/PMH). */
-type HistoryEval = { assessment: string; questions: string[] };
+export type HistoryEval = { assessment: string; questions: string[] };
+
+/** Evaluate history-taking completeness from a transcript alone (no patient
+ *  record needed) — used by the nurse intake flow. */
+export function evaluateHistoryFromTranscript(transcript: string, chiefComplaint?: string): Promise<HistoryEval> {
+  const ctx =
+    `อาการสำคัญ: ${chiefComplaint?.trim() || "-"}\n` +
+    `บทสนทนาจากการซักประวัติจนถึงตอนนี้: ${transcript.trim() || "(ยังไม่มีบทสนทนา)"}`;
+  return evalHistoryCtx(ctx);
+}
+
 async function evaluateHistory(patient: Patient, transcript: string): Promise<HistoryEval> {
   const cc = patient.recentVisits[0]?.chiefComplaint ?? "-";
   const dx = patient.diagnoses.map((d) => `${d.name} (${d.code})`).join(", ") || "ไม่มีโรคประจำตัว";
   const ctx =
     `อาการสำคัญ: ${cc}\nโรคประจำตัว: ${dx}\n` +
     `บทสนทนาจากการซักประวัติจนถึงตอนนี้: ${transcript.trim() || "(ยังไม่มีบทสนทนา)"}`;
+  return evalHistoryCtx(ctx);
+}
+
+async function evalHistoryCtx(ctx: string): Promise<HistoryEval> {
   try {
     const r = await chatJSON<{ assessment?: string; questions?: string[] }>(
       [
@@ -2396,8 +2538,8 @@ function PlanSection({
         className="flex items-center gap-2 py-3 text-left"
       >
         {icon}
-        <h3 className="text-[16px] font-bold text-[#22202a]">{title}</h3>
-        <IconChevronDown className={`ml-auto h-5 w-5 shrink-0 text-black/40 transition-transform ${open ? "rotate-180" : ""}`} stroke={2} />
+        <h3 className="text-[16px] font-bold text-[var(--theme-neutral)]">{title}</h3>
+        <IconChevronDown className={`ml-auto h-5 w-5 shrink-0 text-[var(--theme-neutral)]/40 transition-transform ${open ? "rotate-180" : ""}`} stroke={2} />
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -2419,13 +2561,13 @@ function PlanSection({
 /** Read-only grouped view of the treatment plan (สั่งยา / Lab / ใบรับรอง / นัด).
  *  The primary Dx auto-fills lab indication + the certificate diagnosis line. */
 function PlanView({ plan, primaryDx }: { plan: TreatmentPlan; primaryDx?: EncounterDx }) {
-  const ic = "h-4 w-4 shrink-0 text-[#22202a]";
+  const ic = "h-4 w-4 shrink-0 text-[var(--theme-neutral)]";
   const dxLabel = primaryDx ? (primaryDx.icd10 ? `[${primaryDx.icd10}] ${primaryDx.termTh}` : primaryDx.termTh) : "";
   return (
     <div className="flex flex-col">
       <PlanSection
         icon={<IconPill className={ic} stroke={2} />}
-        title={<>สั่งยา <span className="font-semibold text-black/45">{plan.medications.length} รายการ</span></>}
+        title={<>สั่งยา <span className="font-semibold text-[var(--theme-neutral)]/45">{plan.medications.length} รายการ</span></>}
         className="pt-1"
       >
         {plan.medications.length ? (
@@ -2433,20 +2575,20 @@ function PlanView({ plan, primaryDx }: { plan: TreatmentPlan; primaryDx?: Encoun
             {plan.medications.map((m, i) => (
               <li key={i} className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[14px] font-bold text-[#22202a]">{m.name}</p>
-                  {m.usage && <p className="mt-0.5 text-[12px] text-black/45">({m.usage})</p>}
+                  <p className="text-[14px] font-bold text-[var(--theme-neutral)]">{m.name}</p>
+                  {m.usage && <p className="mt-0.5 text-[12px] text-[var(--theme-neutral)]/45">({m.usage})</p>}
                 </div>
-                <span className="shrink-0 text-[13px] font-semibold tabular-nums text-black/60">{m.qty}</span>
+                <span className="shrink-0 text-[13px] font-semibold tabular-nums text-[var(--theme-neutral)]/60">{m.qty}</span>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-[13px] text-black/40">ไม่มีรายการยา</p>
+          <p className="text-[13px] text-[var(--theme-neutral)]/40">ไม่มีรายการยา</p>
         )}
       </PlanSection>
       <PlanSection
         icon={<IconTestPipe className={ic} stroke={2} />}
-        title={<>สั่งตรวจ Lab <span className="font-semibold text-black/45">{plan.labs.length} รายการ</span></>}
+        title={<>สั่งตรวจ Lab <span className="font-semibold text-[var(--theme-neutral)]/45">{plan.labs.length} รายการ</span></>}
       >
         {plan.labs.length ? (
           <ul className="flex flex-col gap-2">
@@ -2455,13 +2597,13 @@ function PlanView({ plan, primaryDx }: { plan: TreatmentPlan; primaryDx?: Encoun
               return (
                 <li key={i} className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[14px] font-bold text-[#22202a]">{l.name}</p>
-                    {l.prep && l.prep !== "-" && <p className="mt-0.5 text-[12px] text-black/45">{l.prep}</p>}
+                    <p className="text-[14px] font-bold text-[var(--theme-neutral)]">{l.name}</p>
+                    {l.prep && l.prep !== "-" && <p className="mt-0.5 text-[12px] text-[var(--theme-neutral)]/45">{l.prep}</p>}
                     {indication && (
                       <p className="mt-0.5 text-[11px] text-[#3965e1]/70">ข้อบ่งชี้: {indication}</p>
                     )}
                   </div>
-                  <span className={`shrink-0 text-[13px] font-semibold ${l.reimbursable ? "text-[#1f9d52]" : "text-black/40"}`}>
+                  <span className={`shrink-0 text-[13px] font-semibold ${l.reimbursable ? "text-[#1f9d52]" : "text-[var(--theme-neutral)]/40"}`}>
                     {l.reimbursable ? "เบิกได้" : "เบิกไม่ได้"}
                   </span>
                 </li>
@@ -2469,20 +2611,20 @@ function PlanView({ plan, primaryDx }: { plan: TreatmentPlan; primaryDx?: Encoun
             })}
           </ul>
         ) : (
-          <p className="text-[13px] text-black/40">ไม่มีรายการตรวจ</p>
+          <p className="text-[13px] text-[var(--theme-neutral)]/40">ไม่มีรายการตรวจ</p>
         )}
       </PlanSection>
       <PlanSection icon={<IconCertificate className={ic} stroke={2} />} title="ออกใบรับรองแพทย์">
         {dxLabel && (
-          <p className="mb-1.5 text-[12px] text-black/55">
-            การวินิจฉัย: <span className="font-semibold text-[#22202a]">{dxLabel}</span>
+          <p className="mb-1.5 text-[12px] text-[var(--theme-neutral)]/55">
+            การวินิจฉัย: <span className="font-semibold text-[var(--theme-neutral)]">{dxLabel}</span>
           </p>
         )}
         {plan.cert && plan.cert.template === "none" ? (
-          <p className="text-[13px] text-black/40">ไม่ออกใบรับรองแพทย์สำหรับการตรวจครั้งนี้</p>
+          <p className="text-[13px] text-[var(--theme-neutral)]/40">ไม่ออกใบรับรองแพทย์สำหรับการตรวจครั้งนี้</p>
         ) : plan.cert ? (
           <div className="flex flex-col gap-1">
-            <p className="text-[14px] font-semibold text-[#22202a]">{CERT_TEMPLATE_BY_ID[plan.cert.template].label}</p>
+            <p className="text-[14px] font-semibold text-[var(--theme-neutral)]">{CERT_TEMPLATE_BY_ID[plan.cert.template].label}</p>
             {plan.cert.signed ? (
               <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-[#1f9d52]/10 px-2.5 py-0.5 text-[12px] font-bold text-[#1f7a43]">
                 <IconCertificate className="h-3.5 w-3.5" stroke={2.4} /> ลงนามแล้ว · ว.{plan.cert.licenseNo}
@@ -2494,28 +2636,28 @@ function PlanView({ plan, primaryDx }: { plan: TreatmentPlan; primaryDx?: Encoun
             )}
           </div>
         ) : plan.certificate ? (
-          <p className="text-[14px] leading-relaxed text-[#22202a]">{plan.certificate}</p>
+          <p className="text-[14px] leading-relaxed text-[var(--theme-neutral)]">{plan.certificate}</p>
         ) : (
-          <p className="text-[13px] text-black/40">ไม่มีใบรับรองแพทย์สำหรับการตรวจครั้งนี้ — เพิ่มได้ในโหมดแก้ไข</p>
+          <p className="text-[13px] text-[var(--theme-neutral)]/40">ไม่มีใบรับรองแพทย์สำหรับการตรวจครั้งนี้ — เพิ่มได้ในโหมดแก้ไข</p>
         )}
       </PlanSection>
       <PlanSection icon={<IconCalendarEvent className={ic} stroke={2} />} title="การนัดหมาย">
         {plan.appt && plan.appt.intervalKey === "none" ? (
-          <p className="text-[13px] text-black/40">ไม่มีนัดครั้งต่อไป</p>
+          <p className="text-[13px] text-[var(--theme-neutral)]/40">ไม่มีนัดครั้งต่อไป</p>
         ) : plan.appt ? (
           <div className="flex flex-col gap-1">
-            <p className="text-[14px] font-semibold text-[#22202a]">
+            <p className="text-[14px] font-semibold text-[var(--theme-neutral)]">
               {fmtThaiDate(plan.appt.date)} · {plan.appt.type}
             </p>
-            <p className="text-[12px] text-black/55">
+            <p className="text-[12px] text-[var(--theme-neutral)]/55">
               {plan.appt.clinic} · {plan.appt.doctor}
             </p>
-            {plan.appt.note && <p className="text-[12px] text-black/45">{plan.appt.note}</p>}
+            {plan.appt.note && <p className="text-[12px] text-[var(--theme-neutral)]/45">{plan.appt.note}</p>}
           </div>
         ) : plan.appointment ? (
-          <p className="text-[14px] leading-relaxed text-[#22202a]">{plan.appointment}</p>
+          <p className="text-[14px] leading-relaxed text-[var(--theme-neutral)]">{plan.appointment}</p>
         ) : (
-          <p className="text-[13px] text-black/40">ไม่มีการนัดหมาย — เพิ่มได้ในโหมดแก้ไข</p>
+          <p className="text-[13px] text-[var(--theme-neutral)]/40">ไม่มีการนัดหมาย — เพิ่มได้ในโหมดแก้ไข</p>
         )}
       </PlanSection>
     </div>
@@ -2619,10 +2761,10 @@ function DrugSelect({
           <div
             ref={ddRef}
             style={{ position: "fixed", left: rect.left, top: rect.top, width: rect.width, zIndex: 80 }}
-            className="max-h-[260px] overflow-y-auto rounded-[12px] border border-black/10 bg-white py-1 shadow-[0_10px_30px_rgba(0,0,0,0.16)]"
+            className="max-h-[260px] overflow-y-auto rounded-[12px] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] py-1 shadow-[0_10px_30px_rgba(0,0,0,0.16)]"
           >
             {loading ? (
-              <p className="flex items-center gap-2 px-3 py-2 text-[12px] text-black/45">
+              <p className="flex items-center gap-2 px-3 py-2 text-[12px] text-[var(--theme-neutral)]/45">
                 <IconLoader2 className="h-3.5 w-3.5 animate-spin" stroke={2} /> กำลังค้นหา…
               </p>
             ) : results.length ? (
@@ -2634,10 +2776,10 @@ function DrugSelect({
                   className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-[#3965e1]/[0.06]"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold text-[#22202a]">
-                      {d.generic} <span className="font-normal text-black/45">{d.strength}</span>
+                    <span className="block truncate text-[13px] font-semibold text-[var(--theme-neutral)]">
+                      {d.generic} <span className="font-normal text-[var(--theme-neutral)]/45">{d.strength}</span>
                     </span>
-                    <span className="block truncate text-[11px] text-black/40">
+                    <span className="block truncate text-[11px] text-[var(--theme-neutral)]/40">
                       {d.tradeNames[0] ? `${d.tradeNames[0]} · ` : ""}{d.form} · TMT {d.tmtCode}
                     </span>
                   </span>
@@ -2646,7 +2788,7 @@ function DrugSelect({
                 </button>
               ))
             ) : (
-              <p className="px-3 py-2 text-[12px] text-black/45">
+              <p className="px-3 py-2 text-[12px] text-[var(--theme-neutral)]/45">
                 {q.trim() ? "ไม่พบยาในระบบ — เลือกจากรายการเท่านั้น (ห้ามพิมพ์เอง)" : "พิมพ์ชื่อยาเพื่อค้นหา"}
               </p>
             )}
@@ -2737,10 +2879,10 @@ function LabSelect({
           <div
             ref={ddRef}
             style={{ position: "fixed", left: rect.left, top: rect.top, width: rect.width, zIndex: 80 }}
-            className="max-h-[260px] overflow-y-auto rounded-[12px] border border-black/10 bg-white py-1 shadow-[0_10px_30px_rgba(0,0,0,0.16)]"
+            className="max-h-[260px] overflow-y-auto rounded-[12px] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] py-1 shadow-[0_10px_30px_rgba(0,0,0,0.16)]"
           >
             {loading ? (
-              <p className="flex items-center gap-2 px-3 py-2 text-[12px] text-black/45">
+              <p className="flex items-center gap-2 px-3 py-2 text-[12px] text-[var(--theme-neutral)]/45">
                 <IconLoader2 className="h-3.5 w-3.5 animate-spin" stroke={2} /> กำลังค้นหา…
               </p>
             ) : results.length ? (
@@ -2752,8 +2894,8 @@ function LabSelect({
                   className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-[#3965e1]/[0.06]"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold text-[#22202a]">{l.name}</span>
-                    <span className="block truncate text-[11px] text-black/40">
+                    <span className="block truncate text-[13px] font-semibold text-[var(--theme-neutral)]">{l.name}</span>
+                    <span className="block truncate text-[11px] text-[var(--theme-neutral)]/40">
                       {l.panel ? `${l.panel} · ` : ""}{l.specimen} · {l.fasting ? "งดอาหาร" : "ไม่งด"} · {l.price}฿ · LOINC {l.loinc}
                     </span>
                   </span>
@@ -2762,7 +2904,7 @@ function LabSelect({
                 </button>
               ))
             ) : (
-              <p className="px-3 py-2 text-[12px] text-black/45">
+              <p className="px-3 py-2 text-[12px] text-[var(--theme-neutral)]/45">
                 {q.trim() ? "ไม่พบรายการตรวจ — เลือกจากรายการเท่านั้น (ห้ามพิมพ์เอง)" : "พิมพ์ชื่อการตรวจเพื่อค้นหา"}
               </p>
             )}
@@ -2847,7 +2989,7 @@ function VoiceEditButton({
         recording
           ? "bg-[#ff383c] text-white"
           : processing
-            ? "cursor-wait bg-black/5 text-black/40"
+            ? "cursor-wait bg-[var(--theme-neutral)]/10 text-[var(--theme-neutral)]/40"
             : "bg-[#3965e1]/[0.08] text-[#3965e1] hover:bg-[#3965e1]/[0.16]",
       ].join(" ")}
     >
@@ -2890,7 +3032,7 @@ function PlanEditor({
     if (glowTimer.current) window.clearTimeout(glowTimer.current);
     glowTimer.current = window.setTimeout(() => setEditedTabs(new Set()), 2600);
   };
-  const cell = "w-full rounded-md border border-black/10 bg-white px-2 py-1 text-[13px] text-[#22202a] outline-none transition focus:border-[#3965e1]";
+  const cell = "w-full rounded-md border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-2 py-1 text-[13px] text-[var(--theme-neutral)] outline-none transition focus:border-[#3965e1]";
   const updMed = (i: number, p: Partial<PlanMed>) =>
     setDraft((d) => ({ ...d, medications: d.medications.map((m, idx) => (idx === i ? { ...m, ...p } : m)) }));
   const updLab = (i: number, p: Partial<PlanLab>) =>
@@ -2902,12 +3044,12 @@ function PlanEditor({
     { key: "appt", label: "การนัดหมาย" },
   ];
   const addBtn = "flex items-center gap-1.5 self-start rounded-[10px] bg-[#3965e1]/[0.08] px-3 py-1.5 text-[12px] font-bold text-[#3965e1] transition hover:bg-[#3965e1]/[0.14]";
-  const delBtn = "grid h-6 w-6 place-items-center rounded-md text-black/35 transition hover:bg-black/5 hover:text-[#ff383c]";
+  const delBtn = "grid h-6 w-6 place-items-center rounded-md text-[var(--theme-neutral)]/35 transition hover:bg-[var(--theme-neutral)]/10 hover:text-[#ff383c]";
   return (
     <div className="flex flex-col gap-3">
       {/* tabs + voice-edit */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1 rounded-[12px] bg-black/[0.04] p-1">
+        <div className="flex flex-wrap gap-1 rounded-[12px] bg-[var(--theme-neutral)]/[0.06] p-1">
           {tabs.map((t) => (
             <button
               key={t.key}
@@ -2915,7 +3057,7 @@ function PlanEditor({
               onClick={() => setTab(t.key)}
               className={[
                 "rounded-[9px] px-3 py-1.5 text-[12px] font-bold transition",
-                tab === t.key ? "bg-white text-[#22202a] shadow-sm" : "text-black/50 hover:text-black/70",
+                tab === t.key ? "bg-[var(--theme-surface)] text-[var(--theme-neutral)] shadow-sm" : "text-[var(--theme-neutral)]/50 hover:text-[var(--theme-neutral)]/70",
               ].join(" ")}
             >
               {t.label}
@@ -2931,7 +3073,7 @@ function PlanEditor({
           <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
             <table className="w-full min-w-[420px] border-separate border-spacing-y-1.5 text-left">
               <thead>
-                <tr className="text-[11px] font-bold text-black/45">
+                <tr className="text-[11px] font-bold text-[var(--theme-neutral)]/45">
                   <th className="w-7 pl-1">#</th>
                   <th>ชื่อยา</th>
                   <th>วิธีการใช้</th>
@@ -2943,7 +3085,7 @@ function PlanEditor({
               <tbody>
                 {draft.medications.map((m, i) => (
                   <tr key={i}>
-                    <td className="pl-1 text-[12px] tabular-nums text-black/45">{i + 1}</td>
+                    <td className="pl-1 text-[12px] tabular-nums text-[var(--theme-neutral)]/45">{i + 1}</td>
                     <td className="pr-1.5">
                       <DrugSelect
                         value={m.name}
@@ -2965,7 +3107,7 @@ function PlanEditor({
                       <button
                         type="button"
                         onClick={() => updMed(i, { reimbursable: !m.reimbursable })}
-                        className={["w-full rounded-md px-2 py-1 text-[11px] font-bold transition", m.reimbursable ? "bg-[#1f9d52]/10 text-[#1f9d52]" : "bg-black/5 text-black/40"].join(" ")}
+                        className={["w-full rounded-md px-2 py-1 text-[11px] font-bold transition", m.reimbursable ? "bg-[#1f9d52]/10 text-[#1f9d52]" : "bg-[var(--theme-neutral)]/10 text-[var(--theme-neutral)]/40"].join(" ")}
                       >
                         {m.reimbursable ? "เบิกได้" : "ไม่เบิก"}
                       </button>
@@ -2991,7 +3133,7 @@ function PlanEditor({
           <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
             <table className="w-full min-w-[520px] border-separate border-spacing-y-1.5 text-left">
               <thead>
-                <tr className="text-[11px] font-bold text-black/45">
+                <tr className="text-[11px] font-bold text-[var(--theme-neutral)]/45">
                   <th className="w-7 pl-1">#</th>
                   <th>รายการตรวจ</th>
                   <th>การเตรียมตัว</th>
@@ -3003,7 +3145,7 @@ function PlanEditor({
               <tbody>
                 {draft.labs.map((l, i) => (
                   <tr key={i}>
-                    <td className="pl-1 text-[12px] tabular-nums text-black/45">{i + 1}</td>
+                    <td className="pl-1 text-[12px] tabular-nums text-[var(--theme-neutral)]/45">{i + 1}</td>
                     <td className="pr-1.5">
                       <LabSelect
                         value={l.name}
@@ -3030,7 +3172,7 @@ function PlanEditor({
                       <button
                         type="button"
                         onClick={() => updLab(i, { reimbursable: !l.reimbursable })}
-                        className={["w-full rounded-md px-2 py-1 text-[11px] font-bold transition", l.reimbursable ? "bg-[#1f9d52]/10 text-[#1f9d52]" : "bg-black/5 text-black/40"].join(" ")}
+                        className={["w-full rounded-md px-2 py-1 text-[11px] font-bold transition", l.reimbursable ? "bg-[#1f9d52]/10 text-[#1f9d52]" : "bg-[var(--theme-neutral)]/10 text-[var(--theme-neutral)]/40"].join(" ")}
                       >
                         {l.reimbursable ? "เบิกได้" : "ไม่เบิก"}
                       </button>
@@ -3096,13 +3238,13 @@ function DxRow({
   const grip = (
     <span
       onPointerDown={draggable ? onGripPointerDown : undefined}
-      className={`grid shrink-0 place-items-center text-black/25 ${draggable ? "cursor-grab touch-none select-none active:cursor-grabbing" : ""}`}
+      className={`grid shrink-0 place-items-center text-[var(--theme-neutral)]/25 ${draggable ? "cursor-grab touch-none select-none active:cursor-grabbing" : ""}`}
     >
       <IconGripVertical className="h-4 w-4" stroke={2} />
     </span>
   );
   const label = (
-    <p className="min-w-0 truncate text-[14px] text-[#22202a]">
+    <p className="min-w-0 truncate text-[14px] text-[var(--theme-neutral)]">
       {!dx.pending && <span className="font-bold">{dx.icd10}</span>}
       {!dx.pending && " "}
       <span className={dx.pending ? "font-bold" : ""}>{dx.pending ? `${dx.termTh} · รอระบุรหัส` : dx.termTh}</span>
@@ -3246,7 +3388,7 @@ function DxEditRow({
     onSave({ ...dx, termTh: name });
   };
   return (
-    <div className="flex flex-col gap-1.5 rounded-[12px] border border-[#3965e1]/40 bg-white p-2">
+    <div className="flex flex-col gap-1.5 rounded-[12px] border border-[#3965e1]/40 bg-[var(--theme-surface)] p-2">
       <div className="flex items-center gap-2">
         <IconPencil className="h-4 w-4 shrink-0 text-[#3965e1]" stroke={2} />
         <input
@@ -3258,13 +3400,13 @@ function DxEditRow({
             else if (e.key === "Escape") onCancel();
           }}
           placeholder="ค้นรหัส/ชื่อโรค เพื่อแก้ไข"
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-[#22202a] outline-none placeholder:text-black/30"
+          className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--theme-neutral)] outline-none placeholder:text-[var(--theme-neutral)]/30"
         />
         <button
           type="button"
           onClick={onCancel}
           aria-label="ยกเลิก"
-          className="grid size-6 shrink-0 place-items-center rounded-md text-black/40 transition hover:bg-black/5"
+          className="grid size-6 shrink-0 place-items-center rounded-md text-[var(--theme-neutral)]/40 transition hover:bg-[var(--theme-neutral)]/10"
         >
           <IconX className="h-4 w-4" stroke={2} />
         </button>
@@ -3279,7 +3421,7 @@ function DxEditRow({
               className="flex items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-left transition hover:bg-[#3965e1]/[0.06]"
             >
               <span className="w-[54px] shrink-0 text-[12px] font-bold tabular-nums text-[#3965e1]">{e.code}</span>
-              <span className="min-w-0 flex-1 truncate text-[13px] text-[#22202a]">{e.termTh}</span>
+              <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--theme-neutral)]">{e.termTh}</span>
             </button>
           ))}
         </div>
@@ -3426,12 +3568,12 @@ function DxSection({
   const primaryDx = value.find((d) => d.confirmed !== false && d.rank === "primary");
 
   return (
-    <motion.div layout transition={{ type: "spring", stiffness: 350, damping: 34, mass: 0.8 }} className="shrink-0 rounded-[24px] bg-gradient-to-b from-white to-[#fff2ed] p-4">
+    <motion.div layout transition={{ type: "spring", stiffness: 350, damping: 34, mass: 0.8 }} className="shrink-0 rounded-[24px] bg-gradient-to-b from-[var(--theme-surface)] to-[var(--theme-surface)] p-4">
       {/* header */}
       {!hideHeader && (
         <div className="flex items-center gap-2">
-          <IconClipboardPlus className="h-4 w-4 shrink-0 text-[#22202a]" stroke={2} />
-          <h3 className="text-[16px] font-semibold text-[#22202a]">การวินิจฉัย ICD-10</h3>
+          <IconClipboardPlus className="h-4 w-4 shrink-0 text-[var(--theme-neutral)]" stroke={2} />
+          <h3 className="text-[16px] font-semibold text-[var(--theme-neutral)]">การวินิจฉัย ICD-10</h3>
         </div>
       )}
 
@@ -3445,7 +3587,7 @@ function DxSection({
 
       {/* search — pill input */}
       <div ref={boxRef} className="relative mt-4">
-        <div className="flex h-12 items-center justify-between gap-2 rounded-[40px] border border-[#9db6fb] bg-white pl-6 pr-2 transition focus-within:border-[#3965e1]">
+        <div className="flex h-12 items-center justify-between gap-2 rounded-[40px] border border-[#9db6fb] bg-[var(--theme-surface)] pl-6 pr-2 transition focus-within:border-[#3965e1]">
           <input
             value={query}
             onChange={(e) => {
@@ -3460,14 +3602,14 @@ function DxSection({
               }
             }}
             placeholder="ค้นชื่อโรค (ไทย/อังกฤษ) หรือรหัส ICD-10"
-            className="min-w-0 flex-1 bg-transparent text-[14px] text-[#1f1f1f] outline-none placeholder:text-[#1f1f1f]/60"
+            className="min-w-0 flex-1 bg-transparent text-[14px] text-[var(--theme-neutral)] outline-none placeholder:text-[var(--theme-neutral)]/60"
           />
           <span className="grid size-10 shrink-0 place-items-center rounded-full text-[#3965e1]">
             <IconSearch className="h-5 w-5" stroke={2} />
           </span>
         </div>
         {open && query.trim() && (
-          <div className="absolute inset-x-0 top-[calc(100%+4px)] z-50 max-h-[240px] overflow-y-auto rounded-[16px] border border-black/10 bg-white py-1 shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+          <div className="absolute inset-x-0 top-[calc(100%+4px)] z-50 max-h-[240px] overflow-y-auto rounded-[16px] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] py-1 shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
             {results.length > 0 ? (
               results.map((e) => (
                 <button
@@ -3478,9 +3620,9 @@ function DxSection({
                 >
                   <span className="w-[58px] shrink-0 text-[12px] font-bold tabular-nums text-[#3965e1]">{e.code}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold text-[#22202a]">{e.termTh}</span>
+                    <span className="block truncate text-[13px] font-semibold text-[var(--theme-neutral)]">{e.termTh}</span>
                     {e.termEn && e.termEn !== e.termTh && (
-                      <span className="block truncate text-[11px] text-black/40">{e.termEn}</span>
+                      <span className="block truncate text-[11px] text-[var(--theme-neutral)]/40">{e.termEn}</span>
                     )}
                   </span>
                   {e.system && e.system !== "ICD-10-TM" && (
@@ -3491,14 +3633,14 @@ function DxSection({
                       {e.system} · อ้างอิง
                     </span>
                   )}
-                  <IconPlus className="h-4 w-4 shrink-0 text-black/30" stroke={2.2} />
+                  <IconPlus className="h-4 w-4 shrink-0 text-[var(--theme-neutral)]/30" stroke={2.2} />
                 </button>
               ))
             ) : (
               <button
                 type="button"
                 onClick={addPending}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-black/55 transition hover:bg-[#e1a325]/[0.08]"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-[var(--theme-neutral)]/55 transition hover:bg-[#e1a325]/[0.08]"
               >
                 <IconPlus className="h-4 w-4 shrink-0 text-[#e1a325]" stroke={2.2} />
                 เพิ่ม “{query.trim()}” แบบรอระบุรหัส (ให้เจ้าหน้าที่ coding เติมภายหลัง)
@@ -3510,7 +3652,7 @@ function DxSection({
 
       {/* AI ran but found nothing usable */}
       {aiEmpty && !aiLoading && (
-        <div className="mt-4 flex items-center gap-1.5 rounded-[12px] bg-black/[0.03] px-3 py-2 text-[12px] text-black/45">
+        <div className="mt-4 flex items-center gap-1.5 rounded-[12px] bg-[var(--theme-neutral)]/[0.05] px-3 py-2 text-[12px] text-[var(--theme-neutral)]/45">
           <IconSparkles className="h-4 w-4 shrink-0" stroke={2} />
           AI ยังเสนอไม่ได้ — ลองค้นรหัสเอง หรือซักประวัติเพิ่ม
         </div>
@@ -3551,7 +3693,7 @@ function DxSection({
         type="button"
         onClick={runAi}
         disabled={aiLoading}
-        className="mt-2 flex w-full items-center justify-center gap-2 rounded-[12px] border border-dashed border-[#3965e1]/40 bg-white py-2.5 text-[13px] font-bold text-[#3965e1] transition hover:border-[#3965e1] hover:bg-[#3965e1]/[0.06] active:scale-[0.99] disabled:opacity-60"
+        className="mt-2 flex w-full items-center justify-center gap-2 rounded-[12px] border border-dashed border-[#3965e1]/40 bg-[var(--theme-surface)] py-2.5 text-[13px] font-bold text-[#3965e1] transition hover:border-[#3965e1] hover:bg-[#3965e1]/[0.06] active:scale-[0.99] disabled:opacity-60"
       >
         {aiLoading ? <IconLoader2 className="h-4 w-4 animate-spin" stroke={2} /> : <IconPlus className="h-4 w-4" stroke={2.4} />}
         {aiLoading ? "กำลังให้ AI วิเคราะห์…" : "ให้ AI ช่วยแนะนำ"}
@@ -3560,16 +3702,16 @@ function DxSection({
       {/* comorbidity quick-add from the chronic problem list */}
       {problemList.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-black/40">โรคประจำตัว:</span>
+          <span className="text-[11px] font-semibold text-[var(--theme-neutral)]/40">โรคประจำตัว:</span>
           {problemList.map((e) => (
             <button
               key={e.code}
               type="button"
               onClick={() => addEntry(e, "problem-list", false)}
-              className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[12px] font-semibold text-black/60 transition hover:border-[#3965e1]/40 hover:text-[#3965e1]"
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-2.5 py-1 text-[12px] font-semibold text-[var(--theme-neutral)]/60 transition hover:border-[#3965e1]/40 hover:text-[#3965e1]"
             >
               <IconPlus className="h-3 w-3" stroke={2.4} />
-              {e.termTh} <span className="tabular-nums text-black/35">{e.code}</span>
+              {e.termTh} <span className="tabular-nums text-[var(--theme-neutral)]/35">{e.code}</span>
             </button>
           ))}
         </div>
@@ -3745,7 +3887,7 @@ function PlanStepShell({
             onClick={onToggleExpand}
             aria-label={expanded ? "ย่อ" : "ขยายเต็มพื้นที่"}
             style={{ color: accent }}
-            className="absolute right-0 top-[36px] z-30 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-l-[16px] bg-white transition hover:bg-slate-100"
+            className="absolute right-0 top-[36px] z-30 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-l-[16px] bg-[var(--theme-surface)] transition hover:bg-slate-100"
           >
             {expanded ? <IconLayoutSidebarRightCollapse className="h-5 w-5" stroke={2} /> : <IconLayoutSidebarRightExpand className="h-5 w-5" stroke={2} />}
           </button>
@@ -3813,7 +3955,7 @@ function PlanStepShell({
       </div>
 
       {/* White container — step body + footer + transcript overlay */}
-      <div className="relative z-30 mt-2 flex min-h-0 flex-1 flex-col gap-2 rounded-[24px] bg-white p-3">
+      <div className="relative z-30 mt-2 flex min-h-0 flex-1 flex-col gap-2 rounded-[24px] bg-[var(--theme-surface)] p-3">
         {children}
         {footer}
 
@@ -3824,17 +3966,17 @@ function PlanStepShell({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 14 }}
               transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-              className="absolute inset-0 z-40 flex flex-col rounded-[24px] bg-white p-3"
+              className="absolute inset-0 z-40 flex flex-col rounded-[24px] bg-[var(--theme-surface)] p-3"
             >
               <div className="flex shrink-0 items-center justify-between gap-2 pb-2">
-                <h3 className="text-[15px] font-bold text-[#22202a]">Transcript บทสนทนา</h3>
-                <button type="button" onClick={() => setShowTranscript(false)} aria-label="ปิด" className="grid h-9 w-9 place-items-center rounded-full text-black/55 transition hover:bg-black/5">
+                <h3 className="text-[15px] font-bold text-[var(--theme-neutral)]">Transcript บทสนทนา</h3>
+                <button type="button" onClick={() => setShowTranscript(false)} aria-label="ปิด" className="grid h-9 w-9 place-items-center rounded-full text-[var(--theme-neutral)]/55 transition hover:bg-[var(--theme-neutral)]/10">
                   <IconX className="h-5 w-5" stroke={2} />
                 </button>
               </div>
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[16px] bg-white px-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[16px] bg-[var(--theme-surface)] px-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
                 <TxSection icon={ChiefIcon} title="อาการสำคัญ" className="pt-1" speak={transcript.primaryText ? () => transcript.primaryText : undefined}>
-                  {transcript.primaryText ? <p className="text-[14px] leading-relaxed text-[#22202a]">{transcript.primaryText}</p> : <p className="text-[13px] text-black/45">—</p>}
+                  {transcript.primaryText ? <p className="text-[14px] leading-relaxed text-[var(--theme-neutral)]">{transcript.primaryText}</p> : <p className="text-[13px] text-[var(--theme-neutral)]/45">—</p>}
                 </TxSection>
                 <TxSection
                   icon={HpiIcon}
@@ -3844,34 +3986,34 @@ function PlanStepShell({
                 >
                   {transcript.hpi ? (
                     transcript.hpiAnn.annotations.length ? (
-                      <HpiHighlighted hpi={transcript.hpi} annotations={transcript.hpiAnn.annotations} ai={transcript.hpiAnn.ai} show={hpiShow} hideControls className="text-[14px] leading-relaxed text-[#22202a]" />
+                      <HpiHighlighted hpi={transcript.hpi} annotations={transcript.hpiAnn.annotations} ai={transcript.hpiAnn.ai} show={hpiShow} hideControls className="text-[14px] leading-relaxed text-[var(--theme-neutral)]" />
                     ) : (
-                      <p className="text-[14px] leading-relaxed text-[#22202a]">{transcript.hpi}</p>
+                      <p className="text-[14px] leading-relaxed text-[var(--theme-neutral)]">{transcript.hpi}</p>
                     )
                   ) : (
-                    <p className="text-[13px] text-black/45">—</p>
+                    <p className="text-[13px] text-[var(--theme-neutral)]/45">—</p>
                   )}
                 </TxSection>
                 <TxSection icon={HistoryIcon} title="ประวัติการเจ็บป่วย" speak={transcript.pastHistory.length ? () => transcript.pastHistory.join(". ") : undefined}>
                   {transcript.pastHistory.length > 0 ? (
-                    <ul className="flex flex-col gap-1.5 text-[14px] leading-relaxed text-[#22202a]">
+                    <ul className="flex flex-col gap-1.5 text-[14px] leading-relaxed text-[var(--theme-neutral)]">
                       {transcript.pastHistory.map((h, i) => (
                         <li key={i} className="flex items-start gap-2"><span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-black/25" /><span className="flex-1">{h}</span></li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-[13px] text-black/45">—</p>
+                    <p className="text-[13px] text-[var(--theme-neutral)]/45">—</p>
                   )}
                 </TxSection>
                 <TxSection icon={MedsIcon} title="ประวัติการใช้ยา" speak={transcript.meds.length ? () => transcript.meds.join(". ") : undefined}>
                   {transcript.meds.length > 0 ? (
-                    <ul className="flex flex-col gap-1.5 text-[14px] leading-relaxed text-[#22202a]">
+                    <ul className="flex flex-col gap-1.5 text-[14px] leading-relaxed text-[var(--theme-neutral)]">
                       {transcript.meds.map((m, i) => (
                         <li key={i} className="flex items-start gap-2"><span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-black/25" /><span className="flex-1">{m}</span></li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-[13px] text-black/45">—</p>
+                    <p className="text-[13px] text-[var(--theme-neutral)]/45">—</p>
                   )}
                 </TxSection>
               </div>
@@ -3921,7 +4063,7 @@ function DiagnosisPanel({
           <button
             type="button"
             onClick={onResume}
-            className="flex flex-1 items-center justify-center gap-2 rounded-[16px] border border-[#d9d9d9] bg-white py-3.5 text-[14px] font-bold text-[#3965e1] transition hover:bg-slate-100"
+            className="flex flex-1 items-center justify-center gap-2 rounded-[16px] border border-[#d9d9d9] bg-[var(--theme-surface)] py-3.5 text-[14px] font-bold text-[#3965e1] transition hover:bg-slate-100"
           >
             <IconChevronLeft className="h-5 w-5" stroke={2} />
             ซักประวัติต่อ
@@ -4003,7 +4145,7 @@ function PlanDraftPanel({
                 setDraft(plan);
                 setEditing(false);
               }}
-              className="flex flex-1 items-center justify-center gap-2 rounded-[16px] border border-[#d9d9d9] bg-white py-3.5 text-[14px] font-bold text-black/55 transition hover:bg-slate-100"
+              className="flex flex-1 items-center justify-center gap-2 rounded-[16px] border border-[#d9d9d9] bg-[var(--theme-surface)] py-3.5 text-[14px] font-bold text-[var(--theme-neutral)]/55 transition hover:bg-slate-100"
             >
               ยกเลิก
             </button>
@@ -4024,7 +4166,7 @@ function PlanDraftPanel({
             <button
               type="button"
               onClick={onResume}
-              className="flex flex-1 items-center justify-center gap-2 rounded-[16px] border border-[#d9d9d9] bg-white py-3.5 text-[14px] font-bold text-[#3965e1] transition hover:bg-slate-100"
+              className="flex flex-1 items-center justify-center gap-2 rounded-[16px] border border-[#d9d9d9] bg-[var(--theme-surface)] py-3.5 text-[14px] font-bold text-[#3965e1] transition hover:bg-slate-100"
             >
               <IconChevronLeft className="h-5 w-5" stroke={2} />
               กลับไปวินิจฉัย
@@ -4048,8 +4190,8 @@ function PlanDraftPanel({
         </div>
 
         {/* Treatment plan — grouped view, or an editable table when editing */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[16px] bg-white px-0 pb-2.5 pt-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-          <h3 className="mb-2 text-[14px] font-semibold text-black/60">แบบร่างแผนการรักษา</h3>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[16px] bg-[var(--theme-surface)] px-0 pb-2.5 pt-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+          <h3 className="mb-2 text-[14px] font-semibold text-[var(--theme-neutral)]/60">แบบร่างแผนการรักษา</h3>
           {editing ? (
             <PlanEditor draft={draft} setDraft={setDraft} tab={editTab} setTab={setEditTab} primaryDx={primaryDx} patient={patient} />
           ) : (
@@ -4436,7 +4578,7 @@ export function ModelPanel({
   const markersThisView = painMarkers.filter((m) => m.view === view).length;
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] bg-white p-5">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] bg-[var(--theme-surface)] p-5">
       {/* Pin mode — top-left of the card */}
       <div className="absolute left-4 top-4 z-20 flex items-center gap-2">
         <button
@@ -4448,7 +4590,7 @@ export function ModelPanel({
           title="แตะตำแหน่งบนร่างกายเพื่อระบุอาการ"
           className={[
             "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-bold shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 transition",
-            drawMode ? "bg-[#e23d2e] text-white ring-[#e23d2e]" : "bg-white text-[#22202a] ring-black/5",
+            drawMode ? "bg-[#e23d2e] text-white ring-[#e23d2e]" : "bg-[var(--theme-surface)] text-[var(--theme-neutral)] ring-[var(--theme-neutral)]/15",
           ].join(" ")}
         >
           <IconMapPin className="h-4 w-4" stroke={2} />
@@ -4465,7 +4607,7 @@ export function ModelPanel({
                 })
               }
               title="ย้อนกลับ (undo)"
-              className="flex items-center justify-center rounded-full bg-white p-1.5 text-black/45 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5 transition hover:text-[#22202a]"
+              className="flex items-center justify-center rounded-full bg-[var(--theme-surface)] p-1.5 text-[var(--theme-neutral)]/45 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-[var(--theme-neutral)]/15 transition hover:text-[var(--theme-neutral)]"
             >
               <IconArrowBackUp className="h-4 w-4" stroke={2} />
             </button>
@@ -4473,7 +4615,7 @@ export function ModelPanel({
               type="button"
               onClick={() => setPainMarkers((cur) => cur.filter((m) => m.view !== view))}
               title="ลบจุดที่ระบุทั้งหมด"
-              className="flex items-center justify-center rounded-full bg-white p-1.5 text-black/45 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5 transition hover:text-[#e23d2e]"
+              className="flex items-center justify-center rounded-full bg-[var(--theme-surface)] p-1.5 text-[var(--theme-neutral)]/45 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-[var(--theme-neutral)]/15 transition hover:text-[#e23d2e]"
             >
               <IconTrash className="h-4 w-4" stroke={2} />
             </button>
@@ -4488,8 +4630,8 @@ export function ModelPanel({
           onClick={() => setShowLabels((s) => !s)}
           title={showLabels ? "ซ่อนป้ายอาการ" : "แสดงป้ายอาการ"}
           className={[
-            "absolute right-4 top-4 z-20 flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12px] font-bold shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5 transition",
-            showLabels ? "text-[#22202a]" : "text-black/40",
+            "absolute right-4 top-4 z-20 flex items-center gap-1.5 rounded-full bg-[var(--theme-surface)] px-3 py-1.5 text-[12px] font-bold shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-[var(--theme-neutral)]/15 transition",
+            showLabels ? "text-[var(--theme-neutral)]" : "text-[var(--theme-neutral)]/40",
           ].join(" ")}
         >
           {showLabels ? (
@@ -4510,7 +4652,7 @@ export function ModelPanel({
             onClick={() => stepVisit(-1)}
             disabled={visitIdx <= 0}
             title="วันถัดไป (ใหม่กว่า)"
-            className="absolute left-1.5 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#52525b] shadow-[0_2px_10px_rgba(0,0,0,0.12)] ring-1 ring-black/5 backdrop-blur transition enabled:hover:bg-white enabled:hover:text-[#18181b] disabled:opacity-0"
+            className="absolute left-1.5 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[var(--theme-neutral)]/70 shadow-[0_2px_10px_rgba(0,0,0,0.12)] ring-1 ring-[var(--theme-neutral)]/15 backdrop-blur transition enabled:hover:bg-[var(--theme-surface)] enabled:hover:text-[var(--theme-neutral)] disabled:opacity-0"
           >
             <IconChevronLeft className="h-5 w-5" stroke={2.2} />
           </button>
@@ -4519,7 +4661,7 @@ export function ModelPanel({
             onClick={() => stepVisit(1)}
             disabled={visitIdx >= visits.length - 1}
             title="วันก่อนหน้า (อดีต)"
-            className="absolute right-1.5 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#52525b] shadow-[0_2px_10px_rgba(0,0,0,0.12)] ring-1 ring-black/5 backdrop-blur transition enabled:hover:bg-white enabled:hover:text-[#18181b] disabled:opacity-0"
+            className="absolute right-1.5 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[var(--theme-neutral)]/70 shadow-[0_2px_10px_rgba(0,0,0,0.12)] ring-1 ring-[var(--theme-neutral)]/15 backdrop-blur transition enabled:hover:bg-[var(--theme-surface)] enabled:hover:text-[var(--theme-neutral)] disabled:opacity-0"
           >
             <IconChevronRight className="h-5 w-5" stroke={2.2} />
           </button>
@@ -4584,7 +4726,7 @@ export function ModelPanel({
         </AnimatePresence>
 
         {/* Faded edge (bottom only) so the model blends beneath the floating UI */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-24 rounded-b-[24px] bg-gradient-to-t from-white via-white/85 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-24 rounded-b-[24px] bg-gradient-to-t from-[var(--theme-surface)] via-[var(--theme-surface)]/85 to-transparent" />
 
         {/* Zoom controls — above the fade so they stay crisp */}
         <ZoomControls api={zoomApi} />
@@ -4621,7 +4763,7 @@ export function ModelPanel({
         {/* Visit-date label (the ◂ ▸ steppers live on the card's side edges) */}
         {visits.length > 1 && (
           <div className="flex justify-center">
-            <div className="rounded-full bg-[#ebebec] px-4 py-1.5 text-center text-[12px] font-semibold text-[#18181b]">
+            <div className="rounded-full bg-[var(--theme-neutral)]/10 px-4 py-1.5 text-center text-[12px] font-semibold text-[var(--theme-neutral)]">
               {fmtThaiDate(visit.date)}
               {visitIdx === 0 && " · ล่าสุด"}
             </div>
@@ -4633,12 +4775,12 @@ export function ModelPanel({
       {/* ── Floating controls — bottom ── */}
       <div className="relative z-10 mt-auto flex flex-col items-center gap-1 pt-3">
         {selected && (
-          <p className="text-center text-[11px] font-medium text-black/55">
+          <p className="text-center text-[11px] font-medium text-[var(--theme-neutral)]/55">
             {BODY_REGION_BY_ID[selected].labelTh}
           </p>
         )}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+          <div className="flex items-center gap-1 rounded-full bg-[var(--theme-surface)] p-1 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-[var(--theme-neutral)]/15">
             {(["front", "back"] as const).map((v) => {
               const active = view === v;
               const Icon = v === "front" ? IconUser : IconUserScan;
@@ -4650,20 +4792,17 @@ export function ModelPanel({
                   onClick={() => setView(v)}
                   className={[
                     "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-bold transition",
-                    active ? "bg-[#f2f2f2] text-[#22202a]" : "text-black/45",
+                    active ? "bg-[var(--theme-neutral)]/12 text-[var(--theme-neutral)]" : "text-[var(--theme-neutral)]/45",
                   ].join(" ")}
                 >
-                  <Icon
-                    className="h-4 w-4"
-                    stroke={2}
-                    style={{ color: active ? "#22202a" : "#9ca3af" }}
-                  />
+                  <Icon className="h-4 w-4" stroke={2} />
+
                   {v === "front" ? "หน้า" : "หลัง"}
                   {count > 0 && (
                     <span
                       className={[
                         "ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none",
-                        active ? "bg-[#d64527] text-white" : "bg-black/10 text-black/55",
+                        active ? "bg-[#d64527] text-white" : "bg-[var(--theme-neutral)]/12 text-[var(--theme-neutral)]/55",
                       ].join(" ")}
                     >
                       {count}
@@ -4706,7 +4845,7 @@ export function ModelPanel({
 
 /** Quick form shown when the doctor taps a spot on the model — pick the pain
  *  character, severity (NRS) and an optional note for that point. */
-type PainMarker = {
+export type PainMarker = {
   id: string;
   view: "front" | "back";
   x: number;
@@ -4717,7 +4856,7 @@ type PainMarker = {
   severity: number;
   note: string;
 };
-function PinForm({
+export function PinForm({
   regionLabel,
   onSave,
   onCancel,
@@ -4731,9 +4870,9 @@ function PinForm({
   const [note, setNote] = useState("");
   const char = PAIN_CHARACTERS.find((c) => c.id === charId) ?? PAIN_CHARACTERS[0];
   return (
-    <div className="absolute inset-x-0 bottom-0 z-30 m-3 rounded-2xl border border-black/5 bg-white p-3.5 shadow-[0_-8px_28px_rgba(0,0,0,0.16)]">
+    <div className="absolute inset-x-0 bottom-0 z-30 m-3 rounded-2xl border border-[var(--theme-neutral)]/12 bg-[var(--theme-surface)] p-3.5 shadow-[0_-8px_28px_rgba(0,0,0,0.16)]">
       <div className="mb-2.5 flex items-center gap-2">
-        <p className="text-[13px] font-bold text-[#22202a]">ระบุลักษณะอาการ</p>
+        <p className="text-[13px] font-bold text-[var(--theme-neutral)]">ระบุลักษณะอาการ</p>
         <span className="inline-flex items-center gap-1 rounded-full bg-[#e23d2e]/10 px-2 py-0.5 text-[11px] font-bold text-[#e23d2e]">
           <IconMapPin className="h-3 w-3" stroke={2.5} />
           {regionLabel ?? "นอกบริเวณร่างกาย"}
@@ -4747,11 +4886,11 @@ function PinForm({
               key={c.id}
               type="button"
               onClick={() => setCharId(c.id)}
-              className="rounded-full px-2.5 py-1 text-[11px] font-medium transition"
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition ${
+                on ? "" : "bg-[var(--theme-neutral)]/10 text-[var(--theme-neutral)]/60"
+              }`}
               style={
-                on
-                  ? { background: c.bg, color: c.fg, boxShadow: `inset 0 0 0 1.5px ${c.fg}` }
-                  : { background: "#f3f4f6", color: "#6b7280" }
+                on ? { background: c.bg, color: c.fg, boxShadow: `inset 0 0 0 1.5px ${c.fg}` } : undefined
               }
             >
               {c.label}
@@ -4760,7 +4899,7 @@ function PinForm({
         })}
       </div>
       <div className="mb-3 flex items-center gap-2.5">
-        <span className="text-[11px] text-black/55">ระดับ</span>
+        <span className="text-[11px] text-[var(--theme-neutral)]/55">ระดับ</span>
         <input
           type="range"
           min={0}
@@ -4777,13 +4916,13 @@ function PinForm({
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="โน้ตเพิ่มเติม (ไม่บังคับ)"
-        className="mb-3 w-full rounded-lg border border-black/10 px-2.5 py-1.5 text-[12px] outline-none focus:border-[#3965e1]"
+        className="mb-3 w-full rounded-lg border border-[var(--theme-neutral)]/15 bg-transparent px-2.5 py-1.5 text-[12px] text-[var(--theme-neutral)] outline-none focus:border-[#3965e1]"
       />
       <div className="flex justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg px-3 py-1.5 text-[12px] font-bold text-black/50 transition hover:bg-black/5"
+          className="rounded-lg px-3 py-1.5 text-[12px] font-bold text-[var(--theme-neutral)]/50 transition hover:bg-[var(--theme-neutral)]/8"
         >
           ยกเลิก
         </button>
@@ -4812,7 +4951,7 @@ function Segmented<T extends string>({
 }) {
   const hasIcons = tabs.some((t) => t.icon);
   return (
-    <div className="flex w-full items-center gap-0.5 rounded-[28px] bg-[#ebebec] p-1">
+    <div className="flex w-full items-center gap-0.5 rounded-[28px] bg-[var(--theme-neutral)]/10 p-1">
       {tabs.map((t) => {
         const active = value === t.key;
         const Icon = t.icon;
@@ -4826,7 +4965,7 @@ function Segmented<T extends string>({
               "flex items-center justify-center gap-1.5 rounded-[24px] px-3 py-1.5 text-center text-[13px] font-bold transition-[flex,background,color] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
               // with icons: active grows (label shows), others collapse to icon
               hasIcons ? (active ? "flex-[2_1_0%]" : "flex-[1_1_0%]") : "flex-1",
-              active ? "bg-white text-[#18181b] shadow-[0px_2px_8px_rgba(0,0,0,0.06)]" : "text-[#71717a]",
+              active ? "bg-[var(--theme-surface)] text-[var(--theme-neutral)] shadow-[0px_2px_8px_rgba(0,0,0,0.06)]" : "text-[var(--theme-neutral)]/55",
             ].join(" ")}
           >
             {Icon && <Icon className="h-4 w-4 shrink-0" stroke={2} />}
@@ -4848,7 +4987,7 @@ function severityColor(sev: number): string {
 /** Pinch / scroll-wheel zoom + drag-pan container. Single-finger taps pass
  *  through to children (so region clicks keep working); panning only kicks in
  *  past a small move threshold while zoomed. */
-function ZoomPan({
+export function ZoomPan({
   children,
   className,
   focus,
@@ -5049,7 +5188,7 @@ function ZoomPan({
   );
 }
 
-interface ZoomApi {
+export interface ZoomApi {
   zoomIn: () => void;
   zoomOut: () => void;
   reset: () => void;
@@ -5057,9 +5196,9 @@ interface ZoomApi {
 
 /** Floating zoom controls — rendered separately from ZoomPan so it can sit
  *  ABOVE the panel's fade overlay (which would otherwise wash it out). */
-function ZoomControls({ api }: { api: React.MutableRefObject<ZoomApi | null> }) {
+export function ZoomControls({ api }: { api: React.MutableRefObject<ZoomApi | null> }) {
   return (
-    <div className="absolute bottom-2 right-2 z-[2] flex flex-col gap-1 rounded-full bg-white/90 p-1 shadow-[0_2px_8px_rgba(0,0,0,0.1)] ring-1 ring-black/5 backdrop-blur-sm">
+    <div className="absolute bottom-2 right-2 z-[2] flex flex-col gap-1 rounded-full bg-[var(--theme-surface)]/90 p-1 shadow-[0_2px_8px_rgba(0,0,0,0.1)] ring-1 ring-[var(--theme-neutral)]/15 backdrop-blur-sm">
       <Tooltip content="ขยาย" placement="left" delay={200} closeDelay={0}>
         <ZoomBtn onClick={() => api.current?.zoomIn()} aria-label="ขยาย">
           <IconPlus className="h-4 w-4" stroke={2} />
@@ -5086,7 +5225,7 @@ const ZoomBtn = forwardRef<HTMLButtonElement, React.ComponentProps<"button">>(
         ref={ref}
         type="button"
         {...rest}
-        className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--theme-neutral)]/70 transition hover:bg-black/5 hover:text-[var(--theme-neutral)]"
+        className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--theme-neutral)]/70 transition hover:bg-[var(--theme-neutral)]/10 hover:text-[var(--theme-neutral)]"
       >
         {children}
       </button>
@@ -5138,14 +5277,14 @@ function PhotoViewer({
             <IconCamera className="h-4 w-4" stroke={2} />
           </span>
           <div className="leading-tight">
-            <p className="text-[13px] font-bold text-[#22202a]">รูปบริเวณ{regionLabel}</p>
-            <p className="text-[11px] text-black/50">{ordered.length} ภาพ · เทียบย้อนหลังได้</p>
+            <p className="text-[13px] font-bold text-[var(--theme-neutral)]">รูปบริเวณ{regionLabel}</p>
+            <p className="text-[11px] text-[var(--theme-neutral)]/50">{ordered.length} ภาพ · เทียบย้อนหลังได้</p>
           </div>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="flex h-7 w-7 items-center justify-center rounded-full text-black/50 transition hover:bg-black/5"
+          className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--theme-neutral)]/50 transition hover:bg-[var(--theme-neutral)]/10"
         >
           <IconX className="h-4 w-4" stroke={2} />
         </button>
@@ -5153,15 +5292,15 @@ function PhotoViewer({
 
       {cur && (
         <div className="mt-2 flex min-h-0 flex-1 flex-col">
-          <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl bg-black/5">
+          <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl bg-[var(--theme-neutral)]/10">
             <img src={cur.url} alt={cur.label} className="h-full w-full object-cover" />
             <span className="absolute left-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white">
               {fmtThaiDate(cur.date)}
               {cur.visitIdx === 0 && " · ล่าสุด"}
             </span>
           </div>
-          <p className="mt-1.5 text-[12px] font-semibold text-[#22202a]">{cur.label}</p>
-          {cur.note && <p className="text-[11px] leading-snug text-black/55">{cur.note}</p>}
+          <p className="mt-1.5 text-[12px] font-semibold text-[var(--theme-neutral)]">{cur.label}</p>
+          {cur.note && <p className="text-[11px] leading-snug text-[var(--theme-neutral)]/55">{cur.note}</p>}
         </div>
       )}
 
@@ -5241,9 +5380,9 @@ function TypingText({ text, className }: { text: string; className?: string }) {
 // redundant, non-colour cue (severity = bold) so the meaning survives for
 // colour-blind users and the highlight itself is the primary skim signal.
 const HL_TEXT: Record<ReviewHighlight["kind"], string> = {
-  symptom: "font-semibold text-[#1e3a8a]",
-  severity: "font-bold text-[#991b1b]",
-  allergy: "font-semibold text-[#92400e]",
+  symptom: "font-semibold hl-symptom",
+  severity: "font-bold hl-severity",
+  allergy: "font-semibold hl-allergy",
 };
 const HL_MARKER: Record<ReviewHighlight["kind"], string> = {
   symptom: "rgba(57,101,225,0.22)",
@@ -5359,25 +5498,25 @@ export function AboutPanel({ patient: p, encounterDx = [] }: { patient: Patient;
   return (
     <div className="absolute inset-0 flex flex-col gap-4">
       {/* Patient header card */}
-      <div className="shrink-0 rounded-[20px] bg-white p-3">
+      <div className="shrink-0 rounded-[20px] bg-[var(--theme-surface)] p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <img src={avatarUrl} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-black/5" />
+            <img src={avatarUrl} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-[var(--theme-neutral)]/15" />
             <div className="min-w-0">
-              <p className="text-[12px] font-semibold text-black/60">HN {p.hn}</p>
-              <p className="truncate text-[15px] font-bold text-[#22202a]">
+              <p className="text-[12px] font-semibold text-[var(--theme-neutral)]/60">HN {p.hn}</p>
+              <p className="truncate text-[15px] font-bold text-[var(--theme-neutral)]">
                 {p.prefix}{p.firstName} {p.lastName}
               </p>
             </div>
           </div>
-          <span className="shrink-0 self-start rounded-[10px] bg-black/5 px-2.5 py-1 text-[12px] font-semibold text-black/60">
+          <span className="shrink-0 self-start rounded-[10px] bg-[var(--theme-neutral)]/10 px-2.5 py-1 text-[12px] font-semibold text-[var(--theme-neutral)]/60">
             {INSURANCE_LABEL[p.insurance] ?? p.insurance}
           </span>
         </div>
         <div className="mt-2.5 flex items-stretch gap-4">
           <AboutField label="อายุ">
             {p.age} ปี{" "}
-            <span className="text-[13px] font-semibold text-[#22202a]/60">{ageDetail(p.birthDate)}</span>
+            <span className="text-[13px] font-semibold text-[var(--theme-neutral)]/60">{ageDetail(p.birthDate)}</span>
           </AboutField>
           <AboutField label="เพศ">{p.gender === "M" ? "ชาย" : "หญิง"}</AboutField>
           <AboutField label="หมู่เลือด">{p.bloodType}{p.rh}</AboutField>
@@ -5406,17 +5545,17 @@ export function AboutPanel({ patient: p, encounterDx = [] }: { patient: Patient;
           <div
             ref={ov.ref}
             onScroll={ov.onScroll}
-            className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[24px] bg-white pt-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
+            className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[24px] bg-[var(--theme-surface)] pt-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
           >
             <div className="flex flex-col gap-2 px-4">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-black/60">
+                <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-[var(--theme-neutral)]/60">
                   สรุปเคสโดย AI
                   {review.loading && <IconLoader2 className="h-3.5 w-3.5 animate-spin" stroke={2} />}
                   {review.blurb && <SpeakButton getText={() => review.blurb} />}
                 </h3>
                 {sinceDate && (
-                  <span className="inline-flex items-center rounded-[12px] bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/60">
+                  <span className="inline-flex items-center rounded-[12px] bg-[var(--theme-neutral)]/10 px-3 py-1 text-[12px] font-semibold text-[var(--theme-neutral)]/60">
                     ข้อมูลจาก {sinceDate} ถึงปัจจุบัน
                   </span>
                 )}
@@ -5424,7 +5563,7 @@ export function AboutPanel({ patient: p, encounterDx = [] }: { patient: Patient;
               <HighlightedReview
                 text={review.blurb}
                 highlights={review.highlights}
-                className="text-[14px] font-normal leading-relaxed text-black"
+                className="text-[14px] font-normal leading-relaxed text-[var(--theme-neutral)]"
               />
             </div>
 
@@ -5444,7 +5583,7 @@ export function AboutPanel({ patient: p, encounterDx = [] }: { patient: Patient;
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-9 rounded-b-[24px] bg-gradient-to-t from-white/55 via-white/15 to-transparent"
+                  className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-9 rounded-b-[24px] bg-gradient-to-t from-[var(--theme-surface)]/55 via-[var(--theme-surface)]/15 to-transparent"
                 />
                 <motion.button
                   key="chevron"
@@ -5455,7 +5594,7 @@ export function AboutPanel({ patient: p, encounterDx = [] }: { patient: Patient;
                   animate={{ opacity: 1, y: [0, 4, 0] }}
                   exit={{ opacity: 0, y: 4 }}
                   transition={{ y: { repeat: Infinity, duration: 1.3, ease: "easeInOut" }, opacity: { duration: 0.2 } }}
-                  className="absolute bottom-3 left-1/2 z-20 grid h-8 w-8 -translate-x-1/2 place-items-center rounded-full bg-white text-[#3965e1] shadow-[0_4px_14px_rgba(0,0,0,0.16)] transition hover:bg-slate-50"
+                  className="absolute bottom-3 left-1/2 z-20 grid h-8 w-8 -translate-x-1/2 place-items-center rounded-full bg-[var(--theme-surface)] text-[#3965e1] shadow-[0_4px_14px_rgba(0,0,0,0.16)] transition hover:bg-slate-50"
                 >
                   <IconChevronDown className="h-5 w-5" stroke={2.2} />
                 </motion.button>
@@ -5465,12 +5604,12 @@ export function AboutPanel({ patient: p, encounterDx = [] }: { patient: Patient;
           </div>
         </>
       ) : tab === "dx" ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-[24px] bg-white p-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-          <h3 className="text-[14px] font-semibold text-black/60">การวินิจฉัย (ICD-10)</h3>
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-[24px] bg-[var(--theme-surface)] p-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+          <h3 className="text-[14px] font-semibold text-[var(--theme-neutral)]/60">การวินิจฉัย (ICD-10)</h3>
           {confirmedDx.length > 0 ? (
             confirmedDx.map((d, i) => (
               <div key={`${d.icd10}-${i}`} className="flex items-center gap-2 rounded-[12px] bg-black/[0.02] p-2.5">
-                <p className="min-w-0 flex-1 truncate text-[14px] text-[#22202a]">
+                <p className="min-w-0 flex-1 truncate text-[14px] text-[var(--theme-neutral)]">
                   {!d.pending && <span className="font-bold">{d.icd10}</span>}
                   {!d.pending && " "}
                   <span className={d.pending ? "font-bold" : ""}>{d.pending ? `${d.termTh} · รอระบุรหัส` : d.termTh}</span>
@@ -5486,7 +5625,7 @@ export function AboutPanel({ patient: p, encounterDx = [] }: { patient: Patient;
               </div>
             ))
           ) : (
-            <p className="py-6 text-center text-[13px] text-black/40">ยังไม่มีการวินิจฉัย — เพิ่มในขั้น “วินิจฉัยโรค”</p>
+            <p className="py-6 text-center text-[13px] text-[var(--theme-neutral)]/40">ยังไม่มีการวินิจฉัย — เพิ่มในขั้น “วินิจฉัยโรค”</p>
           )}
         </div>
       ) : tab === "history" ? (
@@ -5509,7 +5648,7 @@ export function AboutPanel({ patient: p, encounterDx = [] }: { patient: Patient;
           />
         </>
       ) : (
-        <div className="rounded-[24px] bg-white p-4">
+        <div className="rounded-[24px] bg-[var(--theme-surface)] p-4">
           <LabTable labs={p.labs} />
         </div>
       )}
@@ -5520,26 +5659,26 @@ export function AboutPanel({ patient: p, encounterDx = [] }: { patient: Patient;
 function AboutField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-1 flex-col">
-      <span className="text-[12px] font-semibold text-black/60">{label}</span>
-      <span className="mt-0.5 text-[13px] font-bold text-[#22202a]">{children}</span>
+      <span className="text-[12px] font-semibold text-[var(--theme-neutral)]/60">{label}</span>
+      <span className="mt-0.5 text-[13px] font-bold text-[var(--theme-neutral)]">{children}</span>
     </div>
   );
 }
 
 function InfoCell({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
-    <div className={`flex flex-1 flex-col rounded-[16px] px-4 py-2 ${danger ? "bg-[#ff383c]" : "bg-white"}`}>
-      <p className={`text-[13px] font-semibold ${danger ? "text-white" : "text-black/60"}`}>{label}</p>
-      <p className={`mt-0.5 truncate text-[14px] font-bold ${danger ? "text-white" : "text-[#22202a]"}`}>{value}</p>
+    <div className={`flex flex-1 flex-col rounded-[16px] px-4 py-2 ${danger ? "bg-[#ff383c]" : "bg-[var(--theme-surface)]"}`}>
+      <p className={`text-[13px] font-semibold ${danger ? "text-white" : "text-[var(--theme-neutral)]/60"}`}>{label}</p>
+      <p className={`mt-0.5 truncate text-[14px] font-bold ${danger ? "text-white" : "text-[var(--theme-neutral)]"}`}>{value}</p>
     </div>
   );
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[16px] bg-white px-4 py-2">
-      <p className="text-[13px] font-semibold text-black/60">{label}</p>
-      <p className="mt-0.5 text-[14px] font-bold text-[#22202a]">{value}</p>
+    <div className="rounded-[16px] bg-[var(--theme-surface)] px-4 py-2">
+      <p className="text-[13px] font-semibold text-[var(--theme-neutral)]/60">{label}</p>
+      <p className="mt-0.5 text-[14px] font-bold text-[var(--theme-neutral)]">{value}</p>
     </div>
   );
 }

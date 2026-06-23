@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1340 760" font-family="-apple-system, Segoe UI, Sukhumvit Set, Thonburi, sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9aa3af"/>
+    </marker>
+    <style>
+      .title { font-size:24px; font-weight:800; fill:#111827; }
+      .sub   { font-size:14px; fill:#6b7280; }
+      .num   { font-size:22px; font-weight:800; fill:#ffffff; }
+      .h     { font-size:19px; font-weight:800; fill:#1f2937; }
+      .d     { font-size:14.5px; fill:#374151; }
+      .pill  { font-size:12.5px; font-weight:700; }
+      .lbl   { font-size:14px; font-weight:800; fill:#6b7280; letter-spacing:.03em; }
+      .sh    { font-size:15px; font-weight:800; }
+      .sd    { font-size:12.5px; fill:#475569; }
+      .flow  { stroke:#9aa3af; stroke-width:2.2; fill:none; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1340" height="760" fill="#f7f8fa"/>
+  <text x="40" y="44" class="title">AI Dr. Note — ผู้ช่วยแพทย์อัจฉริยะ</text>
+  <text x="40" y="68" class="sub">ภาพรวมการทำงาน: หมอคุยกับคนไข้ → AI ฟัง สรุป และช่วยร่างทุกอย่างให้</text>
+
+  <!-- ====================== STEP CARDS ====================== -->
+  <!-- helper coords: row1 y=92, row2 y=300; x = 40 / 470 / 900; w=400 h=178 -->
+
+  <!-- STEP 1 -->
+  <g>
+    <rect x="40" y="92" width="400" height="178" rx="16" fill="#ffffff" stroke="#2f7bf6" stroke-width="2"/>
+    <circle cx="86" cy="138" r="24" fill="#2f7bf6"/>
+    <text x="86" y="146" text-anchor="middle" class="num">1</text>
+    <text x="124" y="134" class="h">อัดเสียงการสนทนา</text>
+    <text x="124" y="158" class="d">หมอกดปุ่มอัดเสียง — จากไมโครโฟน</text>
+    <text x="124" y="180" class="d">หรือเสียงในแท็บ/ระบบ (เช่น Telemed)</text>
+    <rect x="60" y="222" width="118" height="26" rx="13" fill="#e8f1ff"/>
+    <text x="119" y="240" text-anchor="middle" class="pill" fill="#1b4a99">หมอเริ่มเอง</text>
+  </g>
+
+  <!-- STEP 2 -->
+  <g>
+    <rect x="470" y="92" width="400" height="178" rx="16" fill="#ffffff" stroke="#28a35a" stroke-width="2"/>
+    <circle cx="516" cy="138" r="24" fill="#28a35a"/>
+    <text x="516" y="146" text-anchor="middle" class="num">2</text>
+    <text x="554" y="134" class="h">ถอดเสียงเป็นข้อความ</text>
+    <text x="554" y="158" class="d">AI แปลงเสียงพูดเป็นตัวอักษร</text>
+    <text x="554" y="180" class="d">และแยกว่าใครพูด (หมอ / คนไข้)</text>
+    <rect x="490" y="222" width="86" height="26" rx="13" fill="#eafaf0"/>
+    <text x="533" y="240" text-anchor="middle" class="pill" fill="#1c6b3c">AI ทำ</text>
+  </g>
+
+  <!-- STEP 3 -->
+  <g>
+    <rect x="900" y="92" width="400" height="178" rx="16" fill="#ffffff" stroke="#28a35a" stroke-width="2"/>
+    <circle cx="946" cy="138" r="24" fill="#28a35a"/>
+    <text x="946" y="146" text-anchor="middle" class="num">3</text>
+    <text x="984" y="134" class="h">สรุปอาการอัตโนมัติ</text>
+    <text x="984" y="158" class="d">ระหว่างคุย AI ดึง อาการสำคัญ ·</text>
+    <text x="984" y="180" class="d">ประวัติ · ยาที่ใช้ และปักจุดบนรูปร่างกาย</text>
+    <rect x="920" y="222" width="86" height="26" rx="13" fill="#eafaf0"/>
+    <text x="963" y="240" text-anchor="middle" class="pill" fill="#1c6b3c">AI ทำ</text>
+    <rect x="1014" y="222" width="150" height="26" rx="13" fill="#eafaf0"/>
+    <text x="1089" y="240" text-anchor="middle" class="pill" fill="#1c6b3c">เรียลไทม์ขณะคุย</text>
+  </g>
+
+  <!-- STEP 4 -->
+  <g>
+    <rect x="40" y="300" width="400" height="178" rx="16" fill="#ffffff" stroke="#28a35a" stroke-width="2"/>
+    <circle cx="86" cy="346" r="24" fill="#28a35a"/>
+    <text x="86" y="354" text-anchor="middle" class="num">4</text>
+    <text x="124" y="342" class="h">ช่วยวินิจฉัยโรค</text>
+    <text x="124" y="366" class="d">AI แนะนำรหัสโรค ICD-10</text>
+    <text x="124" y="388" class="d">จากสิ่งที่คุยกัน ให้หมอเลือกยืนยัน</text>
+    <rect x="60" y="430" width="86" height="26" rx="13" fill="#eafaf0"/>
+    <text x="103" y="448" text-anchor="middle" class="pill" fill="#1c6b3c">AI ช่วย</text>
+    <rect x="156" y="430" width="150" height="26" rx="13" fill="#eef0f3"/>
+    <text x="231" y="448" text-anchor="middle" class="pill" fill="#3f4954">หมอตัดสินใจสุดท้าย</text>
+  </g>
+
+  <!-- STEP 5 -->
+  <g>
+    <rect x="470" y="300" width="400" height="178" rx="16" fill="#ffffff" stroke="#28a35a" stroke-width="2"/>
+    <circle cx="516" cy="346" r="24" fill="#28a35a"/>
+    <text x="516" y="354" text-anchor="middle" class="num">5</text>
+    <text x="554" y="342" class="h">ร่างแผนการรักษา</text>
+    <text x="554" y="366" class="d">AI เสนอ ยา · แล็บ · ใบรับรองแพทย์ ·</text>
+    <text x="554" y="388" class="d">นัดติดตาม ให้หมอปรับแก้ได้</text>
+    <rect x="490" y="430" width="86" height="26" rx="13" fill="#eafaf0"/>
+    <text x="533" y="448" text-anchor="middle" class="pill" fill="#1c6b3c">AI ร่าง</text>
+    <rect x="586" y="430" width="120" height="26" rx="13" fill="#eef0f3"/>
+    <text x="646" y="448" text-anchor="middle" class="pill" fill="#3f4954">หมอแก้ไขได้</text>
+  </g>
+
+  <!-- STEP 6 -->
+  <g>
+    <rect x="900" y="300" width="400" height="178" rx="16" fill="#ffffff" stroke="#7b8794" stroke-width="2"/>
+    <circle cx="946" cy="346" r="24" fill="#7b8794"/>
+    <text x="946" y="354" text-anchor="middle" class="num">6</text>
+    <text x="984" y="342" class="h">บันทึกเข้าแฟ้มผู้ป่วย</text>
+    <text x="984" y="366" class="d">เก็บ Dr.Note และแผนการรักษา</text>
+    <text x="984" y="388" class="d">เข้าระบบ พร้อมใช้ครั้งต่อไป</text>
+    <rect x="920" y="430" width="118" height="26" rx="13" fill="#eef0f3"/>
+    <text x="979" y="448" text-anchor="middle" class="pill" fill="#3f4954">บันทึกระบบ</text>
+  </g>
+
+  <!-- arrows: 1->2->3 , 3->4 (down+left) , 4->5->6 -->
+  <path class="flow" d="M440 181 H470" marker-end="url(#ar)"/>
+  <path class="flow" d="M870 181 H900" marker-end="url(#ar)"/>
+  <path class="flow" d="M1100 270 V286 H240 V300" marker-end="url(#ar)"/>
+  <path class="flow" d="M440 389 H470" marker-end="url(#ar)"/>
+  <path class="flow" d="M870 389 H900" marker-end="url(#ar)"/>
+
+  <!-- ====================== BEHIND THE SCENES ====================== -->
+  <text x="40" y="540" class="lbl">เบื้องหลัง — ระบบ AI ที่ทำงานให้ (บริการบนคลาวด์ของ BMS)</text>
+  <g>
+    <rect x="40" y="552" width="300" height="74" rx="12" fill="#efe9fc" stroke="#7a55d6"/>
+    <text x="58" y="578" class="sh" fill="#4d2fa0">สมอง AI (LLM)</text>
+    <text x="58" y="600" class="sd">อ่าน · สรุป · ร่างข้อความทั้งหมด</text>
+    <text x="58" y="617" class="sd">(Gemma เป็นหลัก · Qwen เร็วพิเศษ)</text>
+
+    <rect x="356" y="552" width="244" height="74" rx="12" fill="#efe9fc" stroke="#7a55d6"/>
+    <text x="374" y="578" class="sh" fill="#4d2fa0">ถอดเสียง (ASR)</text>
+    <text x="374" y="600" class="sd">แปลงเสียงพูด → ข้อความ</text>
+    <text x="374" y="617" class="sd">ภาษาไทย</text>
+
+    <rect x="616" y="552" width="300" height="74" rx="12" fill="#efe9fc" stroke="#7a55d6"/>
+    <text x="634" y="578" class="sh" fill="#4d2fa0">ฐานความรู้รหัสโรค (ICD-10)</text>
+    <text x="634" y="600" class="sd">ค้นรหัสโรคให้ — ตอนนี้ใช้ฐานในเครื่อง</text>
+    <text x="634" y="617" class="sd">(เชื่อมฐานความรู้กลางได้ภายหลัง)</text>
+
+    <rect x="932" y="552" width="368" height="74" rx="12" fill="#f1eef6" stroke="#b6a7d6" stroke-dasharray="5 4"/>
+    <text x="950" y="578" class="sh" fill="#6b5a8a">อ่านออกเสียง (TTS) — ยังไม่เปิดใช้</text>
+    <text x="950" y="600" class="sd">อนาคต: ให้ผู้ช่วยอ่านสรุปเคสให้ฟัง</text>
+    <text x="950" y="617" class="sd">เก็บไว้พัฒนาต่อ</text>
+  </g>
+
+  <!-- context note -->
+  <g>
+    <rect x="40" y="650" width="1260" height="64" rx="12" fill="#fff8e6" stroke="#e6c34a"/>
+    <text x="58" y="678" class="sh" fill="#8a6d12">ข้อมูลคนไข้ช่วยให้ AI แม่นขึ้น</text>
+    <text x="58" y="700" class="sd" fill="#6b5410">ประวัติการรักษา · ยาเดิม · ผลแล็บ · การนัด จะถูกส่งให้ AI เป็น "บริบท" ทุกครั้ง เพื่อให้คำแนะนำตรงกับเคสจริง — และข้อมูลส่วนตัวมีสวิตช์ควบคุมการส่งออก (PHI gate)</text>
+  </g>
+</svg>

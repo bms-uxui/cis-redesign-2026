@@ -618,9 +618,12 @@ export default function BodyMap({
           />
         )}
 
-        {/* Doctor-placed pain markers — a dot + a small label pill. */}
+        {/* Pain markers — a dot + a small label pill. The pill sits toward the
+            body centre (so right-side points don't push it off the edge). */}
         {pins.map((m) => {
           const color = m.color ?? "#e23d2e";
+          const onLeft = m.x > vb.width * 0.55; // point on the right → pill left
+          const W = 150;
           return (
             <g
               key={m.id}
@@ -629,14 +632,24 @@ export default function BodyMap({
               onClick={onMarkerClick ? () => onMarkerClick(m.id) : undefined}
             >
               <circle cx={m.x} cy={m.y} r={6.5} fill={color} stroke="#fff" strokeWidth={2} />
-              <foreignObject x={m.x + 8} y={m.y - 13} width={150} height={26} style={{ overflow: "visible" }}>
+              <foreignObject
+                x={onLeft ? m.x - 8 - W : m.x + 8}
+                y={m.y - 13}
+                width={W}
+                height={26}
+                style={{ overflow: "visible" }}
+              >
                 <div
                   // @ts-expect-error xmlns is valid on the foreignObject child
                   xmlns="http://www.w3.org/1999/xhtml"
-                  className="inline-flex w-max max-w-[150px] items-center rounded-full bg-white px-2 py-0.5 text-[11px] font-medium leading-tight shadow-sm"
-                  style={{ border: `1.5px solid ${color}`, color: "#22202a" }}
+                  className={`flex w-full items-center ${onLeft ? "justify-end" : "justify-start"}`}
                 >
-                  {m.label}
+                  <span
+                    className="inline-flex max-w-[150px] items-center rounded-full bg-white px-2 py-0.5 text-[11px] font-medium leading-tight shadow-sm"
+                    style={{ border: `1.5px solid ${color}`, color: "#22202a" }}
+                  >
+                    {m.label}
+                  </span>
                 </div>
               </foreignObject>
             </g>

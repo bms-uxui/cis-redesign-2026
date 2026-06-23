@@ -10,6 +10,9 @@ import {
   IconX,
   IconArrowRight,
   IconBolt,
+  IconChevronLeft,
+  IconChevronRight,
+  IconWand,
 } from "@tabler/icons-react";
 import { useSidebar } from "../../contexts/SidebarContext";
 import { useTabs } from "../../contexts/TabsContext";
@@ -39,7 +42,14 @@ export default function Dashboards() {
   // Inline composer state — primary surface, not a modal.
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
-  const [preview, setPreview] = useState<Dashboard | null>(null);
+  // Preview keeps a VERSION HISTORY — each generate/refine pushes a version the
+  // user can flip between before saving. `preview` is the active version.
+  const [versions, setVersions] = useState<Dashboard[]>([]);
+  const [versionIdx, setVersionIdx] = useState(0);
+  const [basePrompt, setBasePrompt] = useState("");
+  const [refineText, setRefineText] = useState("");
+  const [refining, setRefining] = useState(false);
+  const preview = versions[versionIdx] ?? null;
   const inputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -61,12 +71,37 @@ export default function Dashboards() {
   const handleGenerate = async () => {
     if (!prompt.trim() || generating) return;
     setGenerating(true);
-    setPreview(null);
+    setVersions([]);
+    setRefineText("");
     try {
       const d = await generateDashboard(prompt);
-      setPreview(d);
+      setBasePrompt(prompt);
+      setVersions([d]);
+      setVersionIdx(0);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // Refine the active version → a NEW version (branches off the one in view).
+  const handleRefine = async () => {
+    const cur = versions[versionIdx];
+    if (!cur || !refineText.trim() || refining) return;
+    setRefining(true);
+    try {
+      const summary = cur.widgets
+        .map((w) => `${w.kind}:${w.title}${w.source ? ` (${w.source})` : ""}`)
+        .join("; ");
+      const p =
+        `${basePrompt}\n\nนี่คือ dashboard เวอร์ชันปัจจุบัน — widgets: ${summary}. ` +
+        `ปรับแก้ตามคำสั่งนี้ (คงสิ่งที่ดีอยู่แล้วไว้): ${refineText.trim()}`;
+      const d = await generateDashboard(p);
+      const next = [...versions.slice(0, versionIdx + 1), d];
+      setVersions(next);
+      setVersionIdx(next.length - 1);
+      setRefineText("");
+    } finally {
+      setRefining(false);
     }
   };
 
@@ -77,13 +112,13 @@ export default function Dashboards() {
     toast.success("บันทึก Dashboard แล้ว", preview.name);
     const id = preview.id;
     const name = preview.name;
-    setPreview(null);
+    setVersions([]);
     setPrompt("");
     openTab(`/dashboards/${id}`, { title: name });
   };
 
   const handleDiscardPreview = () => {
-    setPreview(null);
+    setVersions([]);
   };
 
   const handleOpen = (id: string, name: string) => {
@@ -279,6 +314,57 @@ export default function Dashboards() {
                     >
                       <IconCheck className="h-3.5 w-3.5" stroke={2} />
                       บันทึก
+                    </button>
+                  </div>
+                </div>
+
+                {/* Version control + refine — flip between versions and ask AI
+                    to tweak the current one into a new version before saving. */}
+                <div className="flex flex-wrap items-center gap-2 rounded-[var(--theme-radius-field)] border border-[var(--theme-neutral)]/12 bg-[var(--theme-base)]/40 px-3 py-2">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setVersionIdx((i) => Math.max(0, i - 1))}
+                      disabled={versionIdx === 0}
+                      aria-label="เวอร์ชันก่อนหน้า"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--theme-neutral)]/60 transition enabled:hover:bg-[var(--theme-neutral)]/10 disabled:opacity-30"
+                    >
+                      <IconChevronLeft className="h-4 w-4" stroke={2} />
+                    </button>
+                    <span className="min-w-[64px] text-center text-[length:var(--theme-text-xs)] font-semibold text-[var(--theme-neutral)]">
+                      เวอร์ชัน {versionIdx + 1}/{versions.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setVersionIdx((i) => Math.min(versions.length - 1, i + 1))}
+                      disabled={versionIdx >= versions.length - 1}
+                      aria-label="เวอร์ชันถัดไป"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--theme-neutral)]/60 transition enabled:hover:bg-[var(--theme-neutral)]/10 disabled:opacity-30"
+                    >
+                      <IconChevronRight className="h-4 w-4" stroke={2} />
+                    </button>
+                  </div>
+                  <div className="flex min-w-[200px] flex-1 items-center gap-2">
+                    <input
+                      value={refineText}
+                      onChange={(e) => setRefineText(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleRefine()}
+                      placeholder="ปรับแก้ dashboard นี้… เช่น เพิ่มกราฟ no-show, เปลี่ยนเป็น bar chart"
+                      disabled={refining}
+                      className="min-w-0 flex-1 rounded-[var(--theme-radius-field)] border border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-3 py-1.5 text-[length:var(--theme-text-xs)] text-[var(--theme-neutral)] outline-none transition focus:border-[var(--theme-primary)] placeholder:text-[var(--theme-neutral)]/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRefine}
+                      disabled={!refineText.trim() || refining}
+                      className="flex h-8 shrink-0 items-center gap-1.5 rounded-[var(--theme-radius-field)] bg-[var(--theme-primary)] px-3 text-[length:var(--theme-text-xs)] font-semibold text-white transition enabled:hover:brightness-110 disabled:opacity-50"
+                    >
+                      {refining ? (
+                        <IconLoader2 className="h-3.5 w-3.5 animate-spin" stroke={2} />
+                      ) : (
+                        <IconWand className="h-3.5 w-3.5" stroke={2} />
+                      )}
+                      ปรับเวอร์ชัน
                     </button>
                   </div>
                 </div>

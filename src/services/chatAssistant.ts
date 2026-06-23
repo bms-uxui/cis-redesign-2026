@@ -85,6 +85,9 @@ Reply style — concise Thai, clinical terms when appropriate. Markdown IS rende
 4. For drug interactions, severe allergies, or clinical warnings use a blockquote starting with \`> ⚠️\`.
 5. Format every date/time as \`[DD/MM/YYYY - HH:MM]\` (or \`[DD/MM/YYYY]\` when there's no time). Convert ISO dates from the tools to this form.
 6. Write destination pages as \`[ชื่อหน้า](/path)\` so they're clickable. Never output fenced code blocks, JSON, or raw tool results — translate them into prose/tables.
+7. GENERATIVE UI — render React cards by writing a directive on ITS OWN line (use the EXACT HN from the tools):
+   - \`::patient <HN>::\` → a patient profile card. Use when the doctor asks to see/open a patient or wants a profile/summary/card (single identified patient only; for cohorts keep using a table).
+   - \`::labs <HN>::\` → a 12-month lab-TREND chart (sparkline per panel: HbA1c, FBS, LDL, Creatinine…). Use when the doctor asks for lab results/trends/แนวโน้มผลแลป/กราฟ of ONE patient, INSTEAD of a lab table. Put the card first, then add a short note below (e.g. which value is abnormal). Don't also print the same numbers as a table.
 
 # § APP KNOWLEDGE (the CIS application)
 ${buildCisKnowledge()}`;

@@ -104,7 +104,14 @@ const SEED: Dashboard[] = [
   },
 ];
 
-function read(): Dashboard[] {
+// Cached snapshot + listeners so hooks re-render the instant a dashboard is
+// saved/deleted in the SAME tab (localStorage's `storage` event only fires in
+// OTHER tabs). `useSyncExternalStore` also needs a STABLE reference between
+// renders, which the cache provides.
+let cache: Dashboard[] | null = null;
+const listeners = new Set<() => void>();
+
+function readFromStorage(): Dashboard[] {
   if (typeof window === "undefined") return SEED;
   try {
     const raw = window.localStorage.getItem(KEY);
@@ -120,21 +127,38 @@ function read(): Dashboard[] {
 }
 
 function write(items: Dashboard[]) {
+  cache = items;
   try {
     window.localStorage.setItem(KEY, JSON.stringify(items));
   } catch {
     /* ignore */
   }
+  listeners.forEach((l) => l());
+}
+
+// Cross-tab edits → refresh the cache and notify local subscribers too.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key && e.key !== KEY) return;
+    cache = readFromStorage();
+    listeners.forEach((l) => l());
+  });
+}
+
+export function subscribeDashboards(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
 }
 
 export function listDashboards(): Dashboard[] {
-  return read();
+  if (cache === null) cache = readFromStorage();
+  return cache;
 }
 export function getDashboard(id: string): Dashboard | undefined {
-  return read().find((d) => d.id === id);
+  return listDashboards().find((d) => d.id === id);
 }
 export function saveDashboard(d: Dashboard) {
-  const all = read();
+  const all = [...listDashboards()];
   const idx = all.findIndex((x) => x.id === d.id);
   const now = new Date().toISOString();
   const next = { ...d, updatedAt: now };
@@ -143,5 +167,5 @@ export function saveDashboard(d: Dashboard) {
   write(all);
 }
 export function deleteDashboard(id: string) {
-  write(read().filter((d) => d.id !== id));
+  write(listDashboards().filter((d) => d.id !== id));
 }

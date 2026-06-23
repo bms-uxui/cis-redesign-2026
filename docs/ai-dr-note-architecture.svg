@@ -1,0 +1,231 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1340 860" font-family="-apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9aa3af"/>
+    </marker>
+    <marker id="arrowUp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#c4a13a"/>
+    </marker>
+    <style>
+      .lbl   { font-size:12px; font-weight:700; fill:#6b7280; letter-spacing:.04em; }
+      .box   { rx:10; }
+      .t     { font-size:12.5px; font-weight:600; }
+      .ts    { font-size:11px; fill:#475569; }
+      .tc    { font-size:11px; }
+      .hd    { font-size:12px; font-weight:700; }
+      .flow  { stroke:#9aa3af; stroke-width:1.6; fill:none; }
+      .ctx   { stroke:#c4a13a; stroke-width:1.4; fill:none; stroke-dasharray:5 4; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1340" height="860" fill="#f7f8fa"/>
+  <text x="30" y="34" font-size="20" font-weight="800" fill="#111827">AI Dr. Note — Doctor Workflow Architecture</text>
+  <text x="30" y="54" class="ts">ehp-cis · /opd/:hn (4-step) + /opd/:hn/consult · BMS Cloud AI (*.bmscloud.in.th)</text>
+
+  <!-- ============ AUDIO CAPTURE (left column) ============ -->
+  <text x="30" y="84" class="lbl">AUDIO CAPTURE · DictationContext</text>
+  <g>
+    <rect x="30" y="92" width="250" height="38" class="box" fill="#fdeef0" stroke="#e0566a"/>
+    <text x="44" y="110" class="t" fill="#98293c">Mic / Tab (system) audio</text>
+    <text x="44" y="124" class="tc" fill="#98293c">getUserMedia · getDisplayMedia</text>
+
+    <rect x="30" y="146" width="250" height="34" class="box" fill="#fdeef0" stroke="#e0566a"/>
+    <text x="44" y="167" class="t" fill="#98293c">pcmRecorder.ts → WAV chunks</text>
+
+    <rect x="30" y="196" width="250" height="34" class="box" fill="#fdeef0" stroke="#e0566a"/>
+    <text x="44" y="217" class="t" fill="#98293c">ASR client (asr.ts)</text>
+
+    <rect x="30" y="246" width="250" height="42" class="box" fill="#fdeef0" stroke="#e0566a"/>
+    <text x="44" y="264" class="t" fill="#98293c">Speaker-label normalize (LLM)</text>
+    <text x="44" y="279" class="tc" fill="#98293c">S1 = แพทย์ · S2 = ผู้ป่วย</text>
+
+    <rect x="30" y="304" width="250" height="44" class="box" fill="#f9d7dc" stroke="#e0566a" stroke-width="1.8"/>
+    <text x="44" y="322" class="t" fill="#98293c">segments[] (speaker + text)</text>
+    <text x="44" y="337" class="tc" fill="#98293c">growing transcript · persisted to localStorage</text>
+
+    <path class="flow" d="M155 130 V146" marker-end="url(#arrow)"/>
+    <path class="flow" d="M155 180 V196" marker-end="url(#arrow)"/>
+    <path class="flow" d="M155 230 V246" marker-end="url(#arrow)"/>
+    <path class="flow" d="M155 288 V304" marker-end="url(#arrow)"/>
+  </g>
+  <!-- segments feed the hooks -->
+  <path class="flow" d="M280 326 H300 V250" marker-end="url(#arrow)"/>
+
+  <!-- ============ DOCTOR WORKFLOW SPINE ============ -->
+  <text x="320" y="84" class="lbl">DOCTOR WORKFLOW (UI steps)</text>
+  <g>
+    <rect x="320" y="92" width="190" height="54" class="box" fill="#e8f1ff" stroke="#2f7bf6"/>
+    <text x="332" y="115" class="t" fill="#1b4a99">0 · คัดกรอง</text>
+    <text x="332" y="132" class="tc" fill="#1b4a99">Screening / vitals · start rec</text>
+
+    <rect x="524" y="92" width="190" height="54" class="box" fill="#e8f1ff" stroke="#2f7bf6" stroke-width="2"/>
+    <text x="536" y="115" class="t" fill="#1b4a99">1 · แพทย์ตรวจ · Dr.Note</text>
+    <text x="536" y="132" class="tc" fill="#1b4a99">live record + transcript</text>
+
+    <rect x="728" y="92" width="190" height="54" class="box" fill="#e8f1ff" stroke="#2f7bf6"/>
+    <text x="740" y="115" class="t" fill="#1b4a99">2 · วินิจฉัย ICD-10</text>
+    <text x="740" y="132" class="tc" fill="#1b4a99">code picker</text>
+
+    <rect x="932" y="92" width="190" height="54" class="box" fill="#e8f1ff" stroke="#2f7bf6"/>
+    <text x="944" y="115" class="t" fill="#1b4a99">3 · วางแผนรักษา</text>
+    <text x="944" y="132" class="tc" fill="#1b4a99">meds · lab · cert · นัด</text>
+
+    <rect x="1136" y="92" width="174" height="54" class="box" fill="#dbe9ff" stroke="#2f7bf6" stroke-dasharray="4 3"/>
+    <text x="1148" y="115" class="t" fill="#1b4a99">ปรึกษา · Consult</text>
+    <text x="1148" y="132" class="tc" fill="#1b4a99">/opd/:hn/consult</text>
+
+    <path class="flow" d="M510 119 H524" marker-end="url(#arrow)"/>
+    <path class="flow" d="M714 119 H728" marker-end="url(#arrow)"/>
+    <path class="flow" d="M918 119 H932" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- workflow -> hooks -->
+  <path class="flow" d="M619 146 V200" marker-end="url(#arrow)"/>
+  <path class="flow" d="M823 146 V200" marker-end="url(#arrow)"/>
+  <path class="flow" d="M1027 146 V200" marker-end="url(#arrow)"/>
+  <path class="flow" d="M1223 146 V200" marker-end="url(#arrow)"/>
+
+  <!-- ============ LIVE AI / LLM HOOKS ============ -->
+  <text x="320" y="184" class="lbl">LIVE AI · LLM HOOKS (run on the growing transcript)</text>
+
+  <!-- Live scribe -->
+  <rect x="320" y="200" width="300" height="118" class="box" fill="#eafaf0" stroke="#28a35a"/>
+  <text x="332" y="219" class="hd" fill="#1c6b3c">Live scribe — while recording</text>
+  <text x="332" y="240" class="tc" fill="#1c6b3c">• useChiefComplaintFromLLM → CC</text>
+  <text x="332" y="258" class="tc" fill="#1c6b3c">• useHpiNarrativeFromLLM → HPI</text>
+  <text x="332" y="276" class="tc" fill="#1c6b3c">• useMedsFromLLM → ยาที่กล่าวถึง</text>
+  <text x="332" y="294" class="tc" fill="#1c6b3c">• useSymptomTopicsFromLLM → topic chips</text>
+  <text x="332" y="312" class="tc" fill="#1c6b3c">• usePastHistoryFromLLM → PMH</text>
+
+  <!-- Body model -->
+  <rect x="636" y="200" width="248" height="118" class="box" fill="#eafaf0" stroke="#28a35a"/>
+  <text x="648" y="219" class="hd" fill="#1c6b3c">Body-model mapping</text>
+  <text x="648" y="240" class="tc" fill="#1c6b3c">• useTranscriptFindings</text>
+  <text x="648" y="258" class="tc" fill="#1c6b3c">• useTranscriptBodyRegions</text>
+  <text x="648" y="276" class="tc" fill="#1c6b3c">• useSymptomPlot</text>
+  <text x="648" y="298" class="tc" fill="#5b7766">→ live pins + NRS on 3D body</text>
+
+  <!-- Post recording -->
+  <rect x="900" y="200" width="410" height="118" class="box" fill="#eafaf0" stroke="#28a35a"/>
+  <text x="912" y="219" class="hd" fill="#1c6b3c">After recording stops / case open</text>
+  <text x="912" y="240" class="tc" fill="#1c6b3c">• useHpiAnnotations → highlight spans (symptom/severity/allergy)</text>
+  <text x="912" y="258" class="tc" fill="#1c6b3c">• useAiCaseReview → รีวิวเคส blurb + highlights</text>
+  <text x="912" y="282" class="hd" fill="#1c6b3c">Consult flow</text>
+  <text x="912" y="302" class="tc" fill="#1c6b3c">SOAP note (cc/hpi/impression/plan) + proposed actions</text>
+
+  <!-- Diagnosis + Plan row -->
+  <rect x="320" y="332" width="564" height="78" class="box" fill="#eafaf0" stroke="#28a35a"/>
+  <text x="332" y="351" class="hd" fill="#1c6b3c">Diagnosis · ICD-10  (icd10Rag → externalSearchIcd10)</text>
+  <text x="332" y="372" class="tc" fill="#1c6b3c">precedence: Thai KB RAG (disabled) → WHO ICD-11 → NLM → local catalog (icd10.ts)</text>
+  <text x="332" y="392" class="tc" fill="#5b7766">debounced query · AbortSignal · local instant fallback</text>
+
+  <rect x="900" y="332" width="410" height="78" class="box" fill="#eafaf0" stroke="#28a35a"/>
+  <text x="912" y="351" class="hd" fill="#1c6b3c">Treatment plan</text>
+  <text x="912" y="372" class="tc" fill="#1c6b3c">generateTreatmentPlan(patient, transcript)</text>
+  <text x="912" y="392" class="tc" fill="#5b7766">→ structured JSON: meds · labs · certificate · appointment(+days)</text>
+
+  <!-- hooks -> services -->
+  <path class="flow" d="M470 410 V452" marker-end="url(#arrow)"/>
+  <path class="flow" d="M760 318 V452" marker-end="url(#arrow)"/>
+  <path class="flow" d="M1100 410 V452" marker-end="url(#arrow)"/>
+
+  <!-- ============ AI SERVICE CLIENTS ============ -->
+  <text x="320" y="440" class="lbl">AI SERVICE CLIENTS  ·  aiFetch() + PHI gate (AI_CONFIG.allowPHI)</text>
+  <g>
+    <rect x="320" y="452" width="220" height="56" class="box" fill="#fff4e6" stroke="#ef8a1f"/>
+    <text x="332" y="474" class="t" fill="#a25910">llm.ts</text>
+    <text x="332" y="492" class="tc" fill="#a25910">chat() · chatJSON() · responseFormat json</text>
+
+    <rect x="552" y="452" width="180" height="56" class="box" fill="#fff4e6" stroke="#ef8a1f"/>
+    <text x="564" y="474" class="t" fill="#a25910">icd10Rag.ts</text>
+    <text x="564" y="492" class="tc" fill="#a25910">RAG / WHO / NLM broker</text>
+
+    <rect x="744" y="452" width="150" height="56" class="box" fill="#fff4e6" stroke="#ef8a1f"/>
+    <text x="756" y="474" class="t" fill="#a25910">asr.ts</text>
+    <text x="756" y="492" class="tc" fill="#a25910">transcriptions</text>
+
+    <rect x="906" y="452" width="170" height="56" class="box" fill="#fff4e6" stroke="#ef8a1f" stroke-dasharray="4 3"/>
+    <text x="918" y="474" class="t" fill="#a25910">tts.ts (parked)</text>
+    <text x="918" y="492" class="tc" fill="#a25910">read summaries aloud</text>
+
+    <rect x="1088" y="452" width="222" height="56" class="box" fill="#fff4e6" stroke="#ef8a1f"/>
+    <text x="1100" y="474" class="t" fill="#a25910">ocr.ts</text>
+    <text x="1100" y="492" class="tc" fill="#a25910">documents → text (MCP)</text>
+  </g>
+
+  <!-- services -> endpoints -->
+  <path class="flow" d="M430 508 V552" marker-end="url(#arrow)"/>
+  <path class="flow" d="M642 508 V552" marker-end="url(#arrow)"/>
+  <path class="flow" d="M819 508 V552" marker-end="url(#arrow)"/>
+  <path class="flow" d="M1199 508 V552" marker-end="url(#arrow)"/>
+
+  <!-- ============ BMS CLOUD ENDPOINTS ============ -->
+  <text x="320" y="540" class="lbl">BMS CLOUD AI ENDPOINTS  (*.bmscloud.in.th · OpenAI-compatible)</text>
+  <g>
+    <rect x="320" y="552" width="186" height="56" class="box" fill="#efe9fc" stroke="#7a55d6"/>
+    <text x="332" y="574" class="t" fill="#4d2fa0">vllm-gemma · LLM default</text>
+    <text x="332" y="592" class="tc" fill="#4d2fa0">/v1/chat/completions</text>
+
+    <rect x="518" y="552" width="186" height="56" class="box" fill="#efe9fc" stroke="#7a55d6"/>
+    <text x="530" y="574" class="t" fill="#4d2fa0">vllm-qwen · LLM fast</text>
+    <text x="530" y="592" class="tc" fill="#4d2fa0">opts.fast = true</text>
+
+    <rect x="716" y="552" width="150" height="56" class="box" fill="#efe9fc" stroke="#7a55d6"/>
+    <text x="728" y="574" class="t" fill="#4d2fa0">asr2 · ASR</text>
+    <text x="728" y="592" class="tc" fill="#4d2fa0">/v1/audio/transcriptions</text>
+
+    <rect x="878" y="552" width="160" height="56" class="box" fill="#efe9fc" stroke="#7a55d6" stroke-dasharray="4 3"/>
+    <text x="890" y="574" class="t" fill="#4d2fa0">vox-cpm · TTS</text>
+    <text x="890" y="592" class="tc" fill="#4d2fa0">parked</text>
+
+    <rect x="1050" y="552" width="150" height="56" class="box" fill="#efe9fc" stroke="#7a55d6" stroke-dasharray="4 3"/>
+    <text x="1062" y="574" class="t" fill="#4d2fa0">knowledge · RAG</text>
+    <text x="1062" y="592" class="tc" fill="#4d2fa0">disabled (404)</text>
+
+    <rect x="1212" y="552" width="98" height="56" class="box" fill="#efe9fc" stroke="#7a55d6"/>
+    <text x="1224" y="574" class="t" fill="#4d2fa0">pdf-ocr</text>
+    <text x="1224" y="592" class="tc" fill="#4d2fa0">MCP</text>
+  </g>
+
+  <!-- ============ DATA / PERSISTENCE ============ -->
+  <text x="320" y="644" class="lbl">DATA &amp; PERSISTENCE</text>
+  <g>
+    <rect x="320" y="656" width="230" height="56" class="box" fill="#eef0f3" stroke="#7b8794"/>
+    <text x="332" y="678" class="t" fill="#3f4954">patientStore</text>
+    <text x="332" y="696" class="tc" fill="#3f4954">getPatient · saveProfile (note)</text>
+
+    <rect x="562" y="656" width="270" height="56" class="box" fill="#eef0f3" stroke="#7b8794"/>
+    <text x="574" y="678" class="t" fill="#3f4954">mock EHR (data/mock/patients)</text>
+    <text x="574" y="696" class="tc" fill="#3f4954">dx · meds · labs · visits · vitals</text>
+
+    <rect x="844" y="656" width="220" height="56" class="box" fill="#eef0f3" stroke="#7b8794"/>
+    <text x="856" y="678" class="t" fill="#3f4954">icd10 local catalog</text>
+    <text x="856" y="696" class="tc" fill="#3f4954">data/icd10.ts (~45 codes)</text>
+
+    <rect x="1076" y="656" width="234" height="56" class="box" fill="#eef0f3" stroke="#7b8794"/>
+    <text x="1088" y="678" class="t" fill="#3f4954">persisted dictation session</text>
+    <text x="1088" y="696" class="tc" fill="#3f4954">localStorage · survives refresh</text>
+  </g>
+
+  <!-- data -> hooks (context, dashed up) ; outputs down -->
+  <path class="ctx" d="M620 656 V412" marker-start="url(#arrowUp)"/>
+  <path class="ctx" d="M940 656 V412" marker-start="url(#arrowUp)"/>
+  <text x="952" y="540" class="tc" fill="#9a7a1f">EHR context → prompts</text>
+
+  <!-- save outputs -->
+  <path class="flow" d="M1100 318 C 1100 600, 470 560, 435 656" marker-end="url(#arrow)" opacity="0.5"/>
+  <text x="640" y="600" class="tc" fill="#7b8794">Dr.Note / plan → saveProfile</text>
+
+  <!-- ============ LEGEND ============ -->
+  <g transform="translate(30,740)">
+    <text x="0" y="0" class="lbl">LEGEND</text>
+    <rect x="0" y="10" width="16" height="14" rx="3" fill="#fdeef0" stroke="#e0566a"/><text x="22" y="22" class="tc" fill="#374151">Audio capture</text>
+    <rect x="130" y="10" width="16" height="14" rx="3" fill="#e8f1ff" stroke="#2f7bf6"/><text x="152" y="22" class="tc" fill="#374151">Workflow UI</text>
+    <rect x="255" y="10" width="16" height="14" rx="3" fill="#eafaf0" stroke="#28a35a"/><text x="277" y="22" class="tc" fill="#374151">AI / LLM hook</text>
+    <rect x="385" y="10" width="16" height="14" rx="3" fill="#fff4e6" stroke="#ef8a1f"/><text x="407" y="22" class="tc" fill="#374151">Service client</text>
+    <rect x="510" y="10" width="16" height="14" rx="3" fill="#efe9fc" stroke="#7a55d6"/><text x="532" y="22" class="tc" fill="#374151">Cloud endpoint</text>
+    <rect x="645" y="10" width="16" height="14" rx="3" fill="#eef0f3" stroke="#7b8794"/><text x="667" y="22" class="tc" fill="#374151">Data</text>
+    <line x1="720" y1="17" x2="752" y2="17" class="ctx"/><text x="758" y="22" class="tc" fill="#374151">EHR context (prompt input)</text>
+    <line x1="930" y1="17" x2="962" y2="17" stroke="#9aa3af" stroke-width="1.6" stroke-dasharray="4 3"/><text x="968" y="22" class="tc" fill="#374151">parked / disabled</text>
+  </g>
+</svg>

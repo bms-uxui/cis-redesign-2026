@@ -4,7 +4,14 @@
  * `source` references must match an id from the data-source catalog.
  */
 
-export type WidgetKind = "kpi" | "line-chart" | "bar-chart" | "table" | "info";
+export type WidgetKind =
+  | "kpi"
+  | "line-chart"
+  | "bar-chart"
+  | "table"
+  | "info"
+  | "patient-card"
+  | "patient-lab-trend";
 
 export interface LayoutCell {
   /** Column start (1-indexed in a 4-col grid). */

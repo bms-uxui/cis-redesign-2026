@@ -27,9 +27,9 @@ function toISO(d: Date): string {
 }
 
 const field =
-  "w-full rounded-xl border-2 border-black/10 bg-white px-2.5 py-1.5 text-[13px] text-[#22202a] outline-none transition focus:border-[#3965e1]";
-const dateTrigger = "h-9 rounded-xl border-2 border-black/10 bg-white px-2.5 text-[13px] text-[#22202a]";
-const lbl = "text-[11px] font-bold text-black/45";
+  "w-full rounded-xl border-2 border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-2.5 py-1.5 text-[13px] text-[var(--theme-neutral)] outline-none transition focus:border-[#3965e1]";
+const dateTrigger = "h-9 rounded-xl border-2 border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-2.5 text-[13px] text-[var(--theme-neutral)]";
+const lbl = "text-[11px] font-bold text-[var(--theme-neutral)]/45";
 
 /**
  * Auto-scheduled follow-up appointment in the treatment plan.
@@ -80,7 +80,7 @@ export default function AppointmentScheduler({
                 "rounded-[10px] px-3 py-1.5 text-[12px] font-bold transition",
                 a.intervalKey === it.key
                   ? "bg-[#3965e1] text-white shadow-sm"
-                  : "bg-black/[0.04] text-black/55 hover:bg-black/[0.08]",
+                  : "bg-[var(--theme-neutral)]/[0.06] text-[var(--theme-neutral)]/55 hover:bg-[var(--theme-neutral)]/10",
               ].join(" ")}
             >
               {it.label}
@@ -91,7 +91,7 @@ export default function AppointmentScheduler({
             onClick={() => set({ intervalKey: "none" })}
             className={[
               "rounded-[10px] px-3 py-1.5 text-[12px] font-bold transition",
-              none ? "bg-[#ff383c] text-white shadow-sm" : "bg-black/[0.04] text-black/55 hover:bg-black/[0.08]",
+              none ? "bg-[#ff383c] text-white shadow-sm" : "bg-[var(--theme-neutral)]/[0.06] text-[var(--theme-neutral)]/55 hover:bg-[var(--theme-neutral)]/10",
             ].join(" ")}
           >
             ไม่มีนัด
@@ -125,7 +125,7 @@ export default function AppointmentScheduler({
             variant="bordered"
             radius="md"
             size="sm"
-            classNames={{ trigger: "h-9 min-h-9 rounded-xl border-black/10 bg-white", value: "text-[13px] text-[#22202a]" }}
+            classNames={{ trigger: "h-9 min-h-9 rounded-xl border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)]", value: "text-[13px] !text-[var(--theme-neutral)]", popoverContent: "bg-[var(--theme-surface)] !text-[var(--theme-neutral)]", listbox: "!text-[var(--theme-neutral)]" }}
           >
             {withCurrent(APPT_TYPES.map((t) => t.label), a.type).map((label) => (
               <SelectItem key={label} textValue={label}>{label}</SelectItem>
@@ -144,7 +144,7 @@ export default function AppointmentScheduler({
             variant="bordered"
             radius="md"
             size="sm"
-            classNames={{ trigger: "h-9 min-h-9 rounded-xl border-black/10 bg-white", value: "text-[13px] text-[#22202a]" }}
+            classNames={{ trigger: "h-9 min-h-9 rounded-xl border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)]", value: "text-[13px] !text-[var(--theme-neutral)]", popoverContent: "bg-[var(--theme-surface)] !text-[var(--theme-neutral)]", listbox: "!text-[var(--theme-neutral)]" }}
           >
             {withCurrent(CLINIC_NAMES, a.clinic).map((c) => (
               <SelectItem key={c} textValue={c}>{c}</SelectItem>
@@ -163,7 +163,7 @@ export default function AppointmentScheduler({
             variant="bordered"
             radius="md"
             size="sm"
-            classNames={{ trigger: "h-9 min-h-9 rounded-xl border-black/10 bg-white", value: "text-[13px] text-[#22202a]" }}
+            classNames={{ trigger: "h-9 min-h-9 rounded-xl border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)]", value: "text-[13px] !text-[var(--theme-neutral)]", popoverContent: "bg-[var(--theme-surface)] !text-[var(--theme-neutral)]", listbox: "!text-[var(--theme-neutral)]" }}
           >
             {withCurrent(DOCTOR_NAMES, a.doctor).map((d) => (
               <SelectItem key={d} textValue={d}>{d}</SelectItem>

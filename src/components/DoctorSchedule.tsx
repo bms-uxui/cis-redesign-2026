@@ -191,7 +191,7 @@ export default function DoctorSchedule() {
   );
 
   return (
-    <div className="h-screen w-full overflow-hidden bg-[#f4f4f4]">
+    <div className="h-screen w-full overflow-hidden bg-[var(--theme-base)]">
       <div className="h-16 shrink-0" aria-hidden />
       <div
         className={[
@@ -212,7 +212,7 @@ export default function DoctorSchedule() {
 
         {/* ── Main column — doctor-roster scheduler ────────────────── */}
         <main className="flex min-w-0 min-h-0 flex-1 flex-col gap-4">
-          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] bg-white">
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] bg-[var(--theme-surface)]">
             <DoctorRoster appointments={todayList} onOpenCase={(hn) => openPatient(hn)} />
           </section>
         </main>
@@ -248,7 +248,7 @@ function ViewTabs({
     { key: "roster" as const, label: "จัดเวรแพทย์", icon: IconCalendarClock },
   ];
   return (
-    <div className="flex shrink-0 items-center gap-1 self-start rounded-full bg-white p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)]">
+    <div className="flex shrink-0 items-center gap-1 self-start rounded-full bg-[var(--theme-surface)] p-1 shadow-[0_2px_10px_rgba(0,0,0,0.04)]">
       {tabs.map((t) => {
         const active = value === t.key;
         const Icon = t.icon;
@@ -259,7 +259,7 @@ function ViewTabs({
             onClick={() => onChange(t.key)}
             className={[
               "flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-bold transition",
-              active ? "bg-[#21502c] text-white" : "text-black/45 hover:text-black/70",
+              active ? "bg-[#21502c] text-white" : "text-[var(--theme-neutral)]/45 hover:text-[var(--theme-neutral)]/70",
             ].join(" ")}
           >
             <Icon className="h-4 w-4" stroke={2} />
@@ -290,7 +290,7 @@ function HeroBanner({ doctorName }: { doctorName: string }) {
           on the right (backing the illustration). Raise the bottom point (60%)
           to push the green band further right. */}
       <div
-        className="pointer-events-none absolute inset-0 bg-white"
+        className="pointer-events-none absolute inset-0 bg-[var(--theme-surface)]"
         style={{ clipPath: "polygon(0 0, 100% 0, 60% 100%, 0 100%)" }}
       />
 
@@ -309,7 +309,7 @@ function HeroBanner({ doctorName }: { doctorName: string }) {
 
       {/* greeting · doctor name (bold) · department — in flow so it drives the
           banner height (no fixed aspect → stretches to the text). */}
-      <div className="relative z-10 flex flex-col gap-0.5 py-6 pl-6 text-[#1f1f1f]" style={{ width: "62%" }}>
+      <div className="relative z-10 flex flex-col gap-0.5 py-6 pl-6 text-[var(--theme-neutral)]" style={{ width: "62%" }}>
         <p className="text-[14px] font-medium">{greetingByHour()}</p>
         <p className="text-[24px] font-bold leading-tight">{doctorName}</p>
         <p className="text-[14px]">แผนกผู้ป่วยนอก OPD</p>
@@ -354,7 +354,7 @@ function CalendarHeaderRow({
               "flex items-start justify-between gap-2 px-6 py-4 text-left -mr-px last:mr-0 transition-colors duration-300",
               isSelected
                 ? "cursor-default"
-                : "cursor-pointer border-[0.5px] border-[#d9d9d9] bg-white hover:bg-[#f9f9f9]",
+                : "cursor-pointer border-[0.5px] border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] hover:bg-[var(--theme-neutral)]/[0.04]",
             ].join(" ")}
             style={isSelected ? { background: DAY_COLORS[i].bg } : undefined}
           >
@@ -362,7 +362,7 @@ function CalendarHeaderRow({
               <p
                 className={[
                   "text-[16px] leading-tight transition-colors duration-300",
-                  isSelected ? "font-bold text-white" : "font-medium text-black",
+                  isSelected ? "font-bold text-white" : "font-medium text-[var(--theme-neutral)]",
                 ].join(" ")}
               >
                 {TH_DOW_LONG[i]}
@@ -370,7 +370,7 @@ function CalendarHeaderRow({
               <p
                 className={[
                   "text-[14px] leading-tight transition-colors duration-300",
-                  isSelected ? "text-white/80" : "text-black/60",
+                  isSelected ? "text-white/80" : "text-[var(--theme-neutral)]/60",
                 ].join(" ")}
               >
                 {fmtThaiShort(d)}
@@ -452,16 +452,16 @@ function CalendarBodyRow({
             key={`b-${i}`}
             type="button"
             onClick={() => onSelectDay(i)}
-            whileHover={{ backgroundColor: "#f9f9f9" }}
+            whileHover={{ backgroundColor: "rgba(127,127,127,0.08)" }}
             whileTap={{ scale: 0.99 }}
             transition={{ type: "spring", stiffness: 380, damping: 28 }}
-            className="flex min-h-0 cursor-pointer items-start border-[0.5px] border-[#d9d9d9] bg-white p-4 -mr-px last:mr-0"
+            className="flex min-h-0 cursor-pointer items-start border-[0.5px] border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] p-4 -mr-px last:mr-0"
             aria-label={`เลือก ${TH_DOW_LONG[i]}`}
           >
             <motion.span
               whileHover={{ scale: 1.04 }}
               transition={{ type: "spring", stiffness: 380, damping: 24 }}
-              className="flex w-full items-center justify-center rounded-[16px] bg-black/5 px-6 py-2 text-[14px] font-medium text-black whitespace-nowrap"
+              className="flex w-full items-center justify-center rounded-[16px] bg-[var(--theme-neutral)]/10 px-6 py-2 text-[14px] font-medium text-[var(--theme-neutral)] whitespace-nowrap"
             >
               {events.length} เคส
             </motion.span>
@@ -507,11 +507,11 @@ function SelectedDayColumn({
 
   return (
     <div
-      className="flex min-h-0 flex-col border-[0.5px] border-[#d9d9d9] -mr-px last:mr-0"
+      className="flex min-h-0 flex-col border-[0.5px] border-[var(--theme-neutral)]/15 -mr-px last:mr-0"
       style={{ background: tint }}
     >
       {/* Filter chips — pending first (default), then done, then all. */}
-      <div className="flex items-center gap-2 border-b border-[#d9d9d9]/60 px-4 pt-4 pb-3">
+      <div className="flex items-center gap-2 border-b border-[var(--theme-neutral)]/15 px-4 pt-4 pb-3">
         <FilterChip
           label="รอตรวจ"
           count={counts.pending}
@@ -546,7 +546,7 @@ function SelectedDayColumn({
             className="flex flex-col gap-2"
           >
             {filteredEvents.length === 0 ? (
-              <p className="py-10 text-center text-[14px] text-black/55">
+              <p className="py-10 text-center text-[14px] text-[var(--theme-neutral)]/55">
                 {filter === "pending"
                   ? "ไม่มีเคสรอตรวจ"
                   : filter === "done"
@@ -604,7 +604,7 @@ function FilterChip({
         "inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors duration-200",
         active
           ? "text-white"
-          : "bg-white text-black/70 hover:bg-white hover:text-black",
+          : "bg-[var(--theme-surface)] text-[var(--theme-neutral)]/70 hover:bg-[var(--theme-surface)] hover:text-[var(--theme-neutral)]",
       ].join(" ")}
       style={active ? { background: accent } : undefined}
     >
@@ -612,7 +612,7 @@ function FilterChip({
       <span
         className={[
           "inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold transition-colors duration-200",
-          active ? "bg-white/20 text-white" : "bg-black/5 text-black/65",
+          active ? "bg-white/20 text-white" : "bg-[var(--theme-neutral)]/10 text-[var(--theme-neutral)]/65",
         ].join(" ")}
       >
         {count}
@@ -662,7 +662,7 @@ function EventRow({
       }}
       className={[
         "group relative flex cursor-pointer items-center gap-2 overflow-hidden rounded-[16px] px-4 py-3 transition",
-        highlighted ? "bg-white" : "bg-white/60 hover:bg-white",
+        highlighted ? "bg-[var(--theme-surface)]" : "bg-[var(--theme-neutral)]/[0.06] hover:bg-[var(--theme-surface)]",
       ].join(" ")}
     >
       {/* Top-right corner flag — green triangle stamp with a check icon
@@ -687,13 +687,13 @@ function EventRow({
         </span>
       )}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="truncate text-[12px] font-medium text-black/60 leading-none">
+        <p className="truncate text-[12px] font-medium text-[var(--theme-neutral)]/60 leading-none">
           {a.time} น.
         </p>
-        <p className="truncate text-[16px] font-medium text-black leading-tight">
+        <p className="truncate text-[16px] font-medium text-[var(--theme-neutral)] leading-tight">
           {a.patientName}
         </p>
-        <p className="truncate text-[14px] text-black/60 leading-none">
+        <p className="truncate text-[14px] text-[var(--theme-neutral)]/60 leading-none">
           {a.type}
         </p>
       </div>
@@ -736,7 +736,7 @@ function NextCaseRow({
           onOpenDetail();
         }
       }}
-      className="group relative flex cursor-pointer items-center gap-2 overflow-hidden rounded-[16px] bg-[#f6f6f6] px-4 py-3 transition hover:bg-[#eeeeee] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3965e1]/40"
+      className="group relative flex cursor-pointer items-center gap-2 overflow-hidden rounded-[16px] bg-[var(--theme-neutral)]/[0.06] px-4 py-3 transition hover:bg-[var(--theme-neutral)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3965e1]/40"
     >
       {isDone && (
         <span
@@ -757,13 +757,13 @@ function NextCaseRow({
         </span>
       )}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="truncate text-[12px] font-medium text-black/60 leading-none">
+        <p className="truncate text-[12px] font-medium text-[var(--theme-neutral)]/60 leading-none">
           {a.time} น.
         </p>
-        <p className="truncate text-[16px] font-medium text-black leading-tight">
+        <p className="truncate text-[16px] font-medium text-[var(--theme-neutral)] leading-tight">
           {a.patientName}
         </p>
-        <p className="truncate text-[14px] text-black/60 leading-none">
+        <p className="truncate text-[14px] text-[var(--theme-neutral)]/60 leading-none">
           {a.type}
         </p>
       </div>
@@ -832,7 +832,7 @@ function NextCasePanel({
     <section
       ref={ov.ref}
       onScroll={ov.onScroll}
-      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-[24px] bg-white py-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
+      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-[24px] bg-[var(--theme-surface)] py-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
     >
       {/* greeting banner — full-bleed, flush to the panel's top/left/right */}
       <div className="-mt-4">
@@ -841,11 +841,11 @@ function NextCasePanel({
 
       {/* Next in queue — patient profile of the upcoming case */}
       <div className="flex flex-col gap-2 px-4">
-        <p className="text-[14px] font-semibold text-black">คิวถัดไป</p>
+        <p className="text-[14px] font-semibold text-[var(--theme-neutral)]">คิวถัดไป</p>
         {nextCase ? (
           <NextCaseRow appointment={nextCase} onOpenDetail={() => onOpenPatient(nextCase.patientHN)} />
         ) : (
-          <div className="rounded-[16px] bg-[#f6f6f6] px-4 py-3 text-center text-[12px] text-black/55">ไม่มีคิวถัดไป</div>
+          <div className="rounded-[16px] bg-[var(--theme-neutral)]/[0.06] px-4 py-3 text-center text-[12px] text-[var(--theme-neutral)]/55">ไม่มีคิวถัดไป</div>
         )}
       </div>
 
@@ -855,13 +855,13 @@ function NextCasePanel({
           <div className="flex min-h-0 flex-1 flex-col gap-2">
             {/* title + chip stacked (column is narrow) */}
             <div className="flex flex-col gap-1.5 px-4">
-              <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-black/60">
+              <h3 className="flex items-center gap-1.5 text-[14px] font-semibold text-[var(--theme-neutral)]/60">
                 สรุปเคสโดย AI
                 {review.loading && <IconLoader2 className="h-3.5 w-3.5 animate-spin" stroke={2} />}
                 {review.blurb && <SpeakButton getText={() => review.blurb} />}
               </h3>
               {sinceDate && (
-                <span className="inline-flex w-fit items-center rounded-[12px] bg-black/5 px-3 py-1 text-[12px] font-semibold text-black/60">
+                <span className="inline-flex w-fit items-center rounded-[12px] bg-[var(--theme-neutral)]/10 px-3 py-1 text-[12px] font-semibold text-[var(--theme-neutral)]/60">
                   ข้อมูลจาก {sinceDate} ถึงปัจจุบัน
                 </span>
               )}
@@ -870,7 +870,7 @@ function NextCasePanel({
             <HighlightedReview
               text={review.blurb}
               highlights={review.highlights}
-              className="px-4 text-[14px] font-normal leading-relaxed text-black"
+              className="px-4 text-[14px] font-normal leading-relaxed text-[var(--theme-neutral)]"
             />
 
             {/* Abnormal labs — shared gradient purple panel (Figma 1396-18849).
@@ -890,7 +890,7 @@ function NextCasePanel({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-9 rounded-b-[24px] bg-gradient-to-t from-white/55 via-white/15 to-transparent"
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-9 rounded-b-[24px] bg-gradient-to-t from-[var(--theme-surface)]/55 via-[var(--theme-surface)]/15 to-transparent"
             />
             <motion.button
               key="chevron"
@@ -901,7 +901,7 @@ function NextCasePanel({
               animate={{ opacity: 1, y: [0, 4, 0] }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ y: { repeat: Infinity, duration: 1.3, ease: "easeInOut" }, opacity: { duration: 0.2 } }}
-              className="absolute bottom-3 left-1/2 z-20 grid h-8 w-8 -translate-x-1/2 place-items-center rounded-full bg-white text-[#3965e1] shadow-[0_4px_14px_rgba(0,0,0,0.16)] transition hover:bg-slate-50"
+              className="absolute bottom-3 left-1/2 z-20 grid h-8 w-8 -translate-x-1/2 place-items-center rounded-full bg-[var(--theme-surface)] text-[#3965e1] shadow-[0_4px_14px_rgba(0,0,0,0.16)] transition hover:bg-[var(--theme-neutral)]/10"
             >
               <IconChevronDown className="h-5 w-5" stroke={2.2} />
             </motion.button>
@@ -920,7 +920,7 @@ function Legend({ dotColor, label }: { dotColor: string; label: string }) {
         style={{ background: dotColor }}
         aria-hidden
       />
-      <span className="text-[14px] text-[#5f6368]">{label}</span>
+      <span className="text-[14px] text-[var(--theme-neutral)]/60">{label}</span>
     </div>
   );
 }

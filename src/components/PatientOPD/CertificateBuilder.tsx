@@ -55,8 +55,8 @@ function daysBetween(from: string, to: string): number {
 }
 
 const field =
-  "w-full rounded-xl border-2 border-black/10 bg-white px-2.5 py-1.5 text-[13px] text-[#22202a] outline-none transition focus:border-[#3965e1]";
-const lbl = "text-[11px] font-bold text-black/45";
+  "w-full rounded-xl border-2 border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-2.5 py-1.5 text-[13px] text-[var(--theme-neutral)] outline-none transition focus:border-[#3965e1]";
+const lbl = "text-[11px] font-bold text-[var(--theme-neutral)]/45";
 
 /**
  * Structured medical-certificate builder (ใบรับรองแพทย์).
@@ -164,8 +164,11 @@ export default function CertificateBuilder({
             radius="md"
             size="sm"
             classNames={{
-              trigger: "h-9 min-h-9 rounded-xl border-black/10 bg-white data-[open=true]:!border-[#3965e1]",
-              value: "text-[13px] text-[#22202a]",
+              trigger:
+                "h-9 min-h-9 rounded-xl border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] data-[open=true]:!border-[#3965e1]",
+              value: "text-[13px] !text-[var(--theme-neutral)]",
+              popoverContent: "bg-[var(--theme-surface)] !text-[var(--theme-neutral)]",
+              listbox: "!text-[var(--theme-neutral)]",
             }}
           >
             {CERT_TEMPLATES.map((t) => (
@@ -179,7 +182,7 @@ export default function CertificateBuilder({
             <span className={lbl}>ระยะเวลาพักรักษาตัว ({c.restDays} วัน)</span>
             <DateRangePicker
               className="w-full"
-              triggerClassName="h-9 rounded-xl border-2 border-black/10 bg-white px-2.5 text-[13px] text-[#22202a]"
+              triggerClassName="h-9 rounded-xl border-2 border-[var(--theme-neutral)]/15 bg-[var(--theme-surface)] px-2.5 text-[13px] text-[var(--theme-neutral)]"
               value={{ start: fromISO(c.restFrom), end: fromISO(c.restTo) }}
               onChange={setRestRange}
             />
@@ -188,7 +191,7 @@ export default function CertificateBuilder({
       </div>
 
       {c.template === "none" ? (
-        <p className="rounded-[12px] bg-black/[0.03] px-3 py-2.5 text-[13px] text-black/50">
+        <p className="rounded-[12px] bg-[var(--theme-neutral)]/[0.05] px-3 py-2.5 text-[13px] text-[var(--theme-neutral)]/50">
           ไม่ออกใบรับรองแพทย์สำหรับการตรวจครั้งนี้
         </p>
       ) : (
@@ -219,7 +222,7 @@ export default function CertificateBuilder({
               onClick={sign}
               className={[
                 "flex items-center justify-center gap-2 rounded-[14px] py-3 text-[14px] font-bold transition",
-                canSign ? "bg-[#1f9d52] text-white hover:brightness-110" : "cursor-not-allowed bg-black/10 text-black/35",
+                canSign ? "bg-[#1f9d52] text-white hover:brightness-110" : "cursor-not-allowed bg-[var(--theme-neutral)]/10 text-[var(--theme-neutral)]/35",
               ].join(" ")}
             >
               <IconSignature className="h-5 w-5" stroke={2.2} />
