@@ -45,6 +45,9 @@ import {
   IconCertificate,
   IconCalendarEvent,
   IconPencil,
+  IconMapPin,
+  IconTrash,
+  IconArrowBackUp,
   IconDeviceDesktop,
   IconCheck,
   IconLayoutSidebarRightExpand,
@@ -105,6 +108,7 @@ import {
   BODY_REGION_BY_ID,
   BODY_REGION_ENUM,
   BODY_VIEWBOX,
+  BODY_VIEWBOX_BACK,
   type BodyRegionId,
 } from "../../data/bodyRegions";
 import {
@@ -1015,11 +1019,16 @@ export function AbnormalLabsCard({ labs, className = "" }: { labs: Patient["labs
 interface VitalCheck { label: string; value: string; unit: string; normal: boolean }
 function vitalChecks(v: Patient["vitals"]): VitalCheck[] {
   return [
-    { label: "ความดันตัวบน", value: `${v.systolic}`, unit: "mmHg", normal: v.systolic >= 90 && v.systolic <= 139 },
-    { label: "ความดันตัวล่าง", value: `${v.diastolic}`, unit: "mmHg", normal: v.diastolic >= 60 && v.diastolic <= 89 },
+    {
+      label: "ความดันโลหิต",
+      value: `${v.systolic}/${v.diastolic}`,
+      unit: "mmHg",
+      normal: v.systolic >= 90 && v.systolic <= 139 && v.diastolic >= 60 && v.diastolic <= 89,
+    },
     { label: "ชีพจร", value: `${v.heartRate}`, unit: "bpm", normal: v.heartRate >= 60 && v.heartRate <= 100 },
     { label: "อุณหภูมิ", value: `${v.temperature}`, unit: "°C", normal: v.temperature >= 36.1 && v.temperature <= 37.5 },
     { label: "BMI", value: v.bmi.toFixed(1), unit: "kg/m²", normal: v.bmi >= 18.5 && v.bmi <= 24.9 },
+    { label: "ส่วนสูง", value: `${v.height}`, unit: "ซม.", normal: true },
     { label: "น้ำหนัก", value: `${v.weight}`, unit: "กก.", normal: true },
   ];
 }
@@ -1242,7 +1251,7 @@ function ScreeningPanel({
     return () => document.removeEventListener("mousedown", h);
   }, [srcMenuOpen]);
   const checks = vitalChecks(p.vitals);
-  const ranged = checks.filter((c) => c.label !== "น้ำหนัก");
+  const ranged = checks.filter((c) => c.label !== "น้ำหนัก" && c.label !== "ส่วนสูง");
   const normalCount = ranged.filter((c) => c.normal).length;
   const visit0 = p.recentVisits[0];
   const cc = visit0?.chiefComplaint ?? "—";
@@ -1343,11 +1352,11 @@ function ScreeningPanel({
               <div className="flex flex-col gap-4">
                 <div>
                   <p className="text-[13px] font-semibold text-black/60">อาการสำคัญ</p>
-                  <p className="mt-2 text-[14px] font-semibold text-[#22202a]">{cc}</p>
+                  <p className="mt-2 text-[14px] font-normal text-[#22202a]">{cc}</p>
                 </div>
                 <div>
                   <p className="text-[13px] font-semibold text-black/60">อาการเจ็บป่วยปัจจุบัน (HPI)</p>
-                  <p className="mt-2 text-[14px] font-semibold leading-relaxed text-[#22202a]">{hpi}</p>
+                  <p className="mt-2 text-[14px] font-normal leading-relaxed text-[#22202a]">{hpi}</p>
                 </div>
               </div>
             </AccordionItem>
@@ -4191,7 +4200,7 @@ function SymptomCallouts({
                 borderRadius: 9,
                 padding: "3px 8px",
                 fontSize: 12,
-                fontWeight: 700,
+                fontWeight: 400,
                 color: "#22202a",
                 boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
                 maxWidth: LW,
@@ -4199,9 +4208,6 @@ function SymptomCallouts({
             >
               {a.label}
             </span>
-            {a.sub && (
-              <span style={{ marginTop: 2, fontSize: 11, fontWeight: 600, color, maxWidth: LW }}>{a.sub}</span>
-            )}
           </div>
         );
       })}
@@ -4234,6 +4240,15 @@ export function ModelPanel({
   // visit timeline — pick a date to track findings across visits
   const visits = p.recentVisits;
   const [visitIdx, setVisitIdx] = useState(0);
+  // slide direction for the compare transition (+1 = stepping to an older
+  // visit, -1 = a newer one). visitIdx 0 = latest.
+  const [visitDir, setVisitDir] = useState(0);
+  const stepVisit = (delta: number) =>
+    setVisitIdx((i) => {
+      const next = Math.min(visits.length - 1, Math.max(0, i + delta));
+      if (next !== i) setVisitDir(delta);
+      return next;
+    });
   const visit = visits[visitIdx];
   const o = visit?.opqrst;
 
@@ -4279,18 +4294,42 @@ export function ModelPanel({
     ) as typeof highlights;
   }, [highlights, o, isLive]);
 
-  // Auto-zoom target — centre of the strongest symptom region (viewBox-normalised)
+  // Auto-zoom target — frame the FRONT pain cluster (centre on the spread of
+  // highlighted regions, scale to fit them) so entering the chart zooms to the
+  // affected area while keeping the callout labels in view.
   const focus = useMemo(() => {
+    const pts = (Object.entries(highlights) as [BodyRegionId, number][])
+      .filter(([id, v]) => (v ?? 0) > 0 && BODY_REGION_BY_ID[id]?.view === "front")
+      .map(([id]) => {
+        const s = BODY_REGION_BY_ID[id].shape;
+        return s.kind === "ellipse"
+          ? { x: s.cx, y: s.cy }
+          : { x: s.x + s.w / 2, y: s.y + s.h / 2 };
+      });
+    if (!pts.length) return null;
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    // tighter zoom for a single tight spot, looser when symptoms are spread out
+    const spread = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    const scale = spread > 240 ? 1.3 : spread > 120 ? 1.55 : 1.9;
+    return { vx: cx / BODY_VIEWBOX.width, vy: cy / BODY_VIEWBOX.height, scale };
+  }, [highlights]);
+
+  // Dominant (strongest) highlighted region — used to auto-flip the figure to
+  // the side the symptom is on, so an AI-mapped back symptom (e.g. ปวดหลังส่วนล่าง
+  // → b-lower-back) is actually visible without the doctor toggling manually.
+  const dominantId = useMemo(() => {
     const entries = Object.entries(highlights) as [BodyRegionId, number][];
     if (!entries.length) return null;
-    const [id] = entries.reduce((m, e) => (e[1] > m[1] ? e : m));
-    const r = BODY_REGION_BY_ID[id];
-    if (!r) return null;
-    const s = r.shape;
-    const cx = s.kind === "ellipse" ? s.cx : s.x + s.w / 2;
-    const cy = s.kind === "ellipse" ? s.cy : s.y + s.h / 2;
-    return { vx: cx / BODY_VIEWBOX.width, vy: cy / BODY_VIEWBOX.height, scale: 1.85 };
+    return entries.reduce((m, e) => (e[1] > m[1] ? e : m))[0];
   }, [highlights]);
+  useEffect(() => {
+    if (!dominantId) return;
+    const v = BODY_REGION_BY_ID[dominantId]?.view;
+    if (v) setView(v);
+  }, [dominantId]);
 
   const maxIntensity = Math.max(0, ...Object.values(highlights));
   // Severity from the HPI narrative wins (matches what's written); fall back to
@@ -4326,71 +4365,241 @@ export function ModelPanel({
   // findings from the history) as leader-line callouts — not one per region.
   // The figure zooms out so the labels are visible.
   const plot = symptomPlot ?? [];
-  const annotating = recording === false && plot.length > 0;
-  const annotations = useMemo<BodyAnnotation[]>(
-    () => (annotating ? plot.map((s) => ({ id: s.id, label: s.label, sub: s.cause, color: disp?.fg })) : []),
-    [annotating, plot, disp],
-  );
+  // The curated plot needs a transcript (doctor's Dr Note). In the nurse
+  // screening there's no transcript yet — so when the plot is empty but the
+  // visit already has highlighted regions, label those directly.
+  const hasHeat = Object.values(highlights).some((v) => (v ?? 0) > 0);
+  const annotating = recording === false && (plot.length > 0 || hasHeat);
+  const annotations = useMemo<BodyAnnotation[]>(() => {
+    if (recording !== false) return [];
+    if (plot.length > 0) {
+      return plot
+        .filter((s) => BODY_REGION_BY_ID[s.id]?.view === view)
+        .map((s) => ({ id: s.id, label: s.label, sub: s.cause, color: disp?.fg }));
+    }
+    // fallback (nurse screening, no transcript): the label describes the
+    // SYMPTOM/quality, not the location — from OPQRST quality / chief complaint.
+    const sevTxt = sevNum != null ? ` ${sevNum}/10` : "";
+    const symptomLabel = `${o?.quality?.trim() || visit?.chiefComplaint?.trim() || disp?.label || "อาการเจ็บ"}${sevTxt}`;
+    return (Object.entries(highlights) as [BodyRegionId, number][])
+      .filter(([id, v]) => (v ?? 0) > 0 && BODY_REGION_BY_ID[id]?.view === view)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([id]) => ({ id, label: symptomLabel, color: disp?.fg }));
+  }, [recording, plot, highlights, disp, view, o, sevNum, visit]);
+  // How many symptom points land on the front vs the back — shown on the view
+  // toggle so the doctor knows there's something on the other side.
+  const viewCounts = useMemo(() => {
+    const src = disp ? scaledHighlights : {};
+    const c = { front: 0, back: 0 };
+    for (const [id, v] of Object.entries(src)) {
+      if ((v ?? 0) <= 0) continue;
+      const rv = BODY_REGION_BY_ID[id as BodyRegionId]?.view;
+      if (rv === "front") c.front += 1;
+      else if (rv === "back") c.back += 1;
+    }
+    return c;
+  }, [scaledHighlights, disp]);
+
+  // Heat source for the model. While the curated callouts are shown, drive the
+  // heatmap from the SAME plot regions so every blob sits exactly under its
+  // label (otherwise the two independent LLM mappings can disagree).
+  const heatHighlights = useMemo<Partial<Record<BodyRegionId, number>> | undefined>(() => {
+    if (annotating && plot.length > 0) {
+      const h: Partial<Record<BodyRegionId, number>> = {};
+      for (const s of plot) {
+        if (!BODY_REGION_BY_ID[s.id]) continue;
+        h[s.id] = Math.max(0.55, scaledHighlights[s.id] ?? 0.8);
+      }
+      return h;
+    }
+    return disp ? scaledHighlights : undefined;
+  }, [annotating, plot, scaledHighlights, disp]);
+
   // Live ZoomPan transform → drives the screen-space callout overlay so the
   // labels stay fully visible (and a constant size) at every zoom/pan.
   const [tf, setTf] = useState({ scale: 1, x: 0, y: 0, width: 0, height: 0 });
   const zoomApi = useRef<ZoomApi | null>(null);
-  const annoMaxH = annotating ? 440 : 560;
+  const annoMaxH = annotating ? 390 : 480;
+  // Doctor can hide the symptom callouts to see the bare heatmap.
+  const [showLabels, setShowLabels] = useState(true);
+  // Pain markers the doctor pins on the model — tap a spot, fill a quick form.
+  const [drawMode, setDrawMode] = useState(false);
+  const [painMarkers, setPainMarkers] = useState<PainMarker[]>([]);
+  const [pendingPin, setPendingPin] = useState<{
+    x: number;
+    y: number;
+    view: "front" | "back";
+    regionId?: BodyRegionId;
+  } | null>(null);
+  const drawSeq = useRef(0);
+  const markersThisView = painMarkers.filter((m) => m.view === view).length;
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] bg-white p-5">
+      {/* Pin mode — top-left of the card */}
+      <div className="absolute left-4 top-4 z-20 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setDrawMode((d) => !d);
+            setPendingPin(null);
+          }}
+          title="แตะตำแหน่งบนร่างกายเพื่อระบุอาการ"
+          className={[
+            "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-bold shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 transition",
+            drawMode ? "bg-[#e23d2e] text-white ring-[#e23d2e]" : "bg-white text-[#22202a] ring-black/5",
+          ].join(" ")}
+        >
+          <IconMapPin className="h-4 w-4" stroke={2} />
+          ระบุจุด
+        </button>
+        {markersThisView > 0 && (
+          <>
+            <button
+              type="button"
+              onClick={() =>
+                setPainMarkers((cur) => {
+                  const last = cur.map((m) => m.view).lastIndexOf(view);
+                  return last < 0 ? cur : cur.filter((_, i) => i !== last);
+                })
+              }
+              title="ย้อนกลับ (undo)"
+              className="flex items-center justify-center rounded-full bg-white p-1.5 text-black/45 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5 transition hover:text-[#22202a]"
+            >
+              <IconArrowBackUp className="h-4 w-4" stroke={2} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPainMarkers((cur) => cur.filter((m) => m.view !== view))}
+              title="ลบจุดที่ระบุทั้งหมด"
+              className="flex items-center justify-center rounded-full bg-white p-1.5 text-black/45 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5 transition hover:text-[#e23d2e]"
+            >
+              <IconTrash className="h-4 w-4" stroke={2} />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Show / hide the symptom callout labels — top-right of the card */}
+      {annotating && annotations.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowLabels((s) => !s)}
+          title={showLabels ? "ซ่อนป้ายอาการ" : "แสดงป้ายอาการ"}
+          className={[
+            "absolute right-4 top-4 z-20 flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12px] font-bold shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5 transition",
+            showLabels ? "text-[#22202a]" : "text-black/40",
+          ].join(" ")}
+        >
+          {showLabels ? (
+            <IconEye className="h-4 w-4" stroke={2} />
+          ) : (
+            <IconEyeOff className="h-4 w-4" stroke={2} />
+          )}
+          ป้าย
+        </button>
+      )}
+
+      {/* Visit steppers on the card's left/right edges — step through the visit
+          timeline to compare the body across dates. */}
+      {visits.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={() => stepVisit(-1)}
+            disabled={visitIdx <= 0}
+            title="วันถัดไป (ใหม่กว่า)"
+            className="absolute left-1.5 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#52525b] shadow-[0_2px_10px_rgba(0,0,0,0.12)] ring-1 ring-black/5 backdrop-blur transition enabled:hover:bg-white enabled:hover:text-[#18181b] disabled:opacity-0"
+          >
+            <IconChevronLeft className="h-5 w-5" stroke={2.2} />
+          </button>
+          <button
+            type="button"
+            onClick={() => stepVisit(1)}
+            disabled={visitIdx >= visits.length - 1}
+            title="วันก่อนหน้า (อดีต)"
+            className="absolute right-1.5 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-[#52525b] shadow-[0_2px_10px_rgba(0,0,0,0.12)] ring-1 ring-black/5 backdrop-blur transition enabled:hover:bg-white enabled:hover:text-[#18181b] disabled:opacity-0"
+          >
+            <IconChevronRight className="h-5 w-5" stroke={2.2} />
+          </button>
+        </>
+      )}
+
       {/* Body model = panel background. The zoomed figure overflows freely but
           is clipped to THIS card; white fades blend it under the controls. */}
       <div className="absolute inset-0 z-0 overflow-visible">
-        <AnimatePresence initial={false} mode="wait">
+        <AnimatePresence initial={false} mode="sync" custom={visitDir}>
           <motion.div
             key={`${view}-${visitIdx}`}
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.04 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
+            custom={visitDir}
+            // compare push: the old & new figures slide simultaneously. Stepping
+            // to an older visit (right arrow) pushes the past figure in from the
+            // right; a newer one (left arrow) from the left. View flips cross-fade.
+            variants={{
+              enter: (d: number) => ({ opacity: d === 0 ? 0 : 1, x: d === 0 ? 0 : d > 0 ? "100%" : "-100%" }),
+              center: { opacity: 1, x: 0 },
+              exit: (d: number) => ({ opacity: d === 0 ? 0 : 1, x: d === 0 ? 0 : d > 0 ? "-100%" : "100%" }),
+            }}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.42, ease: [0.32, 0.72, 0, 1] }}
             className="absolute inset-0 flex items-center justify-center overflow-visible"
           >
             <ZoomPan
               className="flex h-full w-full items-center justify-center overflow-visible"
-              focus={view === "front" && !annotating ? focus : null}
-              contentAspect={BODY_VIEWBOX.width / BODY_VIEWBOX.height}
+              focus={view === "front" ? focus : null}
+              contentAspect={
+                (view === "back" ? BODY_VIEWBOX_BACK.width : BODY_VIEWBOX.width) /
+                (view === "back" ? BODY_VIEWBOX_BACK.height : BODY_VIEWBOX.height)
+              }
               contentMaxHeight={annoMaxH}
               onTransform={setTf}
               apiRef={zoomApi}
             >
               <BodyMap
                 view={view}
-                selected={view === "front" ? selected : null}
-                onSelect={view === "front" ? (id) => setSelected((cur) => (cur === id ? null : id)) : undefined}
+                gender={p.gender}
+                selected={selected}
+                onSelect={(id) => setSelected((cur) => (cur === id ? null : id))}
                 // Only tint the model when there's an actual localized symptom
                 // (same signal as the "ไม่มีอาการเฉพาะที่" label). Chronic-disease
                 // context alone (e.g. ความดันโลหิตสูง) must NOT colour the chest.
-                highlights={view === "front" && disp ? scaledHighlights : undefined}
-                highlightColor={view === "front" ? disp?.fg : undefined}
+                highlights={heatHighlights}
+                highlightColor={disp?.fg}
+                drawMode={drawMode}
+                markers={painMarkers}
+                onAddPoint={(x, y, regionId) => setPendingPin({ x, y, view, regionId })}
+                onMarkerClick={(id) => setPainMarkers((cur) => cur.filter((m) => m.id !== id))}
                 photoRegions={view === "front" ? currentPhotoRegions : []}
                 onPhotoClick={setPhotoRegion}
-                className="h-full max-h-[560px]"
+                // max-height MUST match contentMaxHeight (annoMaxH) below so the
+                // callout leader-dots line up with the heat blobs (same figure
+                // size/centring). 390 while annotating, 480 otherwise.
+                className={`h-full ${annotating ? "max-h-[390px]" : "max-h-[480px]"}`}
               />
             </ZoomPan>
           </motion.div>
         </AnimatePresence>
 
-        {/* Faded edges so the model blends beneath the floating UI */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-32 rounded-t-[24px] bg-gradient-to-b from-white via-white/80 to-transparent" />
+        {/* Faded edge (bottom only) so the model blends beneath the floating UI */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-24 rounded-b-[24px] bg-gradient-to-t from-white via-white/85 to-transparent" />
 
         {/* Zoom controls — above the fade so they stay crisp */}
         <ZoomControls api={zoomApi} />
 
         {/* Symptom callouts — screen-space, always visible at any zoom/pan */}
-        {view === "front" && annotating && (
+        {annotating && showLabels && annotations.length > 0 && (
           <SymptomCallouts
             items={annotations}
             tf={tf}
-            contentAspect={BODY_VIEWBOX.width / BODY_VIEWBOX.height}
+            contentAspect={
+              (view === "back" ? BODY_VIEWBOX_BACK.width : BODY_VIEWBOX.width) /
+              (view === "back" ? BODY_VIEWBOX_BACK.height : BODY_VIEWBOX.height)
+            }
             contentMaxHeight={annoMaxH}
-            vb={BODY_VIEWBOX}
+            vb={view === "back" ? BODY_VIEWBOX_BACK : BODY_VIEWBOX}
           />
         )}
       </div>
@@ -4409,76 +4618,16 @@ export function ModelPanel({
 
       {/* ── Floating controls — top ── */}
       <div className="relative z-10 flex flex-col">
-        {/* Visit-date tabs */}
+        {/* Visit-date label (the ◂ ▸ steppers live on the card's side edges) */}
         {visits.length > 1 && (
-          <div className="flex gap-1 overflow-x-auto rounded-[28px] bg-[#ebebec] p-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-            {visits.map((v, i) => (
-              <button
-                key={`${v.date}-${i}`}
-                type="button"
-                onClick={() => setVisitIdx(i)}
-                className={[
-                  "min-w-[96px] flex-1 shrink-0 whitespace-nowrap rounded-[24px] px-3 py-1.5 text-center text-[12px] transition",
-                  i === visitIdx
-                    ? "bg-white font-semibold text-[#18181b] shadow-[0px_2px_8px_rgba(0,0,0,0.06)]"
-                    : "font-medium text-[#71717a]",
-                ].join(" ")}
-              >
-                {fmtThaiDate(v.date)}
-                {i === 0 && " · ล่าสุด"}
-              </button>
-            ))}
+          <div className="flex justify-center">
+            <div className="rounded-full bg-[#ebebec] px-4 py-1.5 text-center text-[12px] font-semibold text-[#18181b]">
+              {fmtThaiDate(visit.date)}
+              {visitIdx === 0 && " · ล่าสุด"}
+            </div>
           </div>
         )}
 
-        {/* Legend */}
-        <div className="mt-4 flex items-center gap-2 self-start">
-          <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-            style={{ background: disp?.bg ?? "#f1f5f9" }}
-          >
-            {findingLoading ? (
-              <IconLoader2 className="h-5 w-5 animate-spin text-[#94a3b8]" stroke={2} />
-            ) : disp ? (
-              <disp.Icon className="h-5 w-5" stroke={2} style={{ color: disp.fg }} />
-            ) : (
-              <IconCircle className="h-5 w-5 text-[#94a3b8]" stroke={2} />
-            )}
-          </span>
-          <div className="leading-tight">
-            <p className="text-[13px] font-bold" style={{ color: disp?.fg ?? "#64748b" }}>
-              {findingLoading ? "กำลังวิเคราะห์อาการ…" : disp?.label ?? "ไม่มีอาการเฉพาะที่"}
-            </p>
-            {!findingLoading && disp && sevNum != null && (
-              <p className="text-[11px] text-black/50">ระดับ {sevNum}/10</p>
-            )}
-          </div>
-        </div>
-
-        {/* Finding chips */}
-        {findings.length > 1 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {findings.map((f, i) => {
-              const d = resolveFinding(f);
-              const active = i === selIdx;
-              return (
-                <button
-                  key={`${f.type}-${f.painCharacter ?? ""}-${i}`}
-                  type="button"
-                  onClick={() => setSelIdx(i)}
-                  className={[
-                    "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition",
-                    active ? "" : "bg-white/70 text-black/55 backdrop-blur-sm hover:bg-white",
-                  ].join(" ")}
-                  style={active ? { background: d.bg, color: d.fg } : undefined}
-                >
-                  <d.Icon className="h-3.5 w-3.5" stroke={2} style={active ? { color: d.fg } : undefined} />
-                  {d.label}
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* ── Floating controls — bottom ── */}
@@ -4488,30 +4637,163 @@ export function ModelPanel({
             {BODY_REGION_BY_ID[selected].labelTh}
           </p>
         )}
-        <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
-          {(["front", "back"] as const).map((v) => {
-            const active = view === v;
-            const Icon = v === "front" ? IconUser : IconUserScan;
-            return (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setView(v)}
-                className={[
-                  "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-bold transition",
-                  active ? "bg-[#f2f2f2] text-[#22202a]" : "text-black/45",
-                ].join(" ")}
-              >
-                <Icon
-                  className="h-4 w-4"
-                  stroke={2}
-                  style={{ color: active ? "#22202a" : "#9ca3af" }}
-                />
-                {v === "front" ? "หน้า" : "หลัง"}
-              </button>
-            );
-          })}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-full bg-white p-1 shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+            {(["front", "back"] as const).map((v) => {
+              const active = view === v;
+              const Icon = v === "front" ? IconUser : IconUserScan;
+              const count = viewCounts[v];
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  className={[
+                    "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-bold transition",
+                    active ? "bg-[#f2f2f2] text-[#22202a]" : "text-black/45",
+                  ].join(" ")}
+                >
+                  <Icon
+                    className="h-4 w-4"
+                    stroke={2}
+                    style={{ color: active ? "#22202a" : "#9ca3af" }}
+                  />
+                  {v === "front" ? "หน้า" : "หลัง"}
+                  {count > 0 && (
+                    <span
+                      className={[
+                        "ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none",
+                        active ? "bg-[#d64527] text-white" : "bg-black/10 text-black/55",
+                      ].join(" ")}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
+      </div>
+
+      {/* Pin detail form — fill the symptom characteristic for the tapped spot */}
+      {pendingPin && (
+        <PinForm
+          regionLabel={pendingPin.regionId ? BODY_REGION_BY_ID[pendingPin.regionId]?.labelTh : undefined}
+          onCancel={() => setPendingPin(null)}
+          onSave={(char, severity, note) => {
+            setPainMarkers((cur) => [
+              ...cur,
+              {
+                id: `pin-${drawSeq.current++}`,
+                view: pendingPin.view,
+                x: pendingPin.x,
+                y: pendingPin.y,
+                label: `${char.label} ${severity}/10${note ? ` · ${note}` : ""}`,
+                color: char.fg,
+                characterId: char.id,
+                severity,
+                note,
+              },
+            ]);
+            setPendingPin(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Quick form shown when the doctor taps a spot on the model — pick the pain
+ *  character, severity (NRS) and an optional note for that point. */
+type PainMarker = {
+  id: string;
+  view: "front" | "back";
+  x: number;
+  y: number;
+  label: string;
+  color: string;
+  characterId: string;
+  severity: number;
+  note: string;
+};
+function PinForm({
+  regionLabel,
+  onSave,
+  onCancel,
+}: {
+  regionLabel?: string;
+  onSave: (char: (typeof PAIN_CHARACTERS)[number], severity: number, note: string) => void;
+  onCancel: () => void;
+}) {
+  const [charId, setCharId] = useState(PAIN_CHARACTERS[0].id);
+  const [sev, setSev] = useState(5);
+  const [note, setNote] = useState("");
+  const char = PAIN_CHARACTERS.find((c) => c.id === charId) ?? PAIN_CHARACTERS[0];
+  return (
+    <div className="absolute inset-x-0 bottom-0 z-30 m-3 rounded-2xl border border-black/5 bg-white p-3.5 shadow-[0_-8px_28px_rgba(0,0,0,0.16)]">
+      <div className="mb-2.5 flex items-center gap-2">
+        <p className="text-[13px] font-bold text-[#22202a]">ระบุลักษณะอาการ</p>
+        <span className="inline-flex items-center gap-1 rounded-full bg-[#e23d2e]/10 px-2 py-0.5 text-[11px] font-bold text-[#e23d2e]">
+          <IconMapPin className="h-3 w-3" stroke={2.5} />
+          {regionLabel ?? "นอกบริเวณร่างกาย"}
+        </span>
+      </div>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {PAIN_CHARACTERS.map((c) => {
+          const on = c.id === charId;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setCharId(c.id)}
+              className="rounded-full px-2.5 py-1 text-[11px] font-medium transition"
+              style={
+                on
+                  ? { background: c.bg, color: c.fg, boxShadow: `inset 0 0 0 1.5px ${c.fg}` }
+                  : { background: "#f3f4f6", color: "#6b7280" }
+              }
+            >
+              {c.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mb-3 flex items-center gap-2.5">
+        <span className="text-[11px] text-black/55">ระดับ</span>
+        <input
+          type="range"
+          min={0}
+          max={10}
+          value={sev}
+          onChange={(e) => setSev(Number(e.target.value))}
+          className="flex-1 accent-[#e23d2e]"
+        />
+        <span className="w-10 text-right text-[12px] font-bold" style={{ color: char.fg }}>
+          {sev}/10
+        </span>
+      </div>
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="โน้ตเพิ่มเติม (ไม่บังคับ)"
+        className="mb-3 w-full rounded-lg border border-black/10 px-2.5 py-1.5 text-[12px] outline-none focus:border-[#3965e1]"
+      />
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg px-3 py-1.5 text-[12px] font-bold text-black/50 transition hover:bg-black/5"
+        >
+          ยกเลิก
+        </button>
+        <button
+          type="button"
+          onClick={() => onSave(char, sev, note.trim())}
+          className="rounded-lg bg-[#3965e1] px-4 py-1.5 text-[12px] font-bold text-white transition hover:brightness-110"
+        >
+          บันทึก
+        </button>
       </div>
     </div>
   );

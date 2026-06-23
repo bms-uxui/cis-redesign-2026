@@ -11,7 +11,6 @@ import {
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconUser,
-  IconSparkles,
 } from "@tabler/icons-react";
 import { useTheme, THEME_PRESETS } from "../contexts/ThemeContext";
 import { useAiva } from "../contexts/AivaContext";
@@ -24,10 +23,6 @@ import {
   Tooltip,
 } from "@heroui/react";
 
-const TOOLTIP_CLASSES = {
-  content:
-    "bg-[#1f1f1f] text-white text-[12px] font-medium px-2.5 py-1.5 rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.25)]",
-};
 import { useNavigate } from "react-router";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTabs, type Tab } from "../contexts/TabsContext";
@@ -144,7 +139,6 @@ export default function TopBar() {
           placement="bottom"
           delay={200}
           closeDelay={0}
-          classNames={TOOLTIP_CLASSES}
         >
           <button
             type="button"
@@ -248,7 +242,7 @@ export default function TopBar() {
           </Dropdown>
         )}
 
-        <Tooltip content="เปิดแท็บใหม่" placement="bottom" delay={200} closeDelay={0} classNames={TOOLTIP_CLASSES}>
+        <Tooltip content="เปิดแท็บใหม่" placement="bottom" delay={200} closeDelay={0}>
         <button
           type="button"
           aria-label="เปิดแท็บใหม่"
@@ -274,16 +268,29 @@ export default function TopBar() {
           placement="bottom"
           delay={200}
           closeDelay={0}
-          classNames={TOOLTIP_CLASSES}
         >
           <button
             type="button"
             aria-label="ถามเมย์"
             onClick={() => openAiva()}
-            className="flex h-8 cursor-pointer items-center gap-1 rounded-full bg-gradient-to-br from-[#5DB4F8] to-[#7556E2] px-3 text-white shadow-[0_3px_10px_-2px_rgba(117,86,226,0.4)] transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.04] hover:shadow-[0_5px_14px_-2px_rgba(117,86,226,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7556E2]/50"
+            className="group flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.1] hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7556E2]/40"
           >
-            <IconSparkles className="h-4 w-4 fill-white" stroke={1.5} />
-            <span className="text-[12px] font-semibold">ถามเมย์</span>
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5 opacity-70 grayscale transition duration-200 group-hover:opacity-100 group-hover:grayscale-0"
+              aria-hidden
+            >
+              <defs>
+                <linearGradient id="mae-topbar-spark" x1="20" y1="4" x2="5" y2="20" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stopColor="#5DB4F8" />
+                  <stop offset="1" stopColor="#7556E2" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M12 2c.5 5.5 4 9 9.5 9.5C16 12 12.5 15.5 12 21c-.5-5.5-4-9-9.5-9.5C8 11 11.5 7.5 12 2Z"
+                fill="url(#mae-topbar-spark)"
+              />
+            </svg>
           </button>
         </Tooltip>
 
@@ -451,7 +458,7 @@ function TabChip({ tab, active, onActivate, onClose }: TabChipProps) {
     const label = tab.iconKind === "home" ? "หน้าหลัก" : "ตารางเวร";
     const Icon = tab.iconKind === "home" ? IconHome : IconCalendarTime;
     return (
-      <Tooltip content={label} placement="bottom" delay={200} closeDelay={0} classNames={TOOLTIP_CLASSES}>
+      <Tooltip content={label} placement="bottom" delay={200} closeDelay={0}>
         <button
           type="button"
           onClick={onActivate}
@@ -491,7 +498,7 @@ function TabChip({ tab, active, onActivate, onClose }: TabChipProps) {
         </span>
       </button>
       {tab.closable && (
-        <Tooltip content="ปิดแท็บ" placement="bottom" delay={200} closeDelay={0} classNames={TOOLTIP_CLASSES}>
+        <Tooltip content="ปิดแท็บ" placement="bottom" delay={200} closeDelay={0}>
           <button
             type="button"
             onClick={(e) => {

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { IconBellRinging, IconUserCircle, IconSparkles } from "@tabler/icons-react";
+import { IconBellRinging, IconUserCircle } from "@tabler/icons-react";
 import { useNavigate } from "react-router";
 import EHP_LOGO from "../assets/figma/ehp-logo.png";
 import FullscreenButton from "./FullscreenButton";
@@ -52,10 +52,22 @@ export default function GlobalHeader({ onOpenAiva }: GlobalHeaderProps = {}) {
               <button
                 type="button"
                 onClick={onOpenAiva}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-violet-200/60 bg-gradient-to-br from-violet-50 to-violet-100 shadow-[0_4px_14px_rgba(120,90,220,0.16),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl transition hover:from-violet-100 hover:to-violet-200"
+                className="group flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-black/5"
                 aria-label="ถามเมย์"
               >
-                <IconSparkles className="h-5 w-5 text-violet-600" stroke={1.75} />
+                <svg viewBox="0 0 24 24" className="h-6 w-6 transition-transform duration-300 group-hover:scale-110">
+                  <defs>
+                    <linearGradient id="mae-spark" x1="20" y1="4" x2="5" y2="20" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#c084fc" />
+                      <stop offset="0.5" stopColor="#a855f7" />
+                      <stop offset="1" stopColor="#4f7cf6" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="M12 2c.5 5.5 4 9 9.5 9.5C16 12 12.5 15.5 12 21c-.5-5.5-4-9-9.5-9.5C8 11 11.5 7.5 12 2Z"
+                    fill="url(#mae-spark)"
+                  />
+                </svg>
               </button>
             </Tooltip>
           )}
