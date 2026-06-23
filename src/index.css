@@ -173,6 +173,13 @@ button:disabled,
   inherits: false;
   initial-value: 0deg;
 }
+/* Hide the native clock indicator on <input type="time"> so a custom Tabler
+   icon can sit on top (the indicator stays clickable underneath). */
+.er-time-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  cursor: pointer;
+}
+
 @keyframes magic-ring-spin {
   to {
     --magic-angle: 360deg;

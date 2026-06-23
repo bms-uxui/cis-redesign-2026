@@ -654,7 +654,7 @@ export default function NewPatientByVoice() {
               <SelectMethodView
                 onPickScan={() => setPhase("scanning")}
                 onPickOcr={handlePickOcr}
-                onPickManual={() => navigate("/patient/new/manual")}
+                onPickER={() => navigate("/er/register")}
               />
             </motion.div>
           )}
@@ -1928,11 +1928,11 @@ interface StepperBarProps {
 function SelectMethodView({
   onPickScan,
   onPickOcr,
-  onPickManual,
+  onPickER,
 }: {
   onPickScan: () => void;
   onPickOcr: () => void;
-  onPickManual: () => void;
+  onPickER: () => void;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-[1200px] flex-1 items-center justify-center px-6">
@@ -1954,12 +1954,12 @@ function SelectMethodView({
           onClick={onPickOcr}
         />
         <MethodCard
-          Icon={IconKeyboard}
-          title="กรอกฟอร์มเอง"
-          description="เปิดฟอร์มลงทะเบียนผู้ป่วยแบบดั้งเดิม — กรอกข้อมูลแต่ละช่องเองทั้งหมด"
-          cta="เปิดฟอร์ม"
-          accent="neutral"
-          onClick={onPickManual}
+          label="ER"
+          title="ลงทะเบียน ER"
+          description="ลงทะเบียนแบบฟอร์ม ER - ลงทะเบียนแบบรวดเร็ว AI ช่วยประมวลผลเพื่อความแม่นยำ"
+          cta="ลงทะเบียน"
+          accent="primary"
+          onClick={onPickER}
         />
       </div>
     </div>
@@ -2032,7 +2032,7 @@ function OcrScanView() {
 // shows a live preview with viewfinder brackets, and snaps a JPEG blob on
 // "ถ่ายภาพ". Falls back to file picker if camera is blocked/unavailable.
 
-function CameraCaptureView({
+export function CameraCaptureView({
   onCapture,
   onPickFile,
   onCancel,
@@ -2166,7 +2166,7 @@ function CameraCaptureView({
 // advances the flow into the Mae conversation phase. The data extraction
 // itself is mocked — we're just simulating the hardware step.
 
-function ScanningCardView({ onDone }: { onDone: () => void }) {
+export function ScanningCardView({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     const t = window.setTimeout(onDone, 2400);
     return () => window.clearTimeout(t);
@@ -2366,13 +2366,16 @@ function VitalSignsModal({
 
 function MethodCard({
   Icon,
+  label,
   title,
   description,
   cta,
   accent,
   onClick,
 }: {
-  Icon: typeof IconMicrophone;
+  Icon?: typeof IconMicrophone;
+  /** Short text shown inside the icon box instead of an icon (e.g. "ER"). */
+  label?: string;
   title: string;
   description: string;
   cta: string;
@@ -2393,7 +2396,11 @@ function MethodCard({
             : "bg-[var(--theme-neutral)]/10 text-[var(--theme-neutral)]",
         ].join(" ")}
       >
-        <Icon className="h-7 w-7" stroke={1.75} />
+        {label ? (
+          <span className="text-[20px] font-bold leading-none">{label}</span>
+        ) : Icon ? (
+          <Icon className="h-7 w-7" stroke={1.75} />
+        ) : null}
       </div>
       <div className="flex flex-col gap-2">
         <h2 className="text-[18px] font-bold text-[var(--theme-neutral)]">
